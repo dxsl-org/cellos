@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["ICACHE_SYNC_PROBE_TICKS"],"fn":["icache_sync_completed","local_fence_i","request_icache_sync","service_sync_request","sync_instruction_caches","sync_loaded_code"],"static":["ICACHE_SYNC_COMPLETE","ICACHE_SYNC_REQUEST"]};

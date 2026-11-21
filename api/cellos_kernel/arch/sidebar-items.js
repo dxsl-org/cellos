@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["board","boot","cell","clock","cpu","dev","gpio_irq","hart_local","iommu","irq","memory","page_probe","power","riscv64","sched","sdhci","smp","task","tlb","user_access","virtio_mmio","vm"]};
+window.SIDEBAR_ITEMS = {"mod":["board","boot","cell","clock","cpu","dev","gpio_irq","hart_local","icache","iommu","irq","memory","page_probe","power","riscv64","sched","sdhci","smp","task","tlb","user_access","virtio_mmio","vm"]};
