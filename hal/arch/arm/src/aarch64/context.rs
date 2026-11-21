@@ -128,6 +128,12 @@ impl CpuContext {
     /// # Safety
     /// Both pointers must point to valid, aligned `CpuContext` structs, and
     /// `root_baddr`/`asid` must describe a completed root this hart may run.
+    ///
+    /// # Panics
+    /// At EL2 when `root_baddr != 0`. EL2 runs host contexts only and the EL2
+    /// stub cannot program a root, so continuing would run the incoming task
+    /// under the wrong translation root. Tier 2 admission is refused at EL2
+    /// (`domain_admission::enable_for_boot`), so this is an invariant violation.
     pub unsafe fn switch_with_root(
         old: *mut CpuContext,
         new: *const CpuContext,
@@ -135,9 +141,7 @@ impl CpuContext {
         asid: usize,
     ) {
         if super::el2::is_el2() {
-            // EL2 switches are host-context only: no private roots exist there,
-            // and the EL2 stub has no root argument.
-            debug_assert_eq!(root_baddr, 0, "private root requested at EL2");
+            assert_eq!(root_baddr, 0, "private root requested at EL2");
             // SAFETY: same preconditions as __switch_el1; uses EL2 sysregs.
             unsafe {
                 __switch_el2(old, new);
