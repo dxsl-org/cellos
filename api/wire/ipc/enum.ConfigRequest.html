@@ -9,7 +9,7 @@
 }</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Requests sent to the config service (<code>/bin/config</code>).</p>
 <p><code>Get</code> and <code>List</code> are open to every caller (Config is not a secret store).
 <code>Set</code> and <code>Delete</code> are admitted only when the kernel-attested caller holds
-<a href="../../abi/caller_identity/constant.CALLER_FLAG_CONFIG_WRITE.html" title="constant abi::caller_identity::CALLER_FLAG_CONFIG_WRITE"><code>abi::caller_identity::CALLER_FLAG_CONFIG_WRITE</code></a> <strong>and</strong> the key is in
+[<code>abi::caller_identity::CALLER_FLAG_CONFIG_WRITE</code>] <strong>and</strong> the key is in
 the shell namespace: 1..=64 bytes of <code>[A-Za-z_][A-Za-z0-9_]*</code>, excluding the
 system keys <code>PATH</code> and <code>OS</code>. Anything else is answered with
 <code>ConfigResponse::Err(ConfigError::Denied)</code> before any mutation.</p>

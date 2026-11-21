@@ -256,36 +256,39 @@
 <a href=#256 id=256 data-nosnippet>256</a>
 <a href=#257 id=257 data-nosnippet>257</a>        <span class="kw">let </span>header =
 <a href=#258 id=258 data-nosnippet>258</a>            NonNull::new(base <span class="kw">as </span><span class="kw-2">*mut </span>VirtIOHeader).expect(<span class="string">"[virtio-gpu] VirtIO slot at address 0"</span>);
-<a href=#259 id=259 data-nosnippet>259</a>        <span class="kw">let </span>transport = <span class="kw">match unsafe </span>{ MmioTransport::new(header) } {
-<a href=#260 id=260 data-nosnippet>260</a>            <span class="prelude-val">Ok</span>(t) <span class="kw">if </span>t.device_type() == DeviceType::GPU =&gt; t,
-<a href=#261 id=261 data-nosnippet>261</a>            <span class="prelude-val">Ok</span>(t) =&gt; {
-<a href=#262 id=262 data-nosnippet>262</a>                core::mem::forget(t);
-<a href=#263 id=263 data-nosnippet>263</a>                <span class="kw">continue</span>;
-<a href=#264 id=264 data-nosnippet>264</a>            }
-<a href=#265 id=265 data-nosnippet>265</a>            <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; <span class="kw">continue</span>,
-<a href=#266 id=266 data-nosnippet>266</a>        };
-<a href=#267 id=267 data-nosnippet>267</a>
-<a href=#268 id=268 data-nosnippet>268</a>        <span class="kw">let </span><span class="kw-2">mut </span>gpu = <span class="kw">match </span>VirtIOGpu::&lt;CellHal, MmioTransport&gt;::new(transport) {
-<a href=#269 id=269 data-nosnippet>269</a>            <span class="prelude-val">Ok</span>(g) =&gt; g,
-<a href=#270 id=270 data-nosnippet>270</a>            <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; <span class="kw">continue</span>,
-<a href=#271 id=271 data-nosnippet>271</a>        };
-<a href=#272 id=272 data-nosnippet>272</a>
-<a href=#273 id=273 data-nosnippet>273</a>        <span class="kw">let </span>(width, height) = gpu.resolution().unwrap_or((<span class="number">1280</span>, <span class="number">800</span>));
-<a href=#274 id=274 data-nosnippet>274</a>        <span class="kw">let </span>fb_slice = <span class="kw">match </span>gpu.setup_framebuffer() {
-<a href=#275 id=275 data-nosnippet>275</a>            <span class="prelude-val">Ok</span>(s) =&gt; s,
-<a href=#276 id=276 data-nosnippet>276</a>            <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; <span class="kw">continue</span>,
-<a href=#277 id=277 data-nosnippet>277</a>        };
-<a href=#278 id=278 data-nosnippet>278</a>        <span class="kw">let </span>fb_ptr = fb_slice.as_mut_ptr();
-<a href=#279 id=279 data-nosnippet>279</a>        <span class="kw">let </span>fb_len = fb_slice.len();
-<a href=#280 id=280 data-nosnippet>280</a>        <span class="kw">let _ </span>= gpu.flush();
-<a href=#281 id=281 data-nosnippet>281</a>        <span class="kw">return </span><span class="prelude-val">Some</span>(GpuDevice {
-<a href=#282 id=282 data-nosnippet>282</a>            gpu,
-<a href=#283 id=283 data-nosnippet>283</a>            fb_ptr,
-<a href=#284 id=284 data-nosnippet>284</a>            fb_len,
-<a href=#285 id=285 data-nosnippet>285</a>            width,
-<a href=#286 id=286 data-nosnippet>286</a>            height,
-<a href=#287 id=287 data-nosnippet>287</a>        });
-<a href=#288 id=288 data-nosnippet>288</a>    }
-<a href=#289 id=289 data-nosnippet>289</a>    <span class="prelude-val">None
-<a href=#290 id=290 data-nosnippet>290</a></span>}
+<a href=#259 id=259 data-nosnippet>259</a>        <span class="comment">// SAFETY: sys_probe_virtio_mmio identified a VirtIO GPU transport at
+<a href=#260 id=260 data-nosnippet>260</a>        // `base` and request_region granted this Cell the slot, so the header is
+<a href=#261 id=261 data-nosnippet>261</a>        // live device memory this Cell owns exclusively.
+<a href=#262 id=262 data-nosnippet>262</a>        </span><span class="kw">let </span>transport = <span class="kw">match unsafe </span>{ MmioTransport::new(header) } {
+<a href=#263 id=263 data-nosnippet>263</a>            <span class="prelude-val">Ok</span>(t) <span class="kw">if </span>t.device_type() == DeviceType::GPU =&gt; t,
+<a href=#264 id=264 data-nosnippet>264</a>            <span class="prelude-val">Ok</span>(t) =&gt; {
+<a href=#265 id=265 data-nosnippet>265</a>                core::mem::forget(t);
+<a href=#266 id=266 data-nosnippet>266</a>                <span class="kw">continue</span>;
+<a href=#267 id=267 data-nosnippet>267</a>            }
+<a href=#268 id=268 data-nosnippet>268</a>            <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; <span class="kw">continue</span>,
+<a href=#269 id=269 data-nosnippet>269</a>        };
+<a href=#270 id=270 data-nosnippet>270</a>
+<a href=#271 id=271 data-nosnippet>271</a>        <span class="kw">let </span><span class="kw-2">mut </span>gpu = <span class="kw">match </span>VirtIOGpu::&lt;CellHal, MmioTransport&gt;::new(transport) {
+<a href=#272 id=272 data-nosnippet>272</a>            <span class="prelude-val">Ok</span>(g) =&gt; g,
+<a href=#273 id=273 data-nosnippet>273</a>            <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; <span class="kw">continue</span>,
+<a href=#274 id=274 data-nosnippet>274</a>        };
+<a href=#275 id=275 data-nosnippet>275</a>
+<a href=#276 id=276 data-nosnippet>276</a>        <span class="kw">let </span>(width, height) = gpu.resolution().unwrap_or((<span class="number">1280</span>, <span class="number">800</span>));
+<a href=#277 id=277 data-nosnippet>277</a>        <span class="kw">let </span>fb_slice = <span class="kw">match </span>gpu.setup_framebuffer() {
+<a href=#278 id=278 data-nosnippet>278</a>            <span class="prelude-val">Ok</span>(s) =&gt; s,
+<a href=#279 id=279 data-nosnippet>279</a>            <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; <span class="kw">continue</span>,
+<a href=#280 id=280 data-nosnippet>280</a>        };
+<a href=#281 id=281 data-nosnippet>281</a>        <span class="kw">let </span>fb_ptr = fb_slice.as_mut_ptr();
+<a href=#282 id=282 data-nosnippet>282</a>        <span class="kw">let </span>fb_len = fb_slice.len();
+<a href=#283 id=283 data-nosnippet>283</a>        <span class="kw">let _ </span>= gpu.flush();
+<a href=#284 id=284 data-nosnippet>284</a>        <span class="kw">return </span><span class="prelude-val">Some</span>(GpuDevice {
+<a href=#285 id=285 data-nosnippet>285</a>            gpu,
+<a href=#286 id=286 data-nosnippet>286</a>            fb_ptr,
+<a href=#287 id=287 data-nosnippet>287</a>            fb_len,
+<a href=#288 id=288 data-nosnippet>288</a>            width,
+<a href=#289 id=289 data-nosnippet>289</a>            height,
+<a href=#290 id=290 data-nosnippet>290</a>        });
+<a href=#291 id=291 data-nosnippet>291</a>    }
+<a href=#292 id=292 data-nosnippet>292</a>    <span class="prelude-val">None
+<a href=#293 id=293 data-nosnippet>293</a></span>}
 </code></pre></div></section></main></body></html>

@@ -526,9 +526,13 @@
 <a href=#526 id=526 data-nosnippet>526</a>    <span class="comment">// The transport leaves Pending on absent data/space; the outer service
 <a href=#527 id=527 data-nosnippet>527</a>    // dispatcher, not a self-waking busy loop, is responsible for the next poll.
 <a href=#528 id=528 data-nosnippet>528</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>context = Context::from_waker(Waker::noop());
-<a href=#529 id=529 data-nosnippet>529</a>    <span class="kw">unsafe </span>{ set_tls_context(iface, device, sockets <span class="kw">as </span><span class="kw-2">*mut </span>SocketSet&lt;<span class="lifetime">'_</span>&gt; <span class="kw">as </span><span class="kw-2">*mut </span>()) };
-<a href=#530 id=530 data-nosnippet>530</a>    <span class="kw">let </span>result = future.as_mut().poll(<span class="kw-2">&amp;mut </span>context);
-<a href=#531 id=531 data-nosnippet>531</a>    clear_tls_context();
-<a href=#532 id=532 data-nosnippet>532</a>    result
-<a href=#533 id=533 data-nosnippet>533</a>}
+<a href=#529 id=529 data-nosnippet>529</a>    <span class="comment">// SAFETY: the three pointers come from exclusive borrows this function holds
+<a href=#530 id=530 data-nosnippet>530</a>    // across the poll and does not otherwise use, and clear_tls_context withdraws
+<a href=#531 id=531 data-nosnippet>531</a>    // them before those borrows end. Callers poll only an operation still in
+<a href=#532 id=532 data-nosnippet>532</a>    // `self.operations`, whose socket is removed only after the operation is.
+<a href=#533 id=533 data-nosnippet>533</a>    </span><span class="kw">unsafe </span>{ set_tls_context(iface, device, sockets <span class="kw">as </span><span class="kw-2">*mut </span>SocketSet&lt;<span class="lifetime">'_</span>&gt; <span class="kw">as </span><span class="kw-2">*mut </span>()) };
+<a href=#534 id=534 data-nosnippet>534</a>    <span class="kw">let </span>result = future.as_mut().poll(<span class="kw-2">&amp;mut </span>context);
+<a href=#535 id=535 data-nosnippet>535</a>    clear_tls_context();
+<a href=#536 id=536 data-nosnippet>536</a>    result
+<a href=#537 id=537 data-nosnippet>537</a>}
 </code></pre></div></section></main></body></html>
