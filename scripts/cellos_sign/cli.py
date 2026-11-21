@@ -129,7 +129,8 @@ def run_check(args: argparse.Namespace) -> int:
     return _check(args)[0]
 
 
-def _check_before_signing(args: argparse.Namespace, targets: list[Path]) -> int:
+def _check_before_signing(args: argparse.Namespace, targets: list[Path],
+                          aliases: dict[Path, str] | None = None) -> int:
     """The strict tree check, then the tier gate on each target's own manifest.
 
     Strictness is imposed here rather than left to the caller: the signature is
@@ -140,12 +141,10 @@ def _check_before_signing(args: argparse.Namespace, targets: list[Path]) -> int:
     args.strict = True
     code, result, allow = _check(args, signing_run=True)
     if code == EXIT_OK:
-        refusals, notes = tier_class.elf_gate(targets, result.crates, result.tier, allow)
-        for note in notes:
-            print(f"NOTE: tier class (binary): {note}")
+        refusals = tier_class.elf_gate(targets, result.crates, result.tier, allow, aliases)
         if refusals:
             print("FAIL: tier class (binary) — the manifest in the ELF, which the kernel "
-                  "reads, puts a gated crate in Tier 1:")
+                  "reads, puts a gated or unattributable binary in Tier 1:")
             for refusal in refusals:
                 print(f"  {refusal}")
             code = EXIT_POLICY
@@ -155,10 +154,34 @@ def _check_before_signing(args: argparse.Namespace, targets: list[Path]) -> int:
     return code
 
 
+def _parse_aliases(pairs: list[str] | None, targets: list[Path]) -> dict[Path, str] | None:
+    """`--as ELF=BIN` values keyed by resolved path; None (after a message) if one
+    is malformed or names no `--sign` target, since an alias that attributes
+    nothing would let the caller believe a renamed copy was held to its crate."""
+    resolved = {t.resolve() for t in targets}
+    aliases: dict[Path, str] = {}
+    for pair in pairs or ():
+        elf, sep, name = pair.rpartition("=")
+        path = Path(elf).resolve() if elf else None
+        if not sep or not name or path is None:
+            print(f"error: --as expects ELF=BIN, got {pair!r}", file=sys.stderr)
+            return None
+        if path not in resolved:
+            print(f"error: --as {pair!r} names no --sign target", file=sys.stderr)
+            return None
+        if aliases.setdefault(path, name) != name:
+            print(f"error: --as gives {elf} two names", file=sys.stderr)
+            return None
+    return aliases
+
+
 def run_sign(args: argparse.Namespace) -> int:
     """Check, then sign. There is no path to the signing call that skips the check."""
     targets = [Path(p) for p in args.targets]
-    check_code = _check_before_signing(args, targets)
+    aliases = _parse_aliases(getattr(args, "aliases", None), targets)
+    if aliases is None:
+        return EXIT_USAGE
+    check_code = _check_before_signing(args, targets, aliases)
     if check_code != EXIT_OK:
         return check_code
     try:
@@ -255,6 +278,10 @@ def build_parser() -> argparse.ArgumentParser:
                         help="run the F1 + F5 check and exit without signing")
     parser.add_argument("--sign", dest="targets", nargs="+", metavar="ELF",
                         help="check, then sign these ELFs in place and re-verify")
+    parser.add_argument("--as", dest="aliases", action="append", metavar="ELF=BIN",
+                        help="with --sign: hold a renamed ELF to the cells/ binary target "
+                             "BIN (a Tier-1 ELF whose file name is no such target is refused "
+                             "without one); repeatable")
     parser.add_argument("--write-baseline", action="store_true",
                         help=f"lower the ceilings in {tcb.BASELINE_PATH} to the tree "
                              "(never raises one) and exit")
@@ -271,6 +298,9 @@ def main(argv: list[str] | None = None) -> int:
     if [bool(args.check), bool(args.targets), args.write_baseline].count(True) != 1:
         print("error: pass exactly one of --check, --sign ELF... or --write-baseline",
               file=sys.stderr)
+        return EXIT_USAGE
+    if args.aliases and not args.targets:
+        print("error: --as applies only to --sign", file=sys.stderr)
         return EXIT_USAGE
     if args.write_baseline:
         return run_write_baseline(args)

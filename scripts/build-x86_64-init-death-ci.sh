@@ -80,7 +80,11 @@ cp "$REL/app-init" "$TH_DIR/init"
 # shellcheck source=scripts/lib-sign-cells.sh
 source scripts/lib-sign-cells.sh
 echo "==> Signing the fixture init (F1/F5) with the dev key..."
-sign_cells "$TH_DIR/init"
+# The copy is named `init`, which is no cells/ binary target, so the signer must be
+# told which crate's entries it answers to (it refuses an unattributable Tier-1 ELF).
+resolve_objcopy "$TH_DIR/init"
+"$PYTHON_BIN" scripts/cellos-sign --quiet --objcopy "$OBJCOPY" \
+    --as "$TH_DIR/init=app-init" --sign "$TH_DIR/init"
 cp "$BASE/kernel_fs.img" "$TH_DIR/kernel_fs.img"
 
 echo "==> Building the canonical-profile kernel (features: ${KERNEL_FEATURES:-none})..."

@@ -42,7 +42,10 @@
 #
 # Usage: bash scripts/x86/qemu-domain-test.sh [kernel-elf] [iso-out]
 # Env: BOOT_WINDOW (default 120), X86_ACCEL (""|tcg|kvm), X86_CPUS (1..64),
-#      X86_CPU_MODEL, X86_EXPECT_PCID, LOG_DIR (default: repository root).
+#      X86_CPU_MODEL (default qemu64 with +svm), X86_EXPECT_PCID, X86_EXPECT_SVM,
+#      LOG_DIR (default: repository root). X86_EXPECT_SVM defaults to 1 when
+#      X86_CPU_MODEL names `+svm`; it then requires SVM root operation and with
+#      it the SVM-only tag-pool fixture (TAG-POOL-OWNER-LIMIT).
 #      The grant suite's evidence matrix is X86_CPUS ∈ {1,2,4} × X86_ACCEL ∈
 #      {tcg,kvm}; CI runs TCG at one CPU.
 #
@@ -59,7 +62,9 @@ ISO="${2:-build/vicell-x86-domain-test.iso}"
 ISO_ROOT="build/x86-domain-test-iso-root"
 BOOT_WINDOW="${BOOT_WINDOW:-120}"
 LOG_DIR="${LOG_DIR:-$REPO_ROOT}"
-X86_CPU_MODEL="${X86_CPU_MODEL:-qemu64,+pdpe1gb,+smep,+smap,+umip}"
+# `+svm` is explicit although TCG's qemu64 already enumerates SVM: the image
+# then enters SVM root operation, and X86_EXPECT_SVM (below) requires it.
+X86_CPU_MODEL="${X86_CPU_MODEL:-qemu64,+pdpe1gb,+svm,+smep,+smap,+umip}"
 X86_ACCEL="${X86_ACCEL:-}"
 X86_EXPECT_PCID="${X86_EXPECT_PCID:-}"
 X86_CPUS="${X86_CPUS:-1}"
@@ -71,6 +76,12 @@ fi
 if [[ -z "$X86_EXPECT_PCID" ]]; then
     if [[ "$X86_ACCEL" == "kvm" ]]; then X86_EXPECT_PCID=1; else X86_EXPECT_PCID=0; fi
 fi
+# From the model QEMU actually runs, so KVM's `host` default never inherits it.
+if [[ "$X86_CPU_MODEL" == *+svm* ]]; then
+    X86_EXPECT_SVM="${X86_EXPECT_SVM:-1}"
+else
+    X86_EXPECT_SVM="${X86_EXPECT_SVM:-0}"
+fi
 
 case "$X86_ACCEL" in
     ""|kvm|tcg) ;;
@@ -79,6 +90,10 @@ esac
 case "$X86_EXPECT_PCID" in
     0|1) ;;
     *) echo "FAIL: X86_EXPECT_PCID must be 0 or 1" >&2; exit 1 ;;
+esac
+case "$X86_EXPECT_SVM" in
+    0|1) ;;
+    *) echo "FAIL: X86_EXPECT_SVM must be 0 or 1" >&2; exit 1 ;;
 esac
 # 1..64 (the x86 MAX_HARTS). Two or more CPUs require the `online=N` topology
 # and the SMP fixtures below (plan 261103-2218 phase 07b).
@@ -362,6 +377,16 @@ REQUIRED_MARKERS=(
     "pin-dying window:::S22-X86-PIN-DYING: PASS"
     "MMIO revoke preserves supervisor binding:::MMIO-REVOKE-USERBIT: PASS"
     "vfs-lifetime and grant quarantine:::vfs-lifetime self-test PASS (exact lease, quarantine, owner watch)"
+    # Runtime capability revoke through `CapRevoke`: REVOKE-PRIVILEGED (inside
+    # thread-cap) also binds and vacates a NIC route on the revoked function.
+    "thread-cap revoke:::thread-cap self-test PASS (thread-inherit + honest-revoke + spawn bound)"
+    "grant reclaim on revoke:::grant-reclaim self-test PASS (owned reclaimed, received kept, pin withheld)"
+    "MMIO class revoke:::mmio-revoke self-test PASS (class selective, user access removed)"
+    # VT-d SLPT teardown primitives (kernel/src/dev/iommu_pt.rs).
+    "IOMMU teardown leaf:::IOMMU-TEARDOWN-LEAF: PASS"
+    "IOMMU teardown idempotent:::IOMMU-TEARDOWN-IDEMPOTENT: PASS"
+    "IOMMU teardown lookup-only:::IOMMU-TEARDOWN-LOOKUP-ONLY: PASS"
+    "IOMMU teardown remappable:::IOMMU-TEARDOWN-REMAPPABLE: PASS"
     "tier2-smoke launch:::fixture-launcher: tier2-smoke admitted."
     "tier2-exploit launch:::fixture-launcher: tier2-exploit admitted."
     "cpp-smoke launch:::fixture-launcher: cpp-smoke admitted."
@@ -489,7 +514,14 @@ fi
 
 # The tag-pool owner-limit fixture (census §8.5) needs a VM tag, which only SVM
 # has (an ASID per vCPU; VMX uses no VPID and the fixture logs SKIP there).
-if grep -aqF "x86 virt: root operation active (SVM)" "$LOG"; then
+# `X86_EXPECT_SVM=1` makes SVM root operation itself a requirement, so a run
+# meant to cover this fixture cannot pass by silently staying out of SVM.
+if [[ "$X86_EXPECT_SVM" == "1" ]]; then
+    REQUIRED_MARKERS+=(
+        "SVM root operation:::x86 virt: root operation active (SVM)"
+    )
+fi
+if [[ "$X86_EXPECT_SVM" == "1" ]] || grep -aqF "x86 virt: root operation active (SVM)" "$LOG"; then
     REQUIRED_MARKERS+=(
         "tag-pool owner limit:::[selftest] TAG-POOL-OWNER-LIMIT: PASS"
     )

@@ -28,14 +28,15 @@ never expanded, or an `abi` that is shadowed or renamed reads FFI here.
 
 From the binary (before every `--sign`, `elf_gate`). Each target's
 `__ViCell_manifest` is read exactly as the loader reads it
-(`elf_manifest.py`). A target that loads in Tier 1 and is named after a
-binary target of a `cells/` crate holding a `c-ffi` or `legacy-raw-ptr`
-entry is refused unless a `[[tier_exception]]` for that crate and class names
-the class the binary carries (`ABSENT` when it has no section). A malformed
-manifest is refused (the loader would refuse it too). A target whose file
-name is no binary target of any `cells/` crate (a renamed copy such as
-`init`, or a cell built outside `cells/`) cannot be attributed and is only
-reported.
+(`elf_manifest.py`). A target that loads in Tier 1 is attributed to the
+`cells/` crates with a binary target of its file name, or of the name an
+explicit `--as ELF=BIN` gives it (a renamed copy such as `init`). It is
+refused if that crate holds a `c-ffi` or `legacy-raw-ptr` entry, unless a
+`[[tier_exception]]` for that crate and class names the class the binary
+carries (`ABSENT` when it has no section). A Tier-1 target that cannot be
+attributed is refused too: otherwise renaming a gated crate's binary would
+skip this reading. A malformed manifest is refused (the loader would refuse
+it too).
 
 Crate records are keyed by package name, so two crates under `cells/` that
 share one fail the check. A file that declares an `extern { … }` block must
@@ -47,7 +48,7 @@ from __future__ import annotations
 
 import os
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -248,20 +249,27 @@ def exception_admits(allow: Allowlist, crate: str, klass: str, manifest: str) ->
 
 def elf_gate(
     targets: Iterable[Path], crates: list[scan.Crate], outcome: Outcome, allow: Allowlist,
-) -> tuple[list[str], list[str]]:
+    aliases: Mapping[Path, str] | None = None,
+) -> list[str]:
     """Hold each target ELF's own manifest to its crate's entries (see module doc).
 
-    Returns (refusals, notes). A target is attributed by file name to every
-    `cells/` crate with a binary target of that name (a trailing `.elf` is
-    ignored); a name shared by several crates is held to all of them.
+    Returns the refusals. A target is attributed to every `cells/` crate with a
+    binary target of its `aliases` entry (keyed by resolved path) or, without
+    one, of its file name (a trailing `.elf` is ignored); a name shared by
+    several crates is held to all of them.
     """
+    aliases = aliases or {}
     by_bin: dict[str, list[str]] = {}
     for crate in crates:
         for name in crate.bins:
             by_bin.setdefault(name, []).append(crate.name)
     refusals: list[str] = []
-    notes: list[str] = []
     for target in targets:
+        alias = aliases.get(Path(target).resolve())
+        if alias is not None and alias not in by_bin:
+            refusals.append(f"{target}: --as names `{alias}`, which is no binary target "
+                            "of a cells/ crate")
+            continue
         try:
             klass = elf_manifest.classify(Path(target).read_bytes())
         except OSError as exc:
@@ -273,10 +281,13 @@ def elf_gate(
         if klass in elf_manifest.TIER2_CLASSES:
             continue
         name = os.path.basename(target)
-        owners = by_bin.get(name) or by_bin.get(name.removesuffix(".elf")) or []
+        owners = (by_bin[alias] if alias is not None
+                  else by_bin.get(name) or by_bin.get(name.removesuffix(".elf")) or [])
         if not owners:
-            notes.append(f"{target}: loads in Tier 1 (manifest {klass}) and is no binary "
-                         "target of a cells/ crate, so the tier-class gate cannot attribute it")
+            refusals.append(
+                f"{target}: loads in Tier 1 (manifest {klass}) and its file name is no binary "
+                "target of a cells/ crate, so the gate cannot hold it to its crate's entries. "
+                "Sign it under its binary name, or name that binary with --as ELF=BIN")
             continue
         for crate in sorted(set(owners)):
             record = outcome.records.get(crate)
@@ -289,4 +300,4 @@ def elf_gate(
                     f"reads {record.manifest}). The binary, not the source, decides the "
                     "tier: make the FFI/UNTRUSTED manifest reach this binary, or add a "
                     "[[tier_exception]] that names manifest " + klass)
-    return refusals, notes
+    return refusals

@@ -42,6 +42,10 @@ const DRIVER_BAR: usize = 0x5100_0000;
 /// (The previous `0x02_00_00` overflowed the 16-bit encoding and aliased the
 /// real host bridge at 00:00.0.)
 const DRIVER_BDF: u32 = 0x00_FF;
+/// A later owner of `DRIVER_BDF`, which must find the revoked driver's NIC
+/// route vacant.
+#[cfg(feature = "test-hooks")]
+const REPLACEMENT_TID: usize = 9005;
 /// Separate cell for the thread-cap section, so its fillers cannot be mistaken
 /// for (or collide with) the identity-inheritance section's parent cell.
 const DOS_CELL_ID: u64 = (crate::memory::cell_quota::MAX_CELLS - 4) as u64;
@@ -407,6 +411,8 @@ pub fn self_test() -> bool {
         insert(driver);
 
         let bdf_claimed = crate::dev::ownership::claim_pci(DRIVER_BDF, DRIVER_TID);
+        #[cfg(feature = "test-hooks")]
+        let nic_route = bind_driver_nic_route(bdf_claimed);
         // The BAR table is boot-discovered data with no removal path, so the
         // synthetic window is registered only where the test hook exists.
         #[cfg(feature = "test-hooks")]
@@ -433,15 +439,23 @@ pub fn self_test() -> bool {
                 rights.pcie_driver && rights.platform && rights.supervisor
             });
             let bdf_retained = crate::dev::ownership::pci_owner(DRIVER_BDF) == Some(DRIVER_TID);
+            // A refused revoke freed nothing, so the route keeps its provider.
+            #[cfg(feature = "test-hooks")]
+            let route_kept = nic_route.is_some()
+                && crate::cell::service_registry::lookup(abi::syscall::service::NIC_DRIVER)
+                    == Some(DRIVER_TID);
+            #[cfg(not(feature = "test-hooks"))]
+            let route_kept = true;
             let refused_closed = matches!(refused, Err(SyscallError::NotSupported));
-            if !(refused_closed && caps_intact && bdf_retained) {
+            if !(refused_closed && caps_intact && bdf_retained && route_kept) {
                 ok = false;
                 log::error!(
                     "[selftest] REVOKE-PRIVILEGED: no-config-space revoke did not fail closed \
-                     r={:?} caps_intact={} bdf_retained={}",
+                     r={:?} caps_intact={} bdf_retained={} route_kept={}",
                     refused,
                     caps_intact,
-                    bdf_retained
+                    bdf_retained,
+                    route_kept
                 );
             }
             crate::dev::ownership::release_for(DRIVER_TID, crate::dev::ownership::Scope::Retired);
@@ -484,24 +498,34 @@ pub fn self_test() -> bool {
             bar_claimed && crate::resource_registry::lookup_mmio_owner(DRIVER_BAR).is_none();
         #[cfg(not(feature = "test-hooks"))]
         let bar_released = true;
+        #[cfg(feature = "test-hooks")]
+        let route_vacated = nic_route.is_some_and(driver_nic_route_vacated);
+        #[cfg(not(feature = "test-hooks"))]
+        let route_vacated = true;
 
         let priv_ok = r_priv.is_ok()
             && priv_state.is_some_and(|(pcie, platform, supervisor, notified)| {
                 pcie && platform && supervisor && notified
             })
             && bdf_released
-            && bar_released;
+            && bar_released
+            && route_vacated;
         if !priv_ok {
             ok = false;
             log::error!(
                 "[selftest] REVOKE-PRIVILEGED: FAIL r={:?} state={:?} bdf_released={} \
-                 bar_released={}",
+                 bar_released={} route_vacated={}",
                 r_priv,
                 priv_state,
                 bdf_released,
-                bar_released
+                bar_released,
+                route_vacated
             );
         }
+        // Leaves no route provider or `service::NIC_DRIVER` row behind, even
+        // when an assertion above failed.
+        #[cfg(feature = "test-hooks")]
+        crate::dev::driver_cell::deregister_all_for(DRIVER_TID);
 
         remove(PARENT_TID);
         remove(TARGET_TID);
@@ -575,4 +599,59 @@ pub fn self_test() -> bool {
         log::error!("[selftest] THREAD-CAP: FAIL");
     }
     ok
+}
+
+#[cfg(feature = "test-hooks")]
+fn driver_nic_key() -> Option<abi::block_route::DeviceKey> {
+    abi::block_route::DeviceKey::new(abi::block_route::BLOCK_DEVICE_PCI, u64::from(DRIVER_BDF))
+}
+
+/// Bind the driver's NIC route as `RegisterNicDriver` (417) does, before any
+/// real NIC registers, so it is the primary and publishes `service::NIC_DRIVER`.
+/// `Some(route index)` only then: otherwise the revoke's effect on the service
+/// row could not be observed.
+///
+/// The route table has no removal path, so the slot stays keyed (vacant) for
+/// the boot; hence test-hooks only, like the synthetic BAR window.
+#[cfg(feature = "test-hooks")]
+fn bind_driver_nic_route(bdf_claimed: bool) -> Option<usize> {
+    use crate::cell::service_registry;
+    use abi::syscall::service::NIC_DRIVER;
+    // A row this early would be replaced by the publication below.
+    if !bdf_claimed || service_registry::lookup(NIC_DRIVER).is_some() {
+        log::error!("[selftest] REVOKE-PRIVILEGED: NIC route fixture unavailable");
+        return None;
+    }
+    let provider = (DRIVER_TID, 0x3333, 1);
+    let index = crate::dev::driver_cell::publish_nic_route(driver_nic_key()?, provider, || {
+        service_registry::register(NIC_DRIVER, provider.0, provider.1, provider.2)
+    })?;
+    (service_registry::lookup(NIC_DRIVER) == Some(DRIVER_TID)).then_some(index)
+}
+
+/// After the revoke freed `DRIVER_BDF` from the still-live driver: its
+/// `service::NIC_DRIVER` row is gone (the primary had no live successor) and a
+/// new owner of the function binds the same route rather than being refused as
+/// held. The replacement is torn down again before returning.
+#[cfg(feature = "test-hooks")]
+fn driver_nic_route_vacated(index: usize) -> bool {
+    use crate::dev::ownership;
+    let row_gone = crate::cell::service_registry::lookup(abi::syscall::service::NIC_DRIVER)
+        != Some(DRIVER_TID);
+    let rebound = ownership::claim_pci(DRIVER_BDF, REPLACEMENT_TID)
+        && driver_nic_key().is_some_and(|key| {
+            crate::dev::driver_cell::publish_nic_route(key, (REPLACEMENT_TID, 0x3334, 1), || true)
+                == Some(index)
+        });
+    crate::dev::driver_cell::deregister_all_for(REPLACEMENT_TID);
+    ownership::release_for(REPLACEMENT_TID, ownership::Scope::Retired);
+    if !(row_gone && rebound) {
+        log::error!(
+            "[selftest] REVOKE-PRIVILEGED: NIC route {} not vacated (row_gone={} rebound={})",
+            index,
+            row_gone,
+            rebound
+        );
+    }
+    row_gone && rebound
 }

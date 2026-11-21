@@ -732,11 +732,13 @@ NC_CARGO = '[package]\nname = "nc"\nversion = "0.1.0"\n'
 
 
 def sign_tree(files: dict[str, str], allow_text: str, targets: dict[str, bytes | None],
-              total: tuple[int, int] = (100, 100)) -> tuple[int, list, str]:
+              total: tuple[int, int] = (100, 100),
+              aliases: dict[str, str] | None = None) -> tuple[int, list, str]:
     """The real `cellos-sign --sign` path on a throwaway tree; only F5 and the
     signing call are replaced. Each target is a minimal ELF carrying the given
     manifest record (None: no section). The generous total keeps the closure
-    layer quiet (a drop is only a NOTE on --sign), so the tier gates decide."""
+    layer quiet (a drop is only a NOTE on --sign), so the tier gates decide.
+    `aliases` maps a file name under build/ to the `--as` binary name."""
     signed: list = []
     out = __import__("io").StringIO()
     verified = toolchain.ToolchainStatus(ok=True, skipped=False, detail="pinned")
@@ -752,8 +754,11 @@ def sign_tree(files: dict[str, str], allow_text: str, targets: dict[str, bytes |
             path.parent.mkdir(exist_ok=True)
             path.write_bytes(elf_manifest.minimal_elf(record))
             paths.append(str(path))
+        as_args = [f"{root / 'build' / name}={bin_name}"
+                   for name, bin_name in (aliases or {}).items()]
         args = argparse.Namespace(repo=root, allowlist="a.toml", quiet=True, strict=False,
-                                  targets=paths, objcopy="objcopy", seed_hex=None)
+                                  targets=paths, objcopy="objcopy", seed_hex=None,
+                                  aliases=as_args)
         with mock.patch.object(cli.toolchain, "check", return_value=verified), \
              mock.patch.object(cli.signing, "sign_and_verify",
                                side_effect=lambda *a, **k: signed.append(a)), \
@@ -848,13 +853,56 @@ class ElfTierGateTests(unittest.TestCase):
         self.assertEqual((code, signed), (cli.EXIT_POLICY, []), output)
         self.assertIn("`__ViCell_manifest` is malformed", output)
 
-    def test_an_unattributable_tier_one_binary_is_noted_and_signed(self):
-        main = "#![no_std]\n" + TIER_FFI + FFI_CALL
-        code, signed, output = sign_tree(
-            {"cells/nc/Cargo.toml": NC_CARGO, "cells/nc/src/main.rs": main},
-            ffi_allowlist(crate="nc"), {"init": self.LEGACY})
+    APP = {"cells/app/Cargo.toml": '[package]\nname = "app"\nversion = "0.1.0"\n',
+           "cells/app/src/main.rs": "#![no_std]\n#![forbid(unsafe_code)]\n"}
+
+    def gated_tree(self) -> dict[str, str]:
+        return {"cells/nc/Cargo.toml": NC_CARGO,
+                "cells/nc/src/main.rs": "#![no_std]\n" + TIER_FFI + FFI_CALL, **self.APP}
+
+    def test_an_unattributable_tier_one_binary_is_refused(self):
+        code, signed, output = sign_tree(self.gated_tree(), ffi_allowlist(crate="nc"),
+                                         {"init": self.LEGACY})
+        self.assertEqual((code, signed), (cli.EXIT_POLICY, []), output)
+        self.assertIn("init: loads in Tier 1 (manifest LEGACY) and its file name is no binary "
+                      "target of a cells/ crate", output)
+
+    def test_a_renamed_binary_signs_when_as_names_its_ungated_crate(self):
+        code, signed, output = sign_tree(self.gated_tree(), ffi_allowlist(crate="nc"),
+                                         {"init": self.LEGACY}, aliases={"init": "app"})
         self.assertEqual((code, len(signed)), (cli.EXIT_OK, 1), output)
-        self.assertIn("is no binary target of a cells/ crate", output)
+
+    def test_as_holds_a_renamed_binary_to_its_gated_crate(self):
+        self.refused_by_binary(*sign_tree(self.gated_tree(), ffi_allowlist(crate="nc"),
+                                          {"init": self.LEGACY}, aliases={"init": "nc"}),
+                               klass="LEGACY")
+
+    def test_as_overrides_a_file_name_that_matches_another_crate(self):
+        # A gated binary copied over an ungated crate's name must not borrow that crate.
+        self.refused_by_binary(*sign_tree(self.gated_tree(), ffi_allowlist(crate="nc"),
+                                          {"app": self.LEGACY}, aliases={"app": "nc"}),
+                               klass="LEGACY")
+
+    def test_as_naming_no_crate_binary_is_refused(self):
+        code, signed, output = sign_tree(self.gated_tree(), ffi_allowlist(crate="nc"),
+                                         {"init": self.FFI}, aliases={"init": "nope"})
+        self.assertEqual((code, signed), (cli.EXIT_POLICY, []), output)
+        self.assertIn("--as names `nope`, which is no binary target", output)
+
+    def test_as_naming_no_sign_target_is_a_usage_error(self):
+        code, signed, output = sign_tree(self.gated_tree(), ffi_allowlist(crate="nc"),
+                                         {"init": self.LEGACY}, aliases={"other": "app"})
+        self.assertEqual((code, signed), (cli.EXIT_USAGE, []), output)
+        self.assertIn("names no --sign target", output)
+
+    def test_an_unattributable_tier_two_binary_signs_without_as(self):
+        code, signed, output = sign_tree(self.gated_tree(), ffi_allowlist(crate="nc"),
+                                         {"foreign": self.FFI})
+        self.assertEqual((code, len(signed)), (cli.EXIT_OK, 1), output)
+
+    def test_as_without_sign_is_a_usage_error(self):
+        with mock.patch("sys.stderr", __import__("io").StringIO()):
+            self.assertEqual(cli.main(["--check", "--as", "x=app"]), cli.EXIT_USAGE)
 
     def test_a_shared_package_name_is_refused_on_the_sign_path(self):
         files = {"cells/a/Cargo.toml": NC_CARGO,
@@ -1336,7 +1384,8 @@ class SignPathStrictnessTests(unittest.TestCase):
             write(root, "a.toml", "version = 1\n")
             write_tcb(root)
             target = root / "cell"
-            target.write_bytes(elf_manifest.minimal_elf(elf_manifest.manifest_record(0xFF)))
+            # FFI (Tier 2): the mocked tree has no crate, so a Tier-1 target is unattributable.
+            target.write_bytes(elf_manifest.minimal_elf(elf_manifest.manifest_record(2)))
             args = argparse.Namespace(
                 repo=root, allowlist="a.toml", quiet=True, strict=False,
                 targets=[str(target)], objcopy="objcopy", seed_hex=None,
@@ -1760,8 +1809,10 @@ class CandidateRouteTests(unittest.TestCase):
 
     def test_sign_route_runs_the_f1_f5_check_first(self):
         targets = self.batch("cellbox")
-        for target in targets:  # the ELF tier gate reads the manifest before any route rule
-            target.write_bytes(elf_manifest.minimal_elf(elf_manifest.manifest_record(0xFF)))
+        # The ELF tier gate reads the manifest before any route rule; FFI (Tier 2) passes
+        # it without a crate, which the mocked check below does not provide.
+        for target in targets:
+            target.write_bytes(elf_manifest.minimal_elf(elf_manifest.manifest_record(2)))
         failed = policy.Result()
         failed.violations.append(policy.Violation("token", "x", "cells/x/src/lib.rs", "unsafe"))
         verified = toolchain.ToolchainStatus(ok=True, skipped=False, detail="pinned")

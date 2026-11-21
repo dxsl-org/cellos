@@ -739,6 +739,22 @@ assert_grant_revoke_outcome() {
         echo "FAIL: [selftest] IRQ-ALLOC-CHARGE: PASS missing for case=$case_id: $(grep -aoF -m1 'IRQ-ALLOC-CHARGE: FAIL' "$normalized_log" || echo 'no verdict'); see $normalized_log" >&2
         exit 1
     fi
+    # Every boot of this test-hooks image also runs the runtime-revoke self-tests
+    # (`CapRevoke` end to end, kernel/src/main.rs) and the Sv39 DMA remapper
+    # teardown probe (kernel/src/dev/iommu_pt.rs).
+    for required_marker in \
+        'thread-cap self-test PASS (thread-inherit + honest-revoke + spawn bound)' \
+        'grant-reclaim self-test PASS (owned reclaimed, received kept, pin withheld)' \
+        'mmio-revoke self-test PASS (class selective, user access removed)' \
+        'IOMMU-TEARDOWN-LEAF: PASS' \
+        'IOMMU-TEARDOWN-IDEMPOTENT: PASS' \
+        'IOMMU-TEARDOWN-LOOKUP-ONLY: PASS' \
+        'IOMMU-TEARDOWN-REMAPPABLE: PASS'; do
+        if ! grep -aFq -- "$required_marker" "$normalized_log"; then
+            echo "FAIL: boot self-test marker missing for case=$case_id: $required_marker; see $normalized_log" >&2
+            exit 1
+        fi
+    done
     # The grant pair runs in every boot of this image, so every case classifies
     # its receiver faults from that boot's own handoff line.
     [[ -n "$GRANT_PAIR_FAULT_ADDRS" ]] || GRANT_PAIR_FAULT_ADDRS="$(grant_pair_fault_addrs "$normalized_log")"

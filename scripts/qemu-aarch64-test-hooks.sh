@@ -356,6 +356,15 @@ REQUIRED_MARKERS=(
     "S22-AARCH64-LEAF-NONG: PASS"
     "S22-AARCH64-RELEASE-FLUSH: PASS"
     "S22-AARCH64-ASID-INVALIDATION:"
+    # Runtime capability revoke, end to end through `CapRevoke` (boot self-tests
+    # in kernel/src/main.rs). A failing one logs FAIL instead and stops the lane.
+    "thread-cap self-test PASS (thread-inherit + honest-revoke + spawn bound)"
+    "grant-reclaim self-test PASS (owned reclaimed, received kept, pin withheld)"
+    "mmio-revoke self-test PASS (class selective, user access removed)"
+    # AArch64 has no DMA remapper page table (`NoRemapper`), so the teardown
+    # probe reports SKIP. A remapper added later drops this line, and the lane
+    # must then require the four IOMMU-TEARDOWN-* PASS lines as RV64 and x86 do.
+    "IOMMU-TEARDOWN: SKIP (no DMA remapper page table on this architecture)"
 )
 # Phase 02 Tier-2 entry on one PE, plus the admission posture it reopened. These
 # are asserted only on the EL1 machine: the development-Silo machine boots with

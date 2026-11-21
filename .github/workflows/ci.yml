@@ -1138,6 +1138,11 @@ jobs:
           BINDGEN_EXTRA_CLANG_ARGS_x86_64_unknown_none: --target=x86_64-linux-gnu
         run: python3 scripts/assemble-x86-image.py --profile headless --out-dir kernel/src/embedded-x86_64
 
+      # UMIP (CR4.UMIP, set when the CPU has it) turns SGDT/SIDT/SLDT/SMSW/STR at
+      # CPL 3 into #GP, which kills the cell. Audit every cell the image ships.
+      - name: UMIP instruction audit (x86_64 headless image)
+        run: python3 scripts/check-x86-umip-mnemonics.py kernel/src/embedded-x86_64/kernel_fs.img kernel/src/embedded-x86_64/init
+
       - name: Build x86_64 kernel
         # The canonical fleet profile (Phase 10 S10-3a): the features come from the
         # assembler's manifest (`kernel_features`, `CANONICAL_KERNEL_FEATURES`), so Tier 2
@@ -1465,11 +1470,22 @@ jobs:
         timeout-minutes: 15
         run: bash scripts/x86/qemu-release-posture-test.sh "$C2C_DIR/embedded" "$C2C_DIR/release-posture"
 
-      - name: x86 Tier-2 domain test (TCG)
+      - name: Build x86 Tier-2 domain-test image
         timeout-minutes: 20
-        run: |
-          bash scripts/build-x86_64-domain-test-ci.sh
-          bash scripts/x86/qemu-domain-test.sh target/x86-domain-test/x86_64-unknown-none/release/cellos-kernel-domain-test
+        run: bash scripts/build-x86_64-domain-test-ci.sh
+
+      - name: UMIP instruction audit (x86_64 domain-test image)
+        run: python3 scripts/check-x86-umip-mnemonics.py target/x86-domain-test-embedded/kernel_fs.img target/x86-domain-test-embedded/init
+
+      # SVM exposed (TCG's qemu64 enumerates it anyway; the lane's default model
+      # names it too): the kernel enters SVM root operation, and the lane then
+      # requires it plus the SVM-only TAG-POOL-OWNER-LIMIT and VM-GUEST-BUDGET
+      # fixtures instead of skipping them when root operation is absent.
+      - name: x86 Tier-2 domain test (TCG, SVM)
+        timeout-minutes: 20
+        env:
+          X86_CPU_MODEL: qemu64,+pdpe1gb,+svm,+smep,+smap,+umip
+        run: bash scripts/x86/qemu-domain-test.sh target/x86-domain-test/x86_64-unknown-none/release/cellos-kernel-domain-test
 
       - name: Local service lifecycle (x86_64)
         timeout-minutes: 20
