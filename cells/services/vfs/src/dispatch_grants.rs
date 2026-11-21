@@ -255,9 +255,6 @@ mod health_tests {
                 BackendHealth::Ready
             }
         }
-        fn get_file_ptr(&self, _: &str) -> Option<(usize, usize)> {
-            None
-        }
         fn list(&self, _: &str, _: &mut [u8]) -> Result<usize, FsError> {
             self.0.store(true, Ordering::SeqCst);
             Err(FsError::Io)

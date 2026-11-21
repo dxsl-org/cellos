@@ -59,12 +59,6 @@ fn boot_first<T>(
 }
 
 impl FsBackend for BinOverlay {
-    fn get_file_ptr(&self, path: &str) -> Option<(usize, usize)> {
-        self.boot
-            .get_file_ptr(path)
-            .or_else(|| self.store.get_file_ptr(path))
-    }
-
     fn list(&self, path: &str, out: &mut [u8]) -> Result<usize, FsError> {
         // Union: VIFS1 entries first, then cell-store entries into the remainder.
         // Bootstrap and P2-only cell sets are disjoint by construction, so no

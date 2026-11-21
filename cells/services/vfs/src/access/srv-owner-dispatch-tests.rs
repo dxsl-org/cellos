@@ -139,7 +139,6 @@ fn every_other_caller_is_refused_every_operation() {
         assert_eq!(call(&mut vfs, caller, &write_own), Reply::Ok, "{caller:?}");
         let requests = [
             VfsRequest::Stat(KEYS),
-            VfsRequest::GetFile(KEYS),
             VfsRequest::ListDir("/srv/sshd"),
             VfsRequest::ReadAsync { path: KEYS },
             VfsRequest::Observe { path: KEYS },

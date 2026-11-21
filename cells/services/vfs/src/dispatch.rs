@@ -74,11 +74,14 @@ pub fn handle_request<'a>(
         }
     }
 
-    // Phase 12 (CP1 W3): the SSH host-trust store moved to KMS. The three trust variants
-    // stay as tombstones so every later request keeps its byte; they are unsupported.
+    // Tombstones keep their bytes so every later request keeps its discriminant;
+    // they are unsupported. Phase 12 (CP1 W3): the SSH host-trust store moved to KMS.
+    // `GetFileRetired` answered a raw pointer into VFS memory, which no domain
+    // outside this cell's address space may hold; files are read via `ReadFileGrant`.
     if matches!(
         req,
-        wire::ipc::VfsRequest::TrustLookup { .. }
+        wire::ipc::VfsRequest::GetFileRetired(_)
+            | wire::ipc::VfsRequest::TrustLookup { .. }
             | wire::ipc::VfsRequest::TrustChallenge { .. }
             | wire::ipc::VfsRequest::TrustCommit { .. }
     ) {
@@ -307,5 +310,36 @@ mod tests {
             );
         }
         assert_eq!(VfsError::Unsupported as u8, 6);
+    }
+
+    /// The retired raw-pointer read answers Unsupported for a readable file, both
+    /// before and after the caller seals its paths: no request can yield an address
+    /// inside the VFS cell.
+    #[test]
+    fn get_file_tombstone_answers_unsupported() {
+        let caller = Caller {
+            flags: abi::caller_identity::CALLER_FLAG_VFS_MUTATE,
+            ..Caller::principal(CellId(92), 1)
+        };
+        let mut vfs = VfsManager::new();
+        let _ = vfs.dirs.on_contact(caller);
+        vfs.dirs.mark_attested(caller);
+        let send = |vfs: &mut VfsManager, req: &VfsRequest<'_>| {
+            let mut request = [0u8; IPC_BUF_SIZE];
+            wire::ipc::encode(req, &mut request).expect("request fits");
+            let mut resp_buf = [0u8; IPC_BUF_SIZE];
+            let resp = super::handle_request(vfs, &request, Some(caller), &mut resp_buf);
+            format!("{resp:?}")
+        };
+        let write = VfsRequest::Write {
+            path: "/tmp/retired.txt",
+            content: b"contents",
+        };
+        assert_eq!(send(&mut vfs, &write), "Ok");
+        let unsupported = format!("{:?}", VfsResponse::Err(VfsError::Unsupported as u8));
+        let get = VfsRequest::GetFileRetired("/tmp/retired.txt");
+        assert_eq!(send(&mut vfs, &get), unsupported);
+        assert_eq!(send(&mut vfs, &VfsRequest::SealPaths), "Ok");
+        assert_eq!(send(&mut vfs, &get), unsupported);
     }
 }

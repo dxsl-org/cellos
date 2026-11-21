@@ -469,7 +469,7 @@ fn cell_main() {
         "rt-probe" => scenarios::preempt_latency::run_probe(),
         "ctl-loop" => scenarios::control_loop::run_control_loop(),
         "ipc-echo" => echo::run(),
-        "resp-echo" => scenarios::vfs_getfile_breakdown::run_resp_echo(),
+        "resp-echo" => scenarios::vfs_read_breakdown::run_resp_echo(),
         "smp-worker" => scenarios::smp::run_worker(),
         "peer-death-guard" => scenarios::smp::run_peer_death_guard(),
         "hotswap-prime" => {
@@ -650,7 +650,7 @@ fn cell_main() {
     }
 
     {
-        use scenarios::vfs_getfile_breakdown as vgb;
+        use scenarios::vfs_read_breakdown as vgb;
         println("");
         println("[breakdown] service call — per-stage cost (each sample = 1000 ops)");
         run_breakdown(

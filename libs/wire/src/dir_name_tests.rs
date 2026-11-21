@@ -200,7 +200,6 @@ fn joining_adds_exactly_one_component() {
 
 #[test]
 fn every_path_naming_request_is_classified_as_path_addressed() {
-    assert!(VfsRequest::GetFile("/x").is_path_addressed());
     assert!(VfsRequest::ListDir("/x").is_path_addressed());
     assert!(VfsRequest::Stat("/x").is_path_addressed());
     assert!(VfsRequest::Write {
@@ -284,8 +283,8 @@ fn the_existing_variants_keep_their_discriminants() {
     // here means an in-flight message from an unmigrated cell would be decoded
     // as a different operation.
     let mut buf = [0u8; 64];
-    let encoded = super::ipc::encode(&VfsRequest::GetFile("a"), &mut buf).unwrap();
-    assert_eq!(encoded[0], 0, "GetFile must stay variant 0");
+    let encoded = super::ipc::encode(&VfsRequest::GetFileRetired("a"), &mut buf).unwrap();
+    assert_eq!(encoded[0], 0, "the GetFile tombstone must stay variant 0");
 
     let mut buf = [0u8; 64];
     let encoded = super::ipc::encode(

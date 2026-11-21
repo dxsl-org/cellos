@@ -86,11 +86,6 @@ pub trait FsBackend: Send {
     fn health(&self) -> BackendHealth {
         BackendHealth::Ready
     }
-    /// SAS zero-copy pointer to the file's bytes. Only in-memory backends
-    /// return `Some` — pointers must stay valid while the VFS cell lives.
-    /// Disk backends return `None`; callers fall back to the copy path.
-    fn get_file_ptr(&self, path: &str) -> Option<(usize, usize)>;
-
     /// List directory entries as `d:name\n` / `f:name\n` lines into `out`.
     /// Returns bytes written (0 for an empty directory); an error when the
     /// path is missing, not a directory, or the listing could not be read.

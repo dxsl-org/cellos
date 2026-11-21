@@ -1,21 +1,21 @@
 //! Stage breakdown of a typed VFS-shaped request/reply on the message path.
 //!
-//! Answers one question: of the cost of a `GetFile`, how much is spent on work a
-//! by-reference direct call would skip? A direct call skips the whole IPC
-//! rendezvous — encoding the request, both `ecall`s, and both context switches —
-//! and runs the handler on the caller's own thread. It does **not** skip the
-//! handler body, nor encoding and decoding the reply (the fast handler still
-//! ends in `wire::ipc::encode`), nor resolving the caller's identity.
+//! Answers one question: of the cost of a path read (`ReadFileGrant`), how much
+//! is spent on work a by-reference direct call would skip? A direct call skips
+//! the whole IPC rendezvous — encoding the request, both `ecall`s, and both
+//! context switches — and runs the handler on the caller's own thread. It does
+//! **not** skip the handler body, nor encoding and decoding the reply, nor
+//! resolving the caller's identity.
 //!
 //! So: `saving ≈ round_trip`, `total ≈ round_trip + handler_body`, and the
 //! fraction saved is `round_trip / (round_trip + handler_body)`.
 //!
 //! # Why the peer is an echo and not the real VFS
-//! The breakdown intentionally avoids service discovery and filesystem work.
-//! The echo peer performs the same typed exchange (decode a request, encode a
-//! `DataPtr` reply) but no lookup. That makes the measured round trip the
-//! **transport cost alone** — the numerator of the fraction above — and leaves
-//! the handler body to be added to the denominator separately.
+//! The breakdown intentionally avoids service discovery, filesystem work and the
+//! grant copy. The echo peer performs the same typed exchange (decode a request,
+//! encode a `GrantDone` reply) but no lookup. That makes the measured round trip
+//! the **transport cost alone** — the numerator of the fraction above — and
+//! leaves the handler body to be added to the denominator separately.
 //!
 //! # Why each scenario loops internally
 //! The shared runner brackets every `run_once` with two `sys_get_time` calls,
@@ -46,17 +46,26 @@ const INNER: u32 = 1_000;
 /// length-prefixed string, short enough to be an ordinary lookup.
 const PATH: &str = "/bin/hello-cell";
 
-/// The reply shape a real `GetFile` returns on both paths.
-const REPLY: VfsResponse = VfsResponse::DataPtr {
-    ptr: 0x8000_0000,
-    len: 4096,
-};
+/// Representative grant id and length; the echo peer never touches the grant.
+const GRANT: usize = 7;
+const GRANT_LEN: usize = 4096;
+
+/// The reply a completed `ReadFileGrant` returns.
+const REPLY: VfsResponse = VfsResponse::GrantDone { bytes: GRANT_LEN };
+
+fn request(path: &str) -> VfsRequest<'_> {
+    VfsRequest::ReadFileGrant {
+        path,
+        grant: GRANT,
+        max: GRANT_LEN,
+    }
+}
 
 /// Echo peer binary — a second instance of this cell in the `resp-echo` role.
 /// Separate VA base (0x19000000) so it does not collide with the orchestrator.
 const PROBE_PATH: &str = "/bin/bench-probe";
 
-/// Peer loop: decode a typed request, reply with an encoded `DataPtr`.
+/// Peer loop: decode a typed request, reply with an encoded `GrantDone`.
 pub fn run_resp_echo() -> ! {
     let mut rx = [0u8; IPC_BUF_SIZE];
     let mut tx = [0u8; 64];
@@ -99,7 +108,7 @@ impl ViBenchmark for EncodeRequestBench {
 
     fn run_once(&mut self) -> types::ViResult<u64> {
         for _ in 0..INNER {
-            let req = VfsRequest::GetFile(black_box(PATH));
+            let req = request(black_box(PATH));
             let encoded =
                 wire::ipc::encode(&req, &mut self.buf).map_err(|_| ViError::InvalidInput)?;
             let _ = black_box(encoded);
@@ -212,7 +221,7 @@ impl ViBenchmark for RoundTripBench {
             return Err(ViError::NotFound);
         }
         for _ in 0..INNER {
-            let req = VfsRequest::GetFile(black_box(PATH));
+            let req = request(black_box(PATH));
             let n = wire::ipc::encode(&req, &mut self.send_buf)
                 .map_err(|_| ViError::InvalidInput)?
                 .len();

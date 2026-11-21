@@ -395,10 +395,6 @@ fn remove_tree(fs: &DataFs, rel: &str) -> Result<(), FsError> {
 }
 
 impl FsBackend for FatBackend {
-    fn get_file_ptr(&self, _path: &str) -> Option<(usize, usize)> {
-        None // disk-backed: no stable in-memory pointer — callers use the copy path
-    }
-
     fn list(&self, path: &str, out: &mut [u8]) -> Result<usize, FsError> {
         let fs = self.volume_fs()?;
         let dir = open_dir_allow_root(fs, self.rel_allow_root(path))?;

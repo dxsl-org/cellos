@@ -795,9 +795,6 @@ fn stale_cursors_and_vanished_directories_are_io_errors_not_empty_pages() {
 struct NoPaging;
 
 impl FsBackend for NoPaging {
-    fn get_file_ptr(&self, _: &str) -> Option<(usize, usize)> {
-        None
-    }
     fn list(&self, _: &str, _: &mut [u8]) -> Result<usize, FsError> {
         Ok(0)
     }

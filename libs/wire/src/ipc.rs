@@ -37,8 +37,12 @@ pub const VFS_GRANT_CHUNK: usize = 64 * 1024;
 /// Requests sent to the VFS service (`/bin/vfs`).
 #[derive(Debug, Serialize, Deserialize)]
 pub enum VfsRequest<'a> {
-    /// Read file content from a VFS-managed path.
-    GetFile(&'a str),
+    /// Tombstone (was `GetFile`, a raw pointer into VFS memory answered with
+    /// `DataPtr`). Keeps discriminant 0 and its field layout so every later
+    /// request keeps its byte and an old client's frame still decodes; the
+    /// service answers `Err(Unsupported)`. Read files with `ReadFileGrant`.
+    /// Never reuse or remove it.
+    GetFileRetired(&'a str),
     /// List directory entries as a newline-separated string.
     ListDir(&'a str),
     /// Stat a path — returns size + is_dir flag.
@@ -408,8 +412,7 @@ impl VfsRequest<'_> {
     /// to nothing.
     pub fn is_path_addressed(&self) -> bool {
         match self {
-            Self::GetFile(_)
-            | Self::ListDir(_)
+            Self::ListDir(_)
             | Self::Stat(_)
             | Self::Write { .. }
             | Self::Append { .. }
@@ -457,6 +460,7 @@ impl VfsRequest<'_> {
             | Self::SaveQuery { .. }
             | Self::SaveAbort { .. }
             // Tombstones: answered Unsupported before any path is resolved.
+            | Self::GetFileRetired(_)
             | Self::TrustLookup { .. }
             | Self::TrustChallenge { .. }
             | Self::TrustCommit { .. } => false,
@@ -489,8 +493,7 @@ impl VfsRequest<'_> {
             | Self::RmdirAt { .. }
             | Self::RenameAt { .. } => true,
 
-            Self::GetFile(_)
-            | Self::ListDir(_)
+            Self::ListDir(_)
             | Self::Stat(_)
             | Self::ReadAsync { .. }
             | Self::Poll { .. }
@@ -513,6 +516,7 @@ impl VfsRequest<'_> {
             | Self::Observe { .. }
             | Self::SaveQuery { .. }
             // Tombstones: answered Unsupported, never mutate.
+            | Self::GetFileRetired(_)
             | Self::TrustLookup { .. }
             | Self::TrustChallenge { .. }
             | Self::TrustCommit { .. } => false,
@@ -525,9 +529,10 @@ impl VfsRequest<'_> {
 pub enum VfsResponse<'a> {
     /// File or directory listing bytes (copied into response buffer).
     Data(&'a [u8]),
-    /// Zero-copy file access: raw pointer + length in the shared address space.
-    /// Used by binary loaders that need to map the ELF directly from VFS memory.
-    DataPtr { ptr: u64, len: u64 },
+    /// Tombstone (was `DataPtr`, a raw VFS-heap pointer and length). Keeps
+    /// discriminant 1 so every later response keeps its byte. A unit variant on
+    /// purpose: no pointer can be expressed in a reply. Never sent; never reuse.
+    DataPtrRetired,
     /// Stat result: (file_size, is_dir).
     Stat { size: u64, is_dir: bool },
     /// Successful write, mkdir, unlink, etc.
@@ -1115,7 +1120,7 @@ mod session_wire_tests {
     fn existing_vfs_tail_and_path_semantics_are_unchanged() {
         let mut out = [0; 32];
         assert_eq!(
-            encode(&VfsRequest::GetFile("a"), &mut out).unwrap(),
+            encode(&VfsRequest::GetFileRetired("a"), &mut out).unwrap(),
             b"\x00\x01a"
         );
         assert_eq!(
@@ -1220,6 +1225,47 @@ mod session_wire_tests {
             (ssh_trust::REFUSED, ssh_trust::EXPIRED, ssh_trust::PENDING),
             (5, 6, 7)
         );
+    }
+
+    #[test]
+    fn get_file_and_data_ptr_tombstones_keep_their_bytes() {
+        let mut out = [0; 32];
+        let get = VfsRequest::GetFileRetired("a");
+        assert_eq!(encode(&get, &mut out).unwrap(), b"\x00\x01a");
+        assert_eq!(
+            encode(&VfsRequest::ListDir("a"), &mut out).unwrap(),
+            b"\x01\x01a"
+        );
+        // An old client's `GetFile` frame decodes to the tombstone, which the
+        // service refuses up front without resolving the path.
+        assert!(matches!(
+            decode::<VfsRequest>(b"\x00\x01a"),
+            Ok(VfsRequest::GetFileRetired("a"))
+        ));
+        assert!(!get.is_path_addressed() && !get.requires_mutation_authority());
+
+        // The response tombstone carries no fields, so no pointer can be encoded.
+        assert_eq!(
+            encode(&VfsResponse::DataPtrRetired, &mut out).unwrap(),
+            b"\x01"
+        );
+        assert_eq!(
+            encode(
+                &VfsResponse::Stat {
+                    size: 3,
+                    is_dir: true
+                },
+                &mut out
+            )
+            .unwrap(),
+            b"\x02\x03\x01"
+        );
+        // An old `DataPtr { ptr, len }` reply decodes to the tombstone; its
+        // pointer bytes are trailing garbage, never a field.
+        assert!(matches!(
+            decode::<VfsResponse>(b"\x01\x80\x10\x08"),
+            Ok(VfsResponse::DataPtrRetired)
+        ));
     }
 
     #[test]

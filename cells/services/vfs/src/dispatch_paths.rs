@@ -13,20 +13,6 @@ pub(crate) fn handle_path_request(
     req: &VfsRequest<'_>,
 ) -> Option<VfsResponse<'static>> {
     let resp = match *req {
-        VfsRequest::GetFile(p) => {
-            if !vfs.access.can_read(caller, p) {
-                return Some(VfsResponse::Err(VfsError::Denied as u8));
-            }
-            if let Some((ptr, len)) = vfs.get_file_ptr(p) {
-                VfsResponse::DataPtr {
-                    ptr: ptr as u64,
-                    len: len as u64,
-                }
-            } else {
-                VfsResponse::Err(VfsError::Io as u8)
-            }
-        }
-
         VfsRequest::Stat(p) => {
             if !vfs.access.can_read(caller, p) {
                 return Some(VfsResponse::Err(VfsError::Denied as u8));

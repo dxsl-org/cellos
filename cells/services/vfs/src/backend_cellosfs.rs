@@ -285,9 +285,6 @@ impl<D: cellos_fs::disk::BlockDevice + Send> FsBackend for CellosFsBackend<D> {
             }
         }
     }
-    fn get_file_ptr(&self, _: &str) -> Option<(usize, usize)> {
-        None
-    }
     fn list(&self, path: &str, out: &mut [u8]) -> Result<usize, VfsFsError> {
         let rel = self.rel_path(path)?;
         self.read(Operation::List, path, |fs| {

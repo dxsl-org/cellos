@@ -118,7 +118,7 @@ unsafe fn lua_arg_path<'a>(L: *mut LuaState, idx: c_int) -> Option<&'a str> {
 /// `vfs.read(path)` → string | nil
 ///
 /// Reads file content from VFS. Returns the content as a Lua string, or nil if
-/// the file is missing or empty. Reads are bounded at 64 KiB with no DataPtr fallback.
+/// the file is missing or empty. Reads are bounded at 64 KiB.
 #[no_mangle]
 pub unsafe extern "C" fn vfs_read(L: *mut LuaState) -> c_int {
     // SAFETY: L is the running state; read_to_lua has returned, so the file

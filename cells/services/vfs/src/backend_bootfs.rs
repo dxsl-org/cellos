@@ -8,9 +8,6 @@
 //! see `kernel/src/task.rs::file_open` and `kernel/src/fs.rs`.
 //!
 //! Strictly read-only: every mutating op fails `Unsupported` before any syscall.
-//! `get_file_ptr` returns `None` (no syscalls) so the fast-IPC handler —
-//! which runs with interrupts disabled in the CALLER's context — never
-//! blocks inside this backend; readers fall back to the ReadAsync copy path.
 
 use crate::backend::{fill_page, FsBackend, ListPage};
 use crate::fs_error::FsError;
@@ -178,10 +175,6 @@ impl BootFsProxy {
 }
 
 impl FsBackend for BootFsProxy {
-    fn get_file_ptr(&self, _path: &str) -> Option<(usize, usize)> {
-        None // no stable user-visible pointer; callers use the ReadAsync copy path
-    }
-
     fn list(&self, path: &str, out: &mut [u8]) -> Result<usize, FsError> {
         let fd = open(path).ok_or(FsError::NotFound)?;
         let mut pos = 0;

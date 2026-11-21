@@ -24,10 +24,14 @@ const DENIED: u8 = 3;
 const BAD_HANDLE: u8 = 4;
 /// The service could not decode the message at all.
 const MALFORMED: u8 = 0xFF;
+/// `VfsError::Unsupported`: the answer to a retired (tombstoned) request.
+const UNSUPPORTED: u8 = 6;
 
 /// Directory this cell builds and then reaches only through a handle.
 const WORKDIR: &str = "/tmp/dircap";
 const READ_FILE_GRANT_SOURCE: &str = "/tmp/grant-read.txt";
+/// Written by `test_ramfs` with the 8 bytes `volatile`.
+const VOLATILE: &str = "/tmp/volatile.txt";
 
 pub fn run() {
     let Some(root) = acquire("/tmp") else {
@@ -286,12 +290,24 @@ fn seal_and_prove_paths_are_refused(work: ViDirHandle) {
         }
     };
 
-    match vfs_req(&VfsRequest::GetFile("/tmp/volatile.txt")) {
-        VfsResponse::DataPtr { ptr, len } if ptr != 0 && len == 8 => {
-            pass("dircap: GetFile returns a nonempty pointer before sealing");
+    // The raw-pointer read is retired: its tombstone is refused outright, and the
+    // same bytes reach this cell only through a grant it owns.
+    match vfs_req(&VfsRequest::GetFileRetired(VOLATILE)) {
+        VfsResponse::Err(UNSUPPORTED) => {
+            pass("dircap: the retired GetFile tombstone is unsupported")
         }
-        _ => fail("dircap: GetFile returns a nonempty pointer before sealing"),
+        _ => fail("dircap: the retired GetFile tombstone is unsupported"),
     }
+    let volatile_grant = match grant_io::read_file_into_grant(VOLATILE) {
+        Ok((grant, 8)) if grant_io::grant_prefix_equals(&grant, b"volatile") => {
+            pass("dircap: ReadFileGrant copies /tmp/volatile.txt before sealing");
+            Some(grant)
+        }
+        _ => {
+            fail("dircap: ReadFileGrant copies /tmp/volatile.txt before sealing");
+            None
+        }
+    };
 
     let sealed_file = open_file_handle(work, "note.txt");
 
@@ -324,11 +340,7 @@ fn seal_and_prove_paths_are_refused(work: ViDirHandle) {
     // Every other path-addressed operation, so the refusal is not one arm.
     for (req, msg) in [
         (
-            VfsRequest::GetFile("/tmp/volatile.txt"),
-            "dircap: GetFile is refused after sealing",
-        ),
-        (
-            VfsRequest::Stat("/tmp/volatile.txt"),
+            VfsRequest::Stat(VOLATILE),
             "dircap: Stat is refused after sealing",
         ),
         (
@@ -336,7 +348,7 @@ fn seal_and_prove_paths_are_refused(work: ViDirHandle) {
             "dircap: ListDir is refused after sealing",
         ),
         (
-            VfsRequest::Unlink("/tmp/volatile.txt"),
+            VfsRequest::Unlink(VOLATILE),
             "dircap: Unlink is refused after sealing",
         ),
         (
@@ -344,9 +356,7 @@ fn seal_and_prove_paths_are_refused(work: ViDirHandle) {
             "dircap: Mkdir is refused after sealing",
         ),
         (
-            VfsRequest::ReadAsync {
-                path: "/tmp/volatile.txt",
-            },
+            VfsRequest::ReadAsync { path: VOLATILE },
             "dircap: ReadAsync is refused after sealing",
         ),
         (
@@ -358,6 +368,20 @@ fn seal_and_prove_paths_are_refused(work: ViDirHandle) {
             VfsResponse::Err(DENIED) => pass(msg),
             _ => fail(msg),
         }
+    }
+
+    match volatile_grant.as_ref() {
+        Some(grant) => match vfs_req(&VfsRequest::ReadFileGrant {
+            path: VOLATILE,
+            grant: grant.id(),
+            max: grant.len(),
+        }) {
+            VfsResponse::Err(DENIED) => {
+                pass("dircap: ReadFileGrant of /tmp/volatile.txt is refused after sealing")
+            }
+            _ => fail("dircap: ReadFileGrant of /tmp/volatile.txt is refused after sealing"),
+        },
+        None => fail("dircap: ReadFileGrant of /tmp/volatile.txt is refused after sealing"),
     }
 
     match (read_file_grant_ready, read_file_grant.as_ref()) {

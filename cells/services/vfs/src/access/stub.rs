@@ -6,10 +6,6 @@ use crate::fs_error::FsError;
 pub(crate) struct GuestDiskStub(pub(crate) u64);
 
 impl FsBackend for GuestDiskStub {
-    fn get_file_ptr(&self, _: &str) -> Option<(usize, usize)> {
-        None
-    }
-
     fn list(&self, _: &str, _: &mut [u8]) -> Result<usize, FsError> {
         Err(FsError::NotADirectory)
     }

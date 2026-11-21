@@ -428,6 +428,15 @@ the reason the value is safe against existing owners.
   - **Services:** config, kms, ai, supervisor, compositor, VFS and net run on
     `ostd::service::serve` (attested receive, owner watches, heartbeat). ai answers only attested
     callers. Unchanged: every frame, buffer size and the operation ABI.
+- 2026-11-21 — **VFS raw-pointer read retired (architecture remediation residual N-6,
+  owner-approved; `.agents/261110-1703-architecture-remediation/reports/closure-matrix.md`).**
+  - `VfsRequest::GetFile` (index 0) is the tombstone `GetFileRetired(&str)`: same byte and field
+    layout, answered `Err(6)` before any path is resolved, and neither path-addressed nor
+    mutating, so a sealed cell gets the same answer.
+  - `VfsResponse::DataPtr { ptr, len }` (index 1) is the unit tombstone `DataPtrRetired`; no reply
+    can carry a pointer. An old `DataPtr` frame decodes to it and its fields are ignored.
+  - Path reads use `ReadFileGrant` into a caller-owned grant (or the handle-addressed reads). Every
+    later request and response keeps its byte (`libs/wire/src/ipc.rs` tests).
 
 ---
 
@@ -623,19 +632,14 @@ arguments would be trustworthy. It MUST derive identity from live scheduler stat
 cell-chosen argument. `TrustedHandle<T>` is advisory and is not an authorization control.
 
 A future fast-path handler MUST authorize exactly as its `ecall` counterpart does and MUST carry
-a measured release gate for its maximum interrupt-off duration. `GetFile` is not a valid target
-operation for the rewrite: its raw `DataPtr` is permanent, unrevocable read authority in SAS and
-cannot cross the Tier-2 boundary.
+a measured release gate for its maximum interrupt-off duration. No VFS operation returns a raw
+pointer: `GetFile`/`DataPtr` are tombstones (§9, 2026-11-21), so no fast path may reintroduce
+one; file bytes leave VFS only as bounded inline copies or through a caller-owned grant.
 
 The file-handle ABI added in Phase 04 stays on the ordinary attested message
 path as well. `OpenFileAt` / `ReadFileHandle` / `CloseFile` are message-only,
 there is no fast arm for them, and their state remains VFS-owned and
 session-scoped.
-
-Before any Tier-2/Layer-B domain is enabled, `GetFile`/`DataPtr` must be removed or
-replaced by a representable revocable handle/grant contract. The detailed Layer-B grant
-mapping ADR is intentionally deferred to that implementation window; this prerequisite
-does not approve a new Law-1 ABI by itself.
 
 ---
 

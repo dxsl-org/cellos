@@ -22,9 +22,9 @@ là [Spec 17](17-ipc-wire-contract.md) §1 (amendment Phase 11, 2026-11-12):
 * **Data flow**: byte request và reply được kernel copy (`kernel/src/task/syscall/ipc.rs`).
   Dữ liệu lớn đi qua grant (`libs/ostd/src/grant.rs`): trong SAS là trang identity-mapped USER;
   với Tier-2 domain, grant được map tường minh vào page table của bên nhận
-  ([Spec 17](17-ipc-wire-contract.md) §12). Không có tham chiếu Rust (`&T`, `Box<T>`) nào đi qua
-  ranh giới Cell. Ngoại lệ đã biết là con trỏ thô `VfsResponse::DataPtr` mà `GetFile` trả cho
-  Cell Tier 1 cùng SAS (`cells/services/vfs/src/dispatch_paths.rs:20-24`).
+  ([Spec 17](17-ipc-wire-contract.md) §12). Không có tham chiếu Rust (`&T`, `Box<T>`) hay con
+  trỏ thô nào đi qua ranh giới Cell. Ngoại lệ cũ `VfsResponse::DataPtr` (`GetFile`) đã bị bỏ
+  ngày 2026-11-21; đọc file đi qua `ReadFileGrant` (Spec 17 §9).
 
 ## 2. Async/Await & Safety (Owned Buffers)
 Cellos dùng mô hình bất đồng bộ của Rust **bên trong** một Cell (`ostd::executor`). Giữa các

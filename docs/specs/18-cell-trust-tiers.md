@@ -223,9 +223,9 @@ item; not a prerequisite for anything above.
   [arch-status](../generated/arch-status.md) table marks for Tier-2 admission. No installer
   exists; when one does, `18b-cell-admission-consent-adr.md` §5 governs its Tier-1/Tier-2 choice.
 - Secure boot remains required to anchor the kernel and its embedded trust key.
-- `GrantShare` to/from a Tier-2 cell maps the grant into the domain's table explicitly;
-  `DataPtr`-style raw pointers (`GetFile`) are unrepresentable across the tier boundary
-  — consistent with their planned removal (midori-lessons phase 06).
+- `GrantShare` to/from a Tier-2 cell maps the grant into the domain's table explicitly.
+  The raw-pointer `GetFile`/`DataPtr` path was removed on 2026-11-21 (both are wire
+  tombstones now), so no reply can carry a pointer across any tier boundary.
 - The scheduler's context-switch path is tier-aware: `sched::domain_switch::RootDecision`
   writes a root only when crossing domains; SAS→SAS switches keep the no-root-write path.
 - Spec 02 §6 and Spec 17 §12 carry the Tier-2 memory and IPC addenda.

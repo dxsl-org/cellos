@@ -184,14 +184,6 @@ impl RamFsBackend {
 }
 
 impl FsBackend for RamFsBackend {
-    fn get_file_ptr(&self, path: &str) -> Option<(usize, usize)> {
-        let n = self.find_node(path)?;
-        if n.is_dir {
-            return None;
-        }
-        Some((n.data.as_ptr() as usize, n.data.len()))
-    }
-
     fn list(&self, path: &str, out: &mut [u8]) -> Result<usize, FsError> {
         let node = self.dir_node(path)?;
         // Historical 480-byte cap (pre-MountTable dispatch staged through a

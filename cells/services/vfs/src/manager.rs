@@ -92,10 +92,6 @@ impl VfsManager {
         backend.is_some_and(|b| b.health() == crate::backend::BackendHealth::Ready)
     }
 
-    pub fn get_file_ptr(&self, path: &str) -> Option<(usize, usize)> {
-        self.mounts.backend(path)?.get_file_ptr(path)
-    }
-
     /// The backend's listing of `path` merged with the mount-table entries.
     /// A path the backend does not hold as a directory lists only those; a
     /// device failure fails the listing rather than shortening it.

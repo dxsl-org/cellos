@@ -34,4 +34,4 @@ pub mod smp;
 pub mod snapshot_authority;
 pub mod stationary_assembly;
 pub mod syscall_yield;
-pub mod vfs_getfile_breakdown;
+pub mod vfs_read_breakdown;

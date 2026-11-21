@@ -142,8 +142,9 @@ Dữ liệu file đi qua ba bước, mỗi bước là một copy:
    (`cells/services/vfs/src/grant_read.rs:1-13`). Ghi theo chiều ngược lại (`WriteHandleGrant`).
 
 Quyền sở hữu buffer không chuyển sang VFS hay Driver Cell, và Driver không DMA vào buffer của App.
-Ngoại lệ là `GetFile` trên backend trong RAM: VFS trả con trỏ thô `DataPtr` vào bộ nhớ của chính
-nó cho Cell Tier 1 cùng SAS (`cells/services/vfs/src/dispatch_paths.rs:20-24`, `backend.rs:89-92`).
+Không có ngoại lệ con trỏ: `GetFile`/`DataPtr` cũ (con trỏ thô vào heap của VFS) nay là tombstone
+trả `Err(6)` (Spec 17 §9, 2026-11-21). Đọc cả file theo path dùng `ReadFileGrant`: VFS copy
+`min(file_len, max, grant_len)` byte vào grant App sở hữu (`cells/services/vfs/src/grant_read.rs`).
 
 
 ## 4. Page Cache
