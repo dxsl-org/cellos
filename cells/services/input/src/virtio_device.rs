@@ -1,12 +1,13 @@
 //! VirtIO MMIO input device layer for the Input Service Cell.
 //!
 //! # Unsafe island
-//! This module is the ONLY place with `unsafe` code in the cell.
+//! This module is the only place with `unsafe` code in the cell image (the
+//! host-only `session_zeroize_tests.rs` is never built into it).
 //!   1. `MmioTransport::new` takes a raw header pointer to a claimed slot,
 //!      which the kernel identified (`sys_probe_virtio_mmio`) before the claim.
 //!   2. `virtio_drivers::Hal` requires `unsafe impl`.
 //!
-//! All other modules in this cell are unsafe-free.
+//! All other modules built into the cell are unsafe-free.
 
 #![allow(unsafe_code)]
 
@@ -42,8 +43,8 @@ pub(crate) struct CellHal;
 unsafe impl Hal for CellHal {
     fn dma_alloc(pages: usize, _dir: BufferDirection) -> (PhysAddr, NonNull<u8>) {
         let base = sys_grant_alloc(pages * 4096).expect("[input] DMA OOM");
-        // SAFETY: kernel-allocated non-null page-aligned address.
-        (base, unsafe { NonNull::new_unchecked(base as *mut u8) })
+        let ptr = NonNull::new(base as *mut u8).expect("[input] DMA grant at address 0");
+        (base, ptr)
     }
 
     unsafe fn dma_dealloc(paddr: PhysAddr, _vaddr: NonNull<u8>, _pages: usize) -> i32 {
@@ -52,8 +53,7 @@ unsafe impl Hal for CellHal {
     }
 
     unsafe fn mmio_phys_to_virt(paddr: PhysAddr, _size: usize) -> NonNull<u8> {
-        // SAFETY: SAS identity mapping.
-        unsafe { NonNull::new_unchecked(paddr as *mut u8) }
+        NonNull::new(paddr as *mut u8).expect("[input] MMIO at address 0")
     }
 
     unsafe fn share(buffer: NonNull<[u8]>, dir: BufferDirection) -> PhysAddr {
@@ -196,10 +196,11 @@ pub fn find_and_init_inputs() -> alloc::vec::Vec<InputDevice> {
             continue;
         }
 
+        let header =
+            NonNull::new(base as *mut VirtIOHeader).expect("[input] VirtIO slot at address 0");
         // SAFETY: the kernel identified a VirtIO input transport at `base` and
         // granted this Cell the slot above, so the header is live device memory
         // this Cell may access.
-        let header = unsafe { NonNull::new_unchecked(base as *mut VirtIOHeader) };
         let transport = match unsafe { MmioTransport::new(header) } {
             Ok(t) if t.device_type() == DeviceType::Input => t,
             Ok(t) => {

@@ -19,6 +19,7 @@ const FAULT_PANIC: u64 = 0x7f;
 
 #[panic_handler]
 fn panic(_info: &core::panic::PanicInfo) -> ! {
+    // SAFETY: HVC_SILO_FAULT is a declared Silo HVC identifier.
     unsafe { mailbox::hvc_signal(HVC_SILO_FAULT, FAULT_PANIC) };
     halt()
 }
@@ -28,7 +29,10 @@ pub extern "C" fn silo_main() -> ! {
     let mut state = SiloState::uninit();
     let mut last_request_seq = 0u64;
     loop {
+        // SAFETY: `wfi` only waits for the host's next resume and touches no memory.
         unsafe { core::arch::asm!("wfi") };
+        // SAFETY: the single-vCPU host touches the mailbox only while the guest
+        // is exited, so this guest is its sole reader until the next HVC.
         let mut request = unsafe { mailbox::read_request() };
         let command = SiloCommand::from(request.command);
         let result = dispatch(&mut state, &mut request, command, &mut last_request_seq);
@@ -48,6 +52,9 @@ pub extern "C" fn silo_main() -> ! {
                 core::slice::from_ref(code),
             ),
         };
+        // SAFETY: the guest holds the mailbox exclusively from resume until this
+        // HVC, publishes before signalling, and `signal` is one of the declared
+        // Silo HVC identifiers.
         unsafe {
             mailbox::publish_response(request.request_seq, request.command, status, output);
             mailbox::hvc_signal(signal, detail_code);
@@ -134,6 +141,7 @@ fn enrollment_input(input: &[u8; INPUT_LEN]) -> Result<(u64, [u8; 32]), CryptoRe
 
 fn halt() -> ! {
     loop {
+        // SAFETY: `wfi` only waits for the next interrupt and touches no memory.
         unsafe { core::arch::asm!("wfi") };
     }
 }

@@ -526,6 +526,10 @@ fn poll_future<T>(
     // The transport leaves Pending on absent data/space; the outer service
     // dispatcher, not a self-waking busy loop, is responsible for the next poll.
     let mut context = Context::from_waker(Waker::noop());
+    // SAFETY: the three pointers come from exclusive borrows this function holds
+    // across the poll and does not otherwise use, and clear_tls_context withdraws
+    // them before those borrows end. Callers poll only an operation still in
+    // `self.operations`, whose socket is removed only after the operation is.
     unsafe { set_tls_context(iface, device, sockets as *mut SocketSet<'_> as *mut ()) };
     let result = future.as_mut().poll(&mut context);
     clear_tls_context();

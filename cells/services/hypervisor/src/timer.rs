@@ -6,7 +6,9 @@ pub const VIRT_TIMER_PPI: u32 = 27;
 
 pub fn guest_timer_asserted(ctl: u64, cval: u64) -> bool {
     let now: u64;
-    // CNTVOFF_EL2=0, so the host physical count equals guest virtual count.
+    // SAFETY: a register read with no memory access; Pi boot sets
+    // CNTKCTL_EL1.EL0PCTEN so EL0 does not trap. CNTVOFF_EL2 = 0, so the host
+    // physical count equals the guest virtual count.
     unsafe {
         core::arch::asm!("mrs {}, cntpct_el0", out(reg) now, options(nomem, nostack));
     }

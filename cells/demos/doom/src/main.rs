@@ -283,7 +283,7 @@ pub unsafe extern "C" fn DG_GetKey(pressed: *mut i32, doomkey: *mut u8) -> i32 {
 
 /// Monotonic millisecond counter.  sys_get_time() returns 10 MHz ticks.
 #[no_mangle]
-pub unsafe extern "C" fn DG_GetTicksMs() -> u32 {
+pub extern "C" fn DG_GetTicksMs() -> u32 {
     (sys_get_time() / 10_000) as u32
 }
 
@@ -291,7 +291,7 @@ pub unsafe extern "C" fn DG_GetTicksMs() -> u32 {
 
 /// Busy-yield sleep.  Accurate enough for DOOM's 35 Hz game tick (~28 ms/frame).
 #[no_mangle]
-pub unsafe extern "C" fn DG_SleepMs(ms: u32) {
+pub extern "C" fn DG_SleepMs(ms: u32) {
     let deadline = sys_get_time() + ms as u64 * 10_000;
     while sys_get_time() < deadline {
         yield_now();
@@ -301,7 +301,7 @@ pub unsafe extern "C" fn DG_SleepMs(ms: u32) {
 // ─── DG_Quit ──────────────────────────────────────────────────────────────────
 
 #[no_mangle]
-pub unsafe extern "C" fn DG_Quit() {
+pub extern "C" fn DG_Quit() {
     sys_exit(0);
 }
 
@@ -309,7 +309,7 @@ pub unsafe extern "C" fn DG_Quit() {
 
 /// No-op: ViCell surfaces don't have a title bar.
 #[no_mangle]
-pub unsafe extern "C" fn DG_SetWindowTitle(_title: *const u8) {}
+pub extern "C" fn DG_SetWindowTitle(_title: *const u8) {}
 
 // ─── Key translation ─────────────────────────────────────────────────────────
 

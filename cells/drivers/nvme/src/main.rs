@@ -8,8 +8,9 @@
 //!      `sys_register_block_device(BlockDevice::Pci { .. })`.
 //!   5. Serves `DrvRequest` IPC (sector read/write) from the registered VFS only.
 //!
-//! Law 4 exception: this cell uses `unsafe` for MMIO register access.  Every
-//! `unsafe` block carries a `// SAFETY:` comment.
+//! Law 4 exception: register MMIO goes through the safe `ostd::mmio::MmioRegion`;
+//! `unsafe` is confined to raw-pointer access of the cell's GrantDma-authorized
+//! queue, Identify and bounce pages (controller.rs, queue.rs, dispatch.rs).
 //!
 //! This cell is granted `PcieDriverCap` by `init` via direct TCB write at spawn
 //! time — NOT via a manifest flag (all 8 flag bits in v1 are occupied).

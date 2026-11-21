@@ -3,11 +3,13 @@
 //! Each queue pair consists of one Submission Queue (SQ) and one Completion
 //! Queue (CQ).  Both are physically contiguous — allocated via `DmaBuf`.
 //!
-//! This file is `unsafe`-annotated because the queue pointers are raw DMA
-//! memory, accessed via volatile reads/writes.
+//! This file is `unsafe`-annotated because the rings are raw DMA memory.
+//! SQ entries are written with plain stores through [`Queue::sq_entry`] and
+//! published by a Release fence before the tail doorbell; CQ fields the device
+//! writes are read with `read_volatile` through raw field addresses.
 //!
-// SAFETY invariant: `sq` and `cq` point into DMA-allocated contiguous pages
-// that are valid for the lifetime of the Queue.  All accesses are volatile.
+// SAFETY invariant: `sq_buf` and `cq_buf` are DMA grants owned by the Queue
+// and valid for its lifetime; every ring index stays below `depth`.
 
 extern crate alloc;
 
@@ -135,12 +137,8 @@ impl Queue {
         let cq_buf = AuthorizedDma::authorize(cq_buf, |buf| buf.authorize(bdf))
             .map_err(|_| ViError::PermissionDenied)?;
 
-        // Zero queues (DmaBuf is not guaranteed zeroed).
-        unsafe {
-            core::ptr::write_bytes(sq_buf.inner().virt(), 0, sq_buf.inner().size());
-            core::ptr::write_bytes(cq_buf.inner().virt(), 0, cq_buf.inner().size());
-        }
-
+        // Both rings start all-zero (phase 0) because `DmaBuf::alloc` returns a
+        // fresh grant, which the kernel zero-fills before mapping it.
         Ok(Self {
             sq_buf,
             cq_buf,

@@ -30,7 +30,8 @@ pub struct DmaBuf {
 }
 
 impl DmaBuf {
-    /// Allocate `n_pages` contiguous 4-KiB pages suitable for DMA.
+    /// Allocate `n_pages` contiguous 4-KiB pages suitable for DMA. The pages
+    /// arrive zero-filled: the kernel zeroes every new grant before mapping it.
     pub fn alloc(n_pages: usize) -> Option<Self> {
         let grant_id = sys_grant_alloc(n_pages * 4096)?;
         Some(Self { grant_id, n_pages })

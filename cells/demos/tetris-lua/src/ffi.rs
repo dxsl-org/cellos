@@ -130,14 +130,3 @@ extern "C" {
     /// Bypasses `__newindex` metamethod — use for raw table writes.
     pub fn lua_rawseti(L: *mut LuaState, idx: c_int, n: i64);
 }
-
-/// Convenience: pop `n` items from the stack.
-///
-/// # Safety
-/// `L` must be a valid, non-null Lua state.
-#[allow(non_snake_case)] // reason: L is the Lua C API convention for lua_State pointers
-#[allow(dead_code)] // reason: called by repl_session and bindings_io when stack cleanup is needed
-pub unsafe fn lua_pop(L: *mut LuaState, n: c_int) {
-    // SAFETY: caller guarantees L is valid; settop(-n-1) is the canonical pop.
-    unsafe { lua_settop(L, -(n) - 1) }
-}

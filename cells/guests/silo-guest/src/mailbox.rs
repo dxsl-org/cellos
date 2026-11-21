@@ -5,9 +5,9 @@ use core::sync::atomic::{compiler_fence, Ordering};
 
 use crate::layout::{
     COMMAND_CREATE_ENROLLMENT_KEY, COMMAND_DESTROY_ENROLLMENT_KEY, COMMAND_INITIALIZE,
-    COMMAND_OFFSET, COMMAND_PROMOTE_ENROLLMENT_KEY, COMMAND_SIGN_ENROLLMENT_CRI,
-    COMMAND_SIGN_TLS, DATA_OFFSET, INPUT_LEN, MAILBOX_IPA, PAGE_LEN, REQUEST_SEQ_OFFSET,
-    RESERVED_OFFSET, RESPONSE_SEQ_OFFSET, STATUS_OFFSET,
+    COMMAND_OFFSET, COMMAND_PROMOTE_ENROLLMENT_KEY, COMMAND_SIGN_ENROLLMENT_CRI, COMMAND_SIGN_TLS,
+    DATA_OFFSET, INPUT_LEN, MAILBOX_IPA, PAGE_LEN, REQUEST_SEQ_OFFSET, RESERVED_OFFSET,
+    RESPONSE_SEQ_OFFSET, STATUS_OFFSET,
 };
 pub use crate::layout::{HVC_SILO_DONE, HVC_SILO_FAULT, HVC_SILO_READY};
 
@@ -51,7 +51,6 @@ pub struct MailboxRequest {
 }
 
 const _: () = assert!(core::mem::size_of::<MailboxRequest>() <= 128);
-
 
 /// Snapshot the request fields while checking every canonical padding byte.
 ///
@@ -119,10 +118,14 @@ pub(crate) unsafe fn publish_response(request_seq: u64, command: u8, status: u8,
 /// # Safety
 /// `function_id` must be one of the declared Silo HVC identifiers.
 pub unsafe fn hvc_signal(function_id: u64, detail_code: u64) {
+    // SMCCC lets an HVC callee clobber x0-x17, so the guest declares the full C
+    // caller-saved set instead of relying on the silo host leaving every guest
+    // register untouched on resume.
     core::arch::asm!(
         "hvc #0",
-        inlateout("x0") function_id => _,
-        inlateout("x1") detail_code => _,
+        in("x0") function_id,
+        in("x1") detail_code,
+        clobber_abi("C"),
         options(nostack),
     );
 }

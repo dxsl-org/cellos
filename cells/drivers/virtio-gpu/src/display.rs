@@ -256,6 +256,9 @@ pub fn find_and_init_gpu() -> Option<GpuDevice> {
 
         let header =
             NonNull::new(base as *mut VirtIOHeader).expect("[virtio-gpu] VirtIO slot at address 0");
+        // SAFETY: sys_probe_virtio_mmio identified a VirtIO GPU transport at
+        // `base` and request_region granted this Cell the slot, so the header is
+        // live device memory this Cell owns exclusively.
         let transport = match unsafe { MmioTransport::new(header) } {
             Ok(t) if t.device_type() == DeviceType::GPU => t,
             Ok(t) => {

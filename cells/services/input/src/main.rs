@@ -4,7 +4,9 @@
 #![cfg_attr(not(test), no_std)]
 #![cfg_attr(not(test), no_main)]
 // The crate cannot carry `#![forbid(unsafe_code)]`: `virtio_device.rs` needs MMIO
-// access (allowlisted, class driver-mmio). All other submodules are unsafe-free.
+// access (allowlisted, class driver-mmio), and the host-only
+// `session_zeroize_tests.rs` reads back wiped allocations (class test-harness).
+// All other submodules are unsafe-free.
 
 //! Input Service Cell.
 //!

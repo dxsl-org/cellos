@@ -35,11 +35,13 @@
 # 2026-11-21 N-3 bounded flush, owner-approved: virtio_drivers blk.rs 5 -> 8
 # (flush_nb, complete_flush, one test block); cells -2 (virtio-blk io.rs 6 replaces
 # io_x86.rs 4; mmio.rs/hal_x86.rs drop 4 NonNull::new_unchecked): 590 / 37.
+# 2026-11-21 allowlist open items: cells -4 (service-input virtio_device.rs drops
+# 3 NonNull::new_unchecked; nvme queue.rs drops the redundant ring zero-fill): 586 / 37.
 
 version = 1
 
 [total]
-unsafe = 590
+unsafe = 586
 attrs = 37
 
 # ── kernel/third_party/virtio_drivers (vendored virtio-drivers 0.7.5 fork) ───────

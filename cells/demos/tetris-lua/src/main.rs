@@ -103,10 +103,12 @@ unsafe fn fill_rect_px(x: i32, y: i32, w: i32, h: i32, bgra: u32) {
     let sh = s.height() as i32;
     let pixels = s.pixels_mut();
     let [b, g, r, a] = bgra.to_le_bytes();
-    let y0 = y.max(0) as usize;
-    let y1 = (y + h).min(sh) as usize;
-    let x0 = x.max(0) as usize;
-    let x1 = (x + w).min(sw) as usize;
+    // Script coordinates are arbitrary: clamp each edge into the surface in i32
+    // so a negative or overflowing edge yields an empty range, never a wrapped usize.
+    let y0 = y.clamp(0, sh) as usize;
+    let y1 = y.saturating_add(h).clamp(0, sh) as usize;
+    let x0 = x.clamp(0, sw) as usize;
+    let x1 = x.saturating_add(w).clamp(0, sw) as usize;
     for py in y0..y1 {
         for px in x0..x1 {
             let o = py * stride + px * 4;
@@ -118,42 +120,27 @@ unsafe fn fill_rect_px(x: i32, y: i32, w: i32, h: i32, bgra: u32) {
     }
 }
 
+/// `scale` must be positive; each set font bit becomes one clipped
+/// `scale` x `scale` rectangle.
 #[cfg(not(lua_c_unavailable))]
-unsafe fn draw_glyph(px: i32, py: i32, c: u8, bgra: u32, scale: u32) {
-    let s = match SURFACE.as_mut() {
-        Some(s) => s,
-        None => return,
-    };
-    let stride = s.stride();
-    let sw = s.width() as i32;
-    let sh = s.height() as i32;
-    let pixels = s.pixels_mut();
-    let [b, g, r, a] = bgra.to_le_bytes();
+unsafe fn draw_glyph(px: i32, py: i32, c: u8, bgra: u32, scale: i32) {
     let idx = if (0x20..=0x7E).contains(&c) {
         (c - 0x20) as usize
     } else {
         0
     };
-    for row in 0..8i32 {
-        let mask = FONT8X8[idx][row as usize];
+    for (row, &mask) in (0i32..).zip(FONT8X8[idx].iter()) {
         for col in 0..8i32 {
             if mask & (0x80u8 >> col as u32) == 0 {
                 continue;
             }
-            for dy in 0..scale as i32 {
-                for dx in 0..scale as i32 {
-                    let qx = px + col * scale as i32 + dx;
-                    let qy = py + row * scale as i32 + dy;
-                    if qx < 0 || qx >= sw || qy < 0 || qy >= sh {
-                        continue;
-                    }
-                    let o = qy as usize * stride + qx as usize * 4;
-                    pixels[o] = b;
-                    pixels[o + 1] = g;
-                    pixels[o + 2] = r;
-                    pixels[o + 3] = a;
-                }
-            }
+            fill_rect_px(
+                px.saturating_add(col.saturating_mul(scale)),
+                py.saturating_add(row.saturating_mul(scale)),
+                scale,
+                scale,
+                bgra,
+            );
         }
     }
 }
@@ -181,12 +168,15 @@ mod lua_fns {
         let mut n = 0usize;
         let ptr = lua_tolstring(L, 3, &mut n);
         let ci = lua_tointegerx(L, 4, core::ptr::null_mut()) as usize;
-        let scale = lua_tointegerx(L, 5, core::ptr::null_mut()).max(1) as u32;
+        let scale = lua_tointegerx(L, 5, core::ptr::null_mut()).clamp(1, i32::MAX as i64) as i32;
         if !ptr.is_null() {
             let text = core::slice::from_raw_parts(ptr as *const u8, n);
             let color = PALETTE[ci.min(15)];
-            for (i, &c) in text.iter().enumerate() {
-                draw_glyph(x + i as i32 * 8 * scale as i32, y, c, color, scale);
+            let advance = scale.saturating_mul(8);
+            let mut gx = x;
+            for &c in text {
+                draw_glyph(gx, y, c, color, scale);
+                gx = gx.saturating_add(advance);
             }
         }
         0

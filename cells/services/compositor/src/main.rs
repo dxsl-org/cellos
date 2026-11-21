@@ -1,6 +1,7 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
-// #[no_mangle] on main() requires removing global forbid — all submodules stay unsafe-free.
+// The root cannot forbid unsafe_code: `main` is #[no_mangle], and
+// surface_table/pixels.rs blits from a leased client Grant through a raw slice.
 
 //! Compositor Service Cell.
 //!

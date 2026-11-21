@@ -20,22 +20,15 @@ pub unsafe extern "C" fn lua_console_write(ptr: *const core::ffi::c_char, len: u
     if ptr.is_null() || len == 0 {
         return;
     }
-    let mut bytes = unsafe { core::slice::from_raw_parts(ptr.cast::<u8>(), len) };
-    while !bytes.is_empty() {
-        match core::str::from_utf8(bytes) {
-            Ok(text) => {
-                ostd::io::print(text);
-                break;
-            }
-            Err(err) => {
-                let good = err.valid_up_to();
-                if good != 0 {
-                    // SAFETY: `valid_up_to` covers only valid UTF-8.
-                    ostd::io::print(unsafe { core::str::from_utf8_unchecked(&bytes[..good]) });
-                }
-                ostd::io::print("\u{fffd}");
-                bytes = &bytes[(good + err.error_len().unwrap_or(bytes.len() - good))..];
-            }
+    // SAFETY: the caller guarantees `ptr` addresses `len` readable bytes for
+    // this call, and nothing here outlives it.
+    let bytes = unsafe { core::slice::from_raw_parts(ptr.cast::<u8>(), len) };
+    for chunk in bytes.utf8_chunks() {
+        if !chunk.valid().is_empty() {
+            ostd::io::print(chunk.valid());
+        }
+        if !chunk.invalid().is_empty() {
+            ostd::io::print("\u{fffd}");
         }
     }
 }
