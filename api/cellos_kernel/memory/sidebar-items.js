@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["address_space","cell_quota","cell_segments","deferred_release","domain_supervisor_registry","frame","frame_run","heap","page_protect","paging","pin","region","rt_heap","stage2","tag_pool","tlb_shootdown","vma"]};
+window.SIDEBAR_ITEMS = {"mod":["address_space","cell_quota","cell_segments","deferred_release","domain_supervisor_registry","frame","frame_run","heap","page_protect","paging","pin","region","rt_heap","stage2","tag_pool","tlb_shootdown"]};

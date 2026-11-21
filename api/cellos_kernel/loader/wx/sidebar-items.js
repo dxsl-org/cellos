@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["BASE"],"fn":["assert_guard_selection","enforce","page_flags","reject_wx_page","reject_wx_segment","run_self_tests"]};
+window.SIDEBAR_ITEMS = {"constant":["BASE","ICACHE_SYNC_PROBE_TICKS"],"fn":["assert_guard_selection","enforce","page_flags","reject_wx_page","reject_wx_segment","run_self_tests","sync_instruction_caches"]};

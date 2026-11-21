@@ -592,503 +592,517 @@
 <a href=#592 id=592 data-nosnippet>592</a>
 <a href=#593 id=593 data-nosnippet>593</a><span class="doccomment">/// Release `owner`'s windows: mark them releasing under `REGISTRY`, lower
 <a href=#594 id=594 data-nosnippet>594</a>/// their runs through `lower` without it, then re-take it to release each
-<a href=#595 id=595 data-nosnippet>595</a>/// window whose lowering is in force and quarantine the others.
-<a href=#596 id=596 data-nosnippet>596</a></span><span class="kw">fn </span>release_windows(
-<a href=#597 id=597 data-nosnippet>597</a>    owner: usize,
-<a href=#598 id=598 data-nosnippet>598</a>    lower: <span class="kw">impl </span>FnMut(usize, usize) -&gt; <span class="prelude-ty">Result</span>&lt;(), (usize, <span class="kw">crate</span>::memory::paging::PageTableError)&gt;,
-<a href=#599 id=599 data-nosnippet>599</a>) -&gt; Release {
-<a href=#600 id=600 data-nosnippet>600</a>    <span class="kw">let </span>windows = begin_release(<span class="kw-2">&amp;mut </span>REGISTRY.lock(), owner);
-<a href=#601 id=601 data-nosnippet>601</a>    <span class="kw">let </span>unlowered = lower_windows(<span class="kw-2">&amp;</span>windows, lower);
-<a href=#602 id=602 data-nosnippet>602</a>    <span class="kw">let </span>quarantined = finish_release(<span class="kw-2">&amp;mut </span>REGISTRY.lock(), <span class="kw-2">&amp;</span>windows, <span class="kw-2">&amp;</span>unlowered);
-<a href=#603 id=603 data-nosnippet>603</a>    <span class="kw">let </span>released = windows
-<a href=#604 id=604 data-nosnippet>604</a>        .iter()
-<a href=#605 id=605 data-nosnippet>605</a>        .filter(|window| !unlowered.iter().any(|failed| failed.<span class="number">0 </span>== window.base))
-<a href=#606 id=606 data-nosnippet>606</a>        .map(|window| (window.base, window.len))
-<a href=#607 id=607 data-nosnippet>607</a>        .collect();
-<a href=#608 id=608 data-nosnippet>608</a>    Release {
-<a href=#609 id=609 data-nosnippet>609</a>        released,
-<a href=#610 id=610 data-nosnippet>610</a>        unlowered,
-<a href=#611 id=611 data-nosnippet>611</a>        quarantined,
-<a href=#612 id=612 data-nosnippet>612</a>    }
-<a href=#613 id=613 data-nosnippet>613</a>}
-<a href=#614 id=614 data-nosnippet>614</a>
-<a href=#615 id=615 data-nosnippet>615</a><span class="doccomment">/// Pass `owner`'s windows to [`RELEASING_OWNER`] and return them with the
-<a href=#616 id=616 data-nosnippet>616</a>/// page runs to lower, computed while `REGISTRY` still shows which pages
-<a href=#617 id=617 data-nosnippet>617</a>/// another live window covers.
-<a href=#618 id=618 data-nosnippet>618</a></span><span class="kw">fn </span>begin_release(
-<a href=#619 id=619 data-nosnippet>619</a>    registry: <span class="kw-2">&amp;mut </span>BTreeMap&lt;usize, MmioRegion&gt;,
-<a href=#620 id=620 data-nosnippet>620</a>    owner: usize,
-<a href=#621 id=621 data-nosnippet>621</a>) -&gt; alloc::vec::Vec&lt;Releasing&gt; {
-<a href=#622 id=622 data-nosnippet>622</a>    <span class="kw">let </span>windows: alloc::vec::Vec&lt;Releasing&gt; = registry
-<a href=#623 id=623 data-nosnippet>623</a>        .iter()
-<a href=#624 id=624 data-nosnippet>624</a>        .filter(|(<span class="kw">_</span>, region)| region.owner_tid == owner)
-<a href=#625 id=625 data-nosnippet>625</a>        .map(|(<span class="kw-2">&amp;</span>base, region)| Releasing {
-<a href=#626 id=626 data-nosnippet>626</a>            base,
-<a href=#627 id=627 data-nosnippet>627</a>            len: region.len,
-<a href=#628 id=628 data-nosnippet>628</a>            runs: lowering_runs(registry, owner, base, region.len),
-<a href=#629 id=629 data-nosnippet>629</a>        })
-<a href=#630 id=630 data-nosnippet>630</a>        .collect();
-<a href=#631 id=631 data-nosnippet>631</a>    <span class="kw">for </span>window <span class="kw">in </span><span class="kw-2">&amp;</span>windows {
-<a href=#632 id=632 data-nosnippet>632</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(region) = registry.get_mut(<span class="kw-2">&amp;</span>window.base) {
-<a href=#633 id=633 data-nosnippet>633</a>            region.owner_tid = RELEASING_OWNER;
-<a href=#634 id=634 data-nosnippet>634</a>        }
-<a href=#635 id=635 data-nosnippet>635</a>    }
-<a href=#636 id=636 data-nosnippet>636</a>    windows
-<a href=#637 id=637 data-nosnippet>637</a>}
-<a href=#638 id=638 data-nosnippet>638</a>
-<a href=#639 id=639 data-nosnippet>639</a><span class="doccomment">/// The pages `RequestMmio` made USER for `[base, base + len)`: the whole pages
-<a href=#640 id=640 data-nosnippet>640</a>/// on RISC-V and AArch64 (`user_pages`), every page the window touches on
-<a href=#641 id=641 data-nosnippet>641</a>/// x86_64 (`map_mmio_user_x86` maps the page-rounded window).
-<a href=#642 id=642 data-nosnippet>642</a></span><span class="attr">#[cfg(any(target_arch = <span class="string">"riscv64"</span>, target_arch = <span class="string">"aarch64"</span>))]
-<a href=#643 id=643 data-nosnippet>643</a></span><span class="kw">fn </span>released_pages(base: usize, len: usize) -&gt; core::ops::Range&lt;usize&gt; {
-<a href=#644 id=644 data-nosnippet>644</a>    user_pages(base, len)
-<a href=#645 id=645 data-nosnippet>645</a>}
-<a href=#646 id=646 data-nosnippet>646</a>
-<a href=#647 id=647 data-nosnippet>647</a><span class="doccomment">/// [`released_pages`] where `RequestMmio` maps the page-rounded window.
-<a href=#648 id=648 data-nosnippet>648</a></span><span class="attr">#[cfg(not(any(target_arch = <span class="string">"riscv64"</span>, target_arch = <span class="string">"aarch64"</span>)))]
-<a href=#649 id=649 data-nosnippet>649</a></span><span class="kw">fn </span>released_pages(base: usize, len: usize) -&gt; core::ops::Range&lt;usize&gt; {
-<a href=#650 id=650 data-nosnippet>650</a>    <span class="kw">const </span>PAGE: usize = <span class="number">4096</span>;
-<a href=#651 id=651 data-nosnippet>651</a>    <span class="kw">match </span>base
-<a href=#652 id=652 data-nosnippet>652</a>        .checked_add(len)
-<a href=#653 id=653 data-nosnippet>653</a>        .and_then(|end| end.checked_add(PAGE - <span class="number">1</span>))
-<a href=#654 id=654 data-nosnippet>654</a>    {
-<a href=#655 id=655 data-nosnippet>655</a>        <span class="prelude-val">Some</span>(end) <span class="kw">if </span>len != <span class="number">0 </span>=&gt; (base &amp; !(PAGE - <span class="number">1</span>))..(end &amp; !(PAGE - <span class="number">1</span>)),
-<a href=#656 id=656 data-nosnippet>656</a>        <span class="kw">_ </span>=&gt; <span class="number">0</span>..<span class="number">0</span>,
-<a href=#657 id=657 data-nosnippet>657</a>    }
-<a href=#658 id=658 data-nosnippet>658</a>}
-<a href=#659 id=659 data-nosnippet>659</a>
-<a href=#660 id=660 data-nosnippet>660</a><span class="doccomment">/// The released pages of window `[base, base + len)` held by `owner` that its
-<a href=#661 id=661 data-nosnippet>661</a>/// release lowers, as contiguous runs `(start, pages)`. A page another
-<a href=#662 id=662 data-nosnippet>662</a>/// owner's live window still covers (one handed over from a Terminated owner
-<a href=#663 id=663 data-nosnippet>663</a>/// before this reap) keeps USER; a quarantined or releasing window has no
-<a href=#664 id=664 data-nosnippet>664</a>/// owner to keep it for.
-<a href=#665 id=665 data-nosnippet>665</a></span><span class="kw">fn </span>lowering_runs(
-<a href=#666 id=666 data-nosnippet>666</a>    registry: <span class="kw-2">&amp;</span>BTreeMap&lt;usize, MmioRegion&gt;,
-<a href=#667 id=667 data-nosnippet>667</a>    owner: usize,
-<a href=#668 id=668 data-nosnippet>668</a>    base: usize,
-<a href=#669 id=669 data-nosnippet>669</a>    len: usize,
-<a href=#670 id=670 data-nosnippet>670</a>) -&gt; alloc::vec::Vec&lt;(usize, usize)&gt; {
-<a href=#671 id=671 data-nosnippet>671</a>    <span class="kw">const </span>PAGE: usize = <span class="number">4096</span>;
-<a href=#672 id=672 data-nosnippet>672</a>    <span class="kw">let </span><span class="kw-2">mut </span>runs: alloc::vec::Vec&lt;(usize, usize)&gt; = alloc::vec::Vec::new();
-<a href=#673 id=673 data-nosnippet>673</a>    <span class="kw">for </span>page <span class="kw">in </span>released_pages(base, len).step_by(PAGE) {
-<a href=#674 id=674 data-nosnippet>674</a>        <span class="kw">let </span>still_owned = registry.iter().any(|(<span class="kw-2">&amp;</span>live, other)| {
-<a href=#675 id=675 data-nosnippet>675</a>            other.owner_tid != owner
-<a href=#676 id=676 data-nosnippet>676</a>                &amp;&amp; other.owner_tid != QUARANTINED_OWNER
-<a href=#677 id=677 data-nosnippet>677</a>                &amp;&amp; other.owner_tid != RELEASING_OWNER
-<a href=#678 id=678 data-nosnippet>678</a>                &amp;&amp; live &lt; page + PAGE
-<a href=#679 id=679 data-nosnippet>679</a>                &amp;&amp; page &lt; live + other.len
-<a href=#680 id=680 data-nosnippet>680</a>        });
-<a href=#681 id=681 data-nosnippet>681</a>        <span class="kw">if </span>still_owned {
-<a href=#682 id=682 data-nosnippet>682</a>            <span class="kw">continue</span>;
-<a href=#683 id=683 data-nosnippet>683</a>        }
-<a href=#684 id=684 data-nosnippet>684</a>        <span class="kw">match </span>runs.last_mut() {
-<a href=#685 id=685 data-nosnippet>685</a>            <span class="prelude-val">Some</span>((start, pages)) <span class="kw">if </span><span class="kw-2">*</span>start + <span class="kw-2">*</span>pages * PAGE == page =&gt; <span class="kw-2">*</span>pages += <span class="number">1</span>,
-<a href=#686 id=686 data-nosnippet>686</a>            <span class="kw">_ </span>=&gt; runs.push((page, <span class="number">1</span>)),
-<a href=#687 id=687 data-nosnippet>687</a>        }
-<a href=#688 id=688 data-nosnippet>688</a>    }
-<a href=#689 id=689 data-nosnippet>689</a>    runs
-<a href=#690 id=690 data-nosnippet>690</a>}
-<a href=#691 id=691 data-nosnippet>691</a>
-<a href=#692 id=692 data-nosnippet>692</a><span class="doccomment">/// Lower every run of `windows` through `lower`, with no `REGISTRY` held.
-<a href=#693 id=693 data-nosnippet>693</a>/// Every run is attempted; a window is reported with its first page that
-<a href=#694 id=694 data-nosnippet>694</a>/// failed.
-<a href=#695 id=695 data-nosnippet>695</a></span><span class="kw">fn </span>lower_windows(
-<a href=#696 id=696 data-nosnippet>696</a>    windows: <span class="kw-2">&amp;</span>[Releasing],
-<a href=#697 id=697 data-nosnippet>697</a>    <span class="kw-2">mut </span>lower: <span class="kw">impl </span>FnMut(usize, usize) -&gt; <span class="prelude-ty">Result</span>&lt;(), (usize, <span class="kw">crate</span>::memory::paging::PageTableError)&gt;,
-<a href=#698 id=698 data-nosnippet>698</a>) -&gt; alloc::vec::Vec&lt;Unlowered&gt; {
-<a href=#699 id=699 data-nosnippet>699</a>    <span class="kw">let </span><span class="kw-2">mut </span>unlowered = alloc::vec::Vec::new();
-<a href=#700 id=700 data-nosnippet>700</a>    <span class="kw">for </span>window <span class="kw">in </span>windows {
-<a href=#701 id=701 data-nosnippet>701</a>        <span class="kw">let </span><span class="kw-2">mut </span>failed = <span class="prelude-val">None</span>;
-<a href=#702 id=702 data-nosnippet>702</a>        <span class="kw">for </span><span class="kw-2">&amp;</span>(start, pages) <span class="kw">in </span><span class="kw-2">&amp;</span>window.runs {
-<a href=#703 id=703 data-nosnippet>703</a>            <span class="kw">if let </span><span class="prelude-val">Err</span>(failure) = lower(start, pages) {
-<a href=#704 id=704 data-nosnippet>704</a>                failed.get_or_insert(failure);
-<a href=#705 id=705 data-nosnippet>705</a>            }
-<a href=#706 id=706 data-nosnippet>706</a>        }
-<a href=#707 id=707 data-nosnippet>707</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>((page, error)) = failed {
-<a href=#708 id=708 data-nosnippet>708</a>            unlowered.push((window.base, window.len, page, error));
-<a href=#709 id=709 data-nosnippet>709</a>        }
-<a href=#710 id=710 data-nosnippet>710</a>    }
-<a href=#711 id=711 data-nosnippet>711</a>    unlowered
-<a href=#712 id=712 data-nosnippet>712</a>}
-<a href=#713 id=713 data-nosnippet>713</a>
-<a href=#714 id=714 data-nosnippet>714</a><span class="doccomment">/// Return a run to the boot posture on every hart: one shared flush per
-<a href=#715 id=715 data-nosnippet>715</a>/// 2 MiB step, absent leaves included (`paging::restore_mmio_run`).
-<a href=#716 id=716 data-nosnippet>716</a></span><span class="attr">#[cfg(all(cellos_wide, not(test)))]
-<a href=#717 id=717 data-nosnippet>717</a></span><span class="kw">fn </span>lower_run(
-<a href=#718 id=718 data-nosnippet>718</a>    start: usize,
-<a href=#719 id=719 data-nosnippet>719</a>    pages: usize,
-<a href=#720 id=720 data-nosnippet>720</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), (usize, <span class="kw">crate</span>::memory::paging::PageTableError)&gt; {
-<a href=#721 id=721 data-nosnippet>721</a>    <span class="kw">crate</span>::memory::paging::restore_mmio_run(start, pages).map(drop)
-<a href=#722 id=722 data-nosnippet>722</a>}
-<a href=#723 id=723 data-nosnippet>723</a>
-<a href=#724 id=724 data-nosnippet>724</a><span class="doccomment">/// Nothing to lower: host tests have no page tables, and the 32-bit targets
-<a href=#725 id=725 data-nosnippet>725</a>/// never map a window USER.
-<a href=#726 id=726 data-nosnippet>726</a></span><span class="attr">#[cfg(not(all(cellos_wide, not(test))))]
-<a href=#727 id=727 data-nosnippet>727</a></span><span class="kw">fn </span>lower_run(
-<a href=#728 id=728 data-nosnippet>728</a>    _start: usize,
-<a href=#729 id=729 data-nosnippet>729</a>    _pages: usize,
-<a href=#730 id=730 data-nosnippet>730</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), (usize, <span class="kw">crate</span>::memory::paging::PageTableError)&gt; {
-<a href=#731 id=731 data-nosnippet>731</a>    <span class="prelude-val">Ok</span>(())
-<a href=#732 id=732 data-nosnippet>732</a>}
-<a href=#733 id=733 data-nosnippet>733</a>
-<a href=#734 id=734 data-nosnippet>734</a><span class="doccomment">/// Release each of `windows` whose lowering is in force on every hart and
-<a href=#735 id=735 data-nosnippet>735</a>/// pass the others (`unlowered`) to [`QUARANTINED_OWNER`]. A releasing window
-<a href=#736 id=736 data-nosnippet>736</a>/// is changed by no other path, so each is still registered as it was left.
-<a href=#737 id=737 data-nosnippet>737</a>/// Returns the windows quarantined after it.
-<a href=#738 id=738 data-nosnippet>738</a></span><span class="kw">fn </span>finish_release(
-<a href=#739 id=739 data-nosnippet>739</a>    registry: <span class="kw-2">&amp;mut </span>BTreeMap&lt;usize, MmioRegion&gt;,
-<a href=#740 id=740 data-nosnippet>740</a>    windows: <span class="kw-2">&amp;</span>[Releasing],
-<a href=#741 id=741 data-nosnippet>741</a>    unlowered: <span class="kw-2">&amp;</span>[Unlowered],
-<a href=#742 id=742 data-nosnippet>742</a>) -&gt; usize {
-<a href=#743 id=743 data-nosnippet>743</a>    <span class="kw">for </span>window <span class="kw">in </span>windows {
-<a href=#744 id=744 data-nosnippet>744</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(region) = registry
-<a href=#745 id=745 data-nosnippet>745</a>            .get_mut(<span class="kw-2">&amp;</span>window.base)
-<a href=#746 id=746 data-nosnippet>746</a>            .filter(|region| region.owner_tid == RELEASING_OWNER &amp;&amp; region.len == window.len)
-<a href=#747 id=747 data-nosnippet>747</a>        <span class="kw">else </span>{
-<a href=#748 id=748 data-nosnippet>748</a>            <span class="kw">continue</span>;
-<a href=#749 id=749 data-nosnippet>749</a>        };
-<a href=#750 id=750 data-nosnippet>750</a>        <span class="kw">if </span>unlowered.iter().any(|failed| failed.<span class="number">0 </span>== window.base) {
-<a href=#751 id=751 data-nosnippet>751</a>            region.owner_tid = QUARANTINED_OWNER;
-<a href=#752 id=752 data-nosnippet>752</a>        } <span class="kw">else </span>{
-<a href=#753 id=753 data-nosnippet>753</a>            registry.remove(<span class="kw-2">&amp;</span>window.base);
-<a href=#754 id=754 data-nosnippet>754</a>        }
-<a href=#755 id=755 data-nosnippet>755</a>    }
-<a href=#756 id=756 data-nosnippet>756</a>    count_quarantined(registry)
-<a href=#757 id=757 data-nosnippet>757</a>}
-<a href=#758 id=758 data-nosnippet>758</a>
-<a href=#759 id=759 data-nosnippet>759</a><span class="doccomment">/// Lower every quarantined window again and release those whose lowering is
-<a href=#760 id=760 data-nosnippet>760</a>/// now in force on every hart. The housekeeping pass calls it; it acts only
-<a href=#761 id=761 data-nosnippet>761</a>/// when the timer poll armed it ([`RETRY_ARMED`]) and no remote hart owes an
-<a href=#762 id=762 data-nosnippet>762</a>/// invalidation, and it lowers without `REGISTRY`, as [`release_mmio_for`]
-<a href=#763 id=763 data-nosnippet>763</a>/// does. Returns the windows still quarantined.
-<a href=#764 id=764 data-nosnippet>764</a></span><span class="kw">pub fn </span>retry_quarantined_windows() -&gt; usize {
-<a href=#765 id=765 data-nosnippet>765</a>    <span class="kw">if </span>!RETRY_ARMED.swap(<span class="bool-val">false</span>, Ordering::AcqRel)
-<a href=#766 id=766 data-nosnippet>766</a>        || QUARANTINED_WINDOWS.load(Ordering::Acquire) == <span class="number">0
-<a href=#767 id=767 data-nosnippet>767</a>    </span>{
-<a href=#768 id=768 data-nosnippet>768</a>        <span class="kw">return </span>QUARANTINED_WINDOWS.load(Ordering::Acquire);
+<a href=#595 id=595 data-nosnippet>595</a>/// window whose lowering is in force and quarantine the others. Every run of
+<a href=#596 id=596 data-nosnippet>596</a>/// the release gets the same `await_flush` flag
+<a href=#597 id=597 data-nosnippet>597</a>/// (`paging::restore_mmio_run`): once one flush is unconfirmed, no later run
+<a href=#598 id=598 data-nosnippet>598</a>/// waits a probe bound for its own.
+<a href=#599 id=599 data-nosnippet>599</a></span><span class="kw">fn </span>release_windows(
+<a href=#600 id=600 data-nosnippet>600</a>    owner: usize,
+<a href=#601 id=601 data-nosnippet>601</a>    lower: <span class="kw">impl </span>FnMut(
+<a href=#602 id=602 data-nosnippet>602</a>        usize,
+<a href=#603 id=603 data-nosnippet>603</a>        usize,
+<a href=#604 id=604 data-nosnippet>604</a>        <span class="kw-2">&amp;mut </span>bool,
+<a href=#605 id=605 data-nosnippet>605</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), (usize, <span class="kw">crate</span>::memory::paging::PageTableError)&gt;,
+<a href=#606 id=606 data-nosnippet>606</a>) -&gt; Release {
+<a href=#607 id=607 data-nosnippet>607</a>    <span class="kw">let </span>windows = begin_release(<span class="kw-2">&amp;mut </span>REGISTRY.lock(), owner);
+<a href=#608 id=608 data-nosnippet>608</a>    <span class="kw">let </span>unlowered = lower_windows(<span class="kw-2">&amp;</span>windows, <span class="kw-2">&amp;mut </span><span class="bool-val">true</span>, lower);
+<a href=#609 id=609 data-nosnippet>609</a>    <span class="kw">let </span>quarantined = finish_release(<span class="kw-2">&amp;mut </span>REGISTRY.lock(), <span class="kw-2">&amp;</span>windows, <span class="kw-2">&amp;</span>unlowered);
+<a href=#610 id=610 data-nosnippet>610</a>    <span class="kw">let </span>released = windows
+<a href=#611 id=611 data-nosnippet>611</a>        .iter()
+<a href=#612 id=612 data-nosnippet>612</a>        .filter(|window| !unlowered.iter().any(|failed| failed.<span class="number">0 </span>== window.base))
+<a href=#613 id=613 data-nosnippet>613</a>        .map(|window| (window.base, window.len))
+<a href=#614 id=614 data-nosnippet>614</a>        .collect();
+<a href=#615 id=615 data-nosnippet>615</a>    Release {
+<a href=#616 id=616 data-nosnippet>616</a>        released,
+<a href=#617 id=617 data-nosnippet>617</a>        unlowered,
+<a href=#618 id=618 data-nosnippet>618</a>        quarantined,
+<a href=#619 id=619 data-nosnippet>619</a>    }
+<a href=#620 id=620 data-nosnippet>620</a>}
+<a href=#621 id=621 data-nosnippet>621</a>
+<a href=#622 id=622 data-nosnippet>622</a><span class="doccomment">/// Pass `owner`'s windows to [`RELEASING_OWNER`] and return them with the
+<a href=#623 id=623 data-nosnippet>623</a>/// page runs to lower, computed while `REGISTRY` still shows which pages
+<a href=#624 id=624 data-nosnippet>624</a>/// another live window covers.
+<a href=#625 id=625 data-nosnippet>625</a></span><span class="kw">fn </span>begin_release(
+<a href=#626 id=626 data-nosnippet>626</a>    registry: <span class="kw-2">&amp;mut </span>BTreeMap&lt;usize, MmioRegion&gt;,
+<a href=#627 id=627 data-nosnippet>627</a>    owner: usize,
+<a href=#628 id=628 data-nosnippet>628</a>) -&gt; alloc::vec::Vec&lt;Releasing&gt; {
+<a href=#629 id=629 data-nosnippet>629</a>    <span class="kw">let </span>windows: alloc::vec::Vec&lt;Releasing&gt; = registry
+<a href=#630 id=630 data-nosnippet>630</a>        .iter()
+<a href=#631 id=631 data-nosnippet>631</a>        .filter(|(<span class="kw">_</span>, region)| region.owner_tid == owner)
+<a href=#632 id=632 data-nosnippet>632</a>        .map(|(<span class="kw-2">&amp;</span>base, region)| Releasing {
+<a href=#633 id=633 data-nosnippet>633</a>            base,
+<a href=#634 id=634 data-nosnippet>634</a>            len: region.len,
+<a href=#635 id=635 data-nosnippet>635</a>            runs: lowering_runs(registry, owner, base, region.len),
+<a href=#636 id=636 data-nosnippet>636</a>        })
+<a href=#637 id=637 data-nosnippet>637</a>        .collect();
+<a href=#638 id=638 data-nosnippet>638</a>    <span class="kw">for </span>window <span class="kw">in </span><span class="kw-2">&amp;</span>windows {
+<a href=#639 id=639 data-nosnippet>639</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(region) = registry.get_mut(<span class="kw-2">&amp;</span>window.base) {
+<a href=#640 id=640 data-nosnippet>640</a>            region.owner_tid = RELEASING_OWNER;
+<a href=#641 id=641 data-nosnippet>641</a>        }
+<a href=#642 id=642 data-nosnippet>642</a>    }
+<a href=#643 id=643 data-nosnippet>643</a>    windows
+<a href=#644 id=644 data-nosnippet>644</a>}
+<a href=#645 id=645 data-nosnippet>645</a>
+<a href=#646 id=646 data-nosnippet>646</a><span class="doccomment">/// The pages `RequestMmio` made USER for `[base, base + len)`: the whole pages
+<a href=#647 id=647 data-nosnippet>647</a>/// on RISC-V and AArch64 (`user_pages`), every page the window touches on
+<a href=#648 id=648 data-nosnippet>648</a>/// x86_64 (`map_mmio_user_x86` maps the page-rounded window).
+<a href=#649 id=649 data-nosnippet>649</a></span><span class="attr">#[cfg(any(target_arch = <span class="string">"riscv64"</span>, target_arch = <span class="string">"aarch64"</span>))]
+<a href=#650 id=650 data-nosnippet>650</a></span><span class="kw">fn </span>released_pages(base: usize, len: usize) -&gt; core::ops::Range&lt;usize&gt; {
+<a href=#651 id=651 data-nosnippet>651</a>    user_pages(base, len)
+<a href=#652 id=652 data-nosnippet>652</a>}
+<a href=#653 id=653 data-nosnippet>653</a>
+<a href=#654 id=654 data-nosnippet>654</a><span class="doccomment">/// [`released_pages`] where `RequestMmio` maps the page-rounded window.
+<a href=#655 id=655 data-nosnippet>655</a></span><span class="attr">#[cfg(not(any(target_arch = <span class="string">"riscv64"</span>, target_arch = <span class="string">"aarch64"</span>)))]
+<a href=#656 id=656 data-nosnippet>656</a></span><span class="kw">fn </span>released_pages(base: usize, len: usize) -&gt; core::ops::Range&lt;usize&gt; {
+<a href=#657 id=657 data-nosnippet>657</a>    <span class="kw">const </span>PAGE: usize = <span class="number">4096</span>;
+<a href=#658 id=658 data-nosnippet>658</a>    <span class="kw">match </span>base
+<a href=#659 id=659 data-nosnippet>659</a>        .checked_add(len)
+<a href=#660 id=660 data-nosnippet>660</a>        .and_then(|end| end.checked_add(PAGE - <span class="number">1</span>))
+<a href=#661 id=661 data-nosnippet>661</a>    {
+<a href=#662 id=662 data-nosnippet>662</a>        <span class="prelude-val">Some</span>(end) <span class="kw">if </span>len != <span class="number">0 </span>=&gt; (base &amp; !(PAGE - <span class="number">1</span>))..(end &amp; !(PAGE - <span class="number">1</span>)),
+<a href=#663 id=663 data-nosnippet>663</a>        <span class="kw">_ </span>=&gt; <span class="number">0</span>..<span class="number">0</span>,
+<a href=#664 id=664 data-nosnippet>664</a>    }
+<a href=#665 id=665 data-nosnippet>665</a>}
+<a href=#666 id=666 data-nosnippet>666</a>
+<a href=#667 id=667 data-nosnippet>667</a><span class="doccomment">/// The released pages of window `[base, base + len)` held by `owner` that its
+<a href=#668 id=668 data-nosnippet>668</a>/// release lowers, as contiguous runs `(start, pages)`. A page another
+<a href=#669 id=669 data-nosnippet>669</a>/// owner's live window still covers (one handed over from a Terminated owner
+<a href=#670 id=670 data-nosnippet>670</a>/// before this reap) keeps USER; a quarantined or releasing window has no
+<a href=#671 id=671 data-nosnippet>671</a>/// owner to keep it for.
+<a href=#672 id=672 data-nosnippet>672</a></span><span class="kw">fn </span>lowering_runs(
+<a href=#673 id=673 data-nosnippet>673</a>    registry: <span class="kw-2">&amp;</span>BTreeMap&lt;usize, MmioRegion&gt;,
+<a href=#674 id=674 data-nosnippet>674</a>    owner: usize,
+<a href=#675 id=675 data-nosnippet>675</a>    base: usize,
+<a href=#676 id=676 data-nosnippet>676</a>    len: usize,
+<a href=#677 id=677 data-nosnippet>677</a>) -&gt; alloc::vec::Vec&lt;(usize, usize)&gt; {
+<a href=#678 id=678 data-nosnippet>678</a>    <span class="kw">const </span>PAGE: usize = <span class="number">4096</span>;
+<a href=#679 id=679 data-nosnippet>679</a>    <span class="kw">let </span><span class="kw-2">mut </span>runs: alloc::vec::Vec&lt;(usize, usize)&gt; = alloc::vec::Vec::new();
+<a href=#680 id=680 data-nosnippet>680</a>    <span class="kw">for </span>page <span class="kw">in </span>released_pages(base, len).step_by(PAGE) {
+<a href=#681 id=681 data-nosnippet>681</a>        <span class="kw">let </span>still_owned = registry.iter().any(|(<span class="kw-2">&amp;</span>live, other)| {
+<a href=#682 id=682 data-nosnippet>682</a>            other.owner_tid != owner
+<a href=#683 id=683 data-nosnippet>683</a>                &amp;&amp; other.owner_tid != QUARANTINED_OWNER
+<a href=#684 id=684 data-nosnippet>684</a>                &amp;&amp; other.owner_tid != RELEASING_OWNER
+<a href=#685 id=685 data-nosnippet>685</a>                &amp;&amp; live &lt; page + PAGE
+<a href=#686 id=686 data-nosnippet>686</a>                &amp;&amp; page &lt; live + other.len
+<a href=#687 id=687 data-nosnippet>687</a>        });
+<a href=#688 id=688 data-nosnippet>688</a>        <span class="kw">if </span>still_owned {
+<a href=#689 id=689 data-nosnippet>689</a>            <span class="kw">continue</span>;
+<a href=#690 id=690 data-nosnippet>690</a>        }
+<a href=#691 id=691 data-nosnippet>691</a>        <span class="kw">match </span>runs.last_mut() {
+<a href=#692 id=692 data-nosnippet>692</a>            <span class="prelude-val">Some</span>((start, pages)) <span class="kw">if </span><span class="kw-2">*</span>start + <span class="kw-2">*</span>pages * PAGE == page =&gt; <span class="kw-2">*</span>pages += <span class="number">1</span>,
+<a href=#693 id=693 data-nosnippet>693</a>            <span class="kw">_ </span>=&gt; runs.push((page, <span class="number">1</span>)),
+<a href=#694 id=694 data-nosnippet>694</a>        }
+<a href=#695 id=695 data-nosnippet>695</a>    }
+<a href=#696 id=696 data-nosnippet>696</a>    runs
+<a href=#697 id=697 data-nosnippet>697</a>}
+<a href=#698 id=698 data-nosnippet>698</a>
+<a href=#699 id=699 data-nosnippet>699</a><span class="doccomment">/// Lower every run of `windows` through `lower`, with no `REGISTRY` held,
+<a href=#700 id=700 data-nosnippet>700</a>/// passing each the one `await_flush` flag of the release. Every run is
+<a href=#701 id=701 data-nosnippet>701</a>/// attempted; a window is reported with its first page that failed.
+<a href=#702 id=702 data-nosnippet>702</a></span><span class="kw">fn </span>lower_windows(
+<a href=#703 id=703 data-nosnippet>703</a>    windows: <span class="kw-2">&amp;</span>[Releasing],
+<a href=#704 id=704 data-nosnippet>704</a>    await_flush: <span class="kw-2">&amp;mut </span>bool,
+<a href=#705 id=705 data-nosnippet>705</a>    <span class="kw-2">mut </span>lower: <span class="kw">impl </span>FnMut(
+<a href=#706 id=706 data-nosnippet>706</a>        usize,
+<a href=#707 id=707 data-nosnippet>707</a>        usize,
+<a href=#708 id=708 data-nosnippet>708</a>        <span class="kw-2">&amp;mut </span>bool,
+<a href=#709 id=709 data-nosnippet>709</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), (usize, <span class="kw">crate</span>::memory::paging::PageTableError)&gt;,
+<a href=#710 id=710 data-nosnippet>710</a>) -&gt; alloc::vec::Vec&lt;Unlowered&gt; {
+<a href=#711 id=711 data-nosnippet>711</a>    <span class="kw">let </span><span class="kw-2">mut </span>unlowered = alloc::vec::Vec::new();
+<a href=#712 id=712 data-nosnippet>712</a>    <span class="kw">for </span>window <span class="kw">in </span>windows {
+<a href=#713 id=713 data-nosnippet>713</a>        <span class="kw">let </span><span class="kw-2">mut </span>failed = <span class="prelude-val">None</span>;
+<a href=#714 id=714 data-nosnippet>714</a>        <span class="kw">for </span><span class="kw-2">&amp;</span>(start, pages) <span class="kw">in </span><span class="kw-2">&amp;</span>window.runs {
+<a href=#715 id=715 data-nosnippet>715</a>            <span class="kw">if let </span><span class="prelude-val">Err</span>(failure) = lower(start, pages, await_flush) {
+<a href=#716 id=716 data-nosnippet>716</a>                failed.get_or_insert(failure);
+<a href=#717 id=717 data-nosnippet>717</a>            }
+<a href=#718 id=718 data-nosnippet>718</a>        }
+<a href=#719 id=719 data-nosnippet>719</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>((page, error)) = failed {
+<a href=#720 id=720 data-nosnippet>720</a>            unlowered.push((window.base, window.len, page, error));
+<a href=#721 id=721 data-nosnippet>721</a>        }
+<a href=#722 id=722 data-nosnippet>722</a>    }
+<a href=#723 id=723 data-nosnippet>723</a>    unlowered
+<a href=#724 id=724 data-nosnippet>724</a>}
+<a href=#725 id=725 data-nosnippet>725</a>
+<a href=#726 id=726 data-nosnippet>726</a><span class="doccomment">/// Return a run to the boot posture on every hart: one shared flush per
+<a href=#727 id=727 data-nosnippet>727</a>/// 2 MiB step, absent leaves included (`paging::restore_mmio_run`).
+<a href=#728 id=728 data-nosnippet>728</a></span><span class="attr">#[cfg(all(cellos_wide, not(test)))]
+<a href=#729 id=729 data-nosnippet>729</a></span><span class="kw">fn </span>lower_run(
+<a href=#730 id=730 data-nosnippet>730</a>    start: usize,
+<a href=#731 id=731 data-nosnippet>731</a>    pages: usize,
+<a href=#732 id=732 data-nosnippet>732</a>    await_flush: <span class="kw-2">&amp;mut </span>bool,
+<a href=#733 id=733 data-nosnippet>733</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), (usize, <span class="kw">crate</span>::memory::paging::PageTableError)&gt; {
+<a href=#734 id=734 data-nosnippet>734</a>    <span class="kw">crate</span>::memory::paging::restore_mmio_run(start, pages, await_flush).map(drop)
+<a href=#735 id=735 data-nosnippet>735</a>}
+<a href=#736 id=736 data-nosnippet>736</a>
+<a href=#737 id=737 data-nosnippet>737</a><span class="doccomment">/// Nothing to lower: host tests have no page tables, and the 32-bit targets
+<a href=#738 id=738 data-nosnippet>738</a>/// never map a window USER.
+<a href=#739 id=739 data-nosnippet>739</a></span><span class="attr">#[cfg(not(all(cellos_wide, not(test))))]
+<a href=#740 id=740 data-nosnippet>740</a></span><span class="kw">fn </span>lower_run(
+<a href=#741 id=741 data-nosnippet>741</a>    _start: usize,
+<a href=#742 id=742 data-nosnippet>742</a>    _pages: usize,
+<a href=#743 id=743 data-nosnippet>743</a>    _await_flush: <span class="kw-2">&amp;mut </span>bool,
+<a href=#744 id=744 data-nosnippet>744</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), (usize, <span class="kw">crate</span>::memory::paging::PageTableError)&gt; {
+<a href=#745 id=745 data-nosnippet>745</a>    <span class="prelude-val">Ok</span>(())
+<a href=#746 id=746 data-nosnippet>746</a>}
+<a href=#747 id=747 data-nosnippet>747</a>
+<a href=#748 id=748 data-nosnippet>748</a><span class="doccomment">/// Release each of `windows` whose lowering is in force on every hart and
+<a href=#749 id=749 data-nosnippet>749</a>/// pass the others (`unlowered`) to [`QUARANTINED_OWNER`]. A releasing window
+<a href=#750 id=750 data-nosnippet>750</a>/// is changed by no other path, so each is still registered as it was left.
+<a href=#751 id=751 data-nosnippet>751</a>/// Returns the windows quarantined after it.
+<a href=#752 id=752 data-nosnippet>752</a></span><span class="kw">fn </span>finish_release(
+<a href=#753 id=753 data-nosnippet>753</a>    registry: <span class="kw-2">&amp;mut </span>BTreeMap&lt;usize, MmioRegion&gt;,
+<a href=#754 id=754 data-nosnippet>754</a>    windows: <span class="kw-2">&amp;</span>[Releasing],
+<a href=#755 id=755 data-nosnippet>755</a>    unlowered: <span class="kw-2">&amp;</span>[Unlowered],
+<a href=#756 id=756 data-nosnippet>756</a>) -&gt; usize {
+<a href=#757 id=757 data-nosnippet>757</a>    <span class="kw">for </span>window <span class="kw">in </span>windows {
+<a href=#758 id=758 data-nosnippet>758</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(region) = registry
+<a href=#759 id=759 data-nosnippet>759</a>            .get_mut(<span class="kw-2">&amp;</span>window.base)
+<a href=#760 id=760 data-nosnippet>760</a>            .filter(|region| region.owner_tid == RELEASING_OWNER &amp;&amp; region.len == window.len)
+<a href=#761 id=761 data-nosnippet>761</a>        <span class="kw">else </span>{
+<a href=#762 id=762 data-nosnippet>762</a>            <span class="kw">continue</span>;
+<a href=#763 id=763 data-nosnippet>763</a>        };
+<a href=#764 id=764 data-nosnippet>764</a>        <span class="kw">if </span>unlowered.iter().any(|failed| failed.<span class="number">0 </span>== window.base) {
+<a href=#765 id=765 data-nosnippet>765</a>            region.owner_tid = QUARANTINED_OWNER;
+<a href=#766 id=766 data-nosnippet>766</a>        } <span class="kw">else </span>{
+<a href=#767 id=767 data-nosnippet>767</a>            registry.remove(<span class="kw-2">&amp;</span>window.base);
+<a href=#768 id=768 data-nosnippet>768</a>        }
 <a href=#769 id=769 data-nosnippet>769</a>    }
-<a href=#770 id=770 data-nosnippet>770</a>    <span class="comment">// A hart that still owes an invalidation would leave this lowering
-<a href=#771 id=771 data-nosnippet>771</a>    // unconfirmed too: the next poll arms the retry again.
-<a href=#772 id=772 data-nosnippet>772</a>    </span><span class="attr">#[cfg(cellos_wide)]
-<a href=#773 id=773 data-nosnippet>773</a>    </span><span class="kw">if </span><span class="kw">crate</span>::memory::tlb_shootdown::tag_invalidation_outstanding().is_some() {
-<a href=#774 id=774 data-nosnippet>774</a>        <span class="kw">return </span>QUARANTINED_WINDOWS.load(Ordering::Acquire);
-<a href=#775 id=775 data-nosnippet>775</a>    }
-<a href=#776 id=776 data-nosnippet>776</a>    <span class="kw">let </span>release = release_windows(QUARANTINED_OWNER, lower_run);
-<a href=#777 id=777 data-nosnippet>777</a>    <span class="kw">for </span>(base, len) <span class="kw">in </span>release.released {
-<a href=#778 id=778 data-nosnippet>778</a>        <span class="macro">log::warn!</span>(
-<a href=#779 id=779 data-nosnippet>779</a>            <span class="string">"[mmio] quarantined window {base:#x}+{len:#x} lowered on every hart: released \
-<a href=#780 id=780 data-nosnippet>780</a>             ({} still quarantined)"</span>,
-<a href=#781 id=781 data-nosnippet>781</a>            release.quarantined
-<a href=#782 id=782 data-nosnippet>782</a>        );
+<a href=#770 id=770 data-nosnippet>770</a>    count_quarantined(registry)
+<a href=#771 id=771 data-nosnippet>771</a>}
+<a href=#772 id=772 data-nosnippet>772</a>
+<a href=#773 id=773 data-nosnippet>773</a><span class="doccomment">/// Lower every quarantined window again and release those whose lowering is
+<a href=#774 id=774 data-nosnippet>774</a>/// now in force on every hart. The housekeeping pass calls it; it acts only
+<a href=#775 id=775 data-nosnippet>775</a>/// when the timer poll armed it ([`RETRY_ARMED`]) and no remote hart owes an
+<a href=#776 id=776 data-nosnippet>776</a>/// invalidation, and it lowers without `REGISTRY`, as [`release_mmio_for`]
+<a href=#777 id=777 data-nosnippet>777</a>/// does. Returns the windows still quarantined.
+<a href=#778 id=778 data-nosnippet>778</a></span><span class="kw">pub fn </span>retry_quarantined_windows() -&gt; usize {
+<a href=#779 id=779 data-nosnippet>779</a>    <span class="kw">if </span>!RETRY_ARMED.swap(<span class="bool-val">false</span>, Ordering::AcqRel)
+<a href=#780 id=780 data-nosnippet>780</a>        || QUARANTINED_WINDOWS.load(Ordering::Acquire) == <span class="number">0
+<a href=#781 id=781 data-nosnippet>781</a>    </span>{
+<a href=#782 id=782 data-nosnippet>782</a>        <span class="kw">return </span>QUARANTINED_WINDOWS.load(Ordering::Acquire);
 <a href=#783 id=783 data-nosnippet>783</a>    }
-<a href=#784 id=784 data-nosnippet>784</a>    release.quarantined
-<a href=#785 id=785 data-nosnippet>785</a>}
-<a href=#786 id=786 data-nosnippet>786</a>
-<a href=#787 id=787 data-nosnippet>787</a><span class="doccomment">/// Hart-0 timer hook: while a window is quarantined, arm the retry and the
-<a href=#788 id=788 data-nosnippet>788</a>/// housekeeping pass every [`RETRY_EVERY_TICKS`] once no remote hart owes an
-<a href=#789 id=789 data-nosnippet>789</a>/// invalidation, so [`retry_quarantined_windows`] runs when its flush can
-<a href=#790 id=790 data-nosnippet>790</a>/// confirm. One load while nothing is quarantined; never waits.
-<a href=#791 id=791 data-nosnippet>791</a></span><span class="attr">#[cfg(cellos_wide)]
-<a href=#792 id=792 data-nosnippet>792</a></span><span class="kw">pub fn </span>poll_quarantined_windows() {
-<a href=#793 id=793 data-nosnippet>793</a>    <span class="kw">if </span>QUARANTINED_WINDOWS.load(Ordering::Acquire) == <span class="number">0
-<a href=#794 id=794 data-nosnippet>794</a>        </span>|| !<span class="kw">crate</span>::task::system_ticks().is_multiple_of(RETRY_EVERY_TICKS)
-<a href=#795 id=795 data-nosnippet>795</a>    {
-<a href=#796 id=796 data-nosnippet>796</a>        <span class="kw">return</span>;
+<a href=#784 id=784 data-nosnippet>784</a>    <span class="comment">// A hart that still owes an invalidation would leave this lowering
+<a href=#785 id=785 data-nosnippet>785</a>    // unconfirmed too: the next poll arms the retry again.
+<a href=#786 id=786 data-nosnippet>786</a>    </span><span class="attr">#[cfg(cellos_wide)]
+<a href=#787 id=787 data-nosnippet>787</a>    </span><span class="kw">if </span><span class="kw">crate</span>::memory::tlb_shootdown::tag_invalidation_outstanding().is_some() {
+<a href=#788 id=788 data-nosnippet>788</a>        <span class="kw">return </span>QUARANTINED_WINDOWS.load(Ordering::Acquire);
+<a href=#789 id=789 data-nosnippet>789</a>    }
+<a href=#790 id=790 data-nosnippet>790</a>    <span class="kw">let </span>release = release_windows(QUARANTINED_OWNER, lower_run);
+<a href=#791 id=791 data-nosnippet>791</a>    <span class="kw">for </span>(base, len) <span class="kw">in </span>release.released {
+<a href=#792 id=792 data-nosnippet>792</a>        <span class="macro">log::warn!</span>(
+<a href=#793 id=793 data-nosnippet>793</a>            <span class="string">"[mmio] quarantined window {base:#x}+{len:#x} lowered on every hart: released \
+<a href=#794 id=794 data-nosnippet>794</a>             ({} still quarantined)"</span>,
+<a href=#795 id=795 data-nosnippet>795</a>            release.quarantined
+<a href=#796 id=796 data-nosnippet>796</a>        );
 <a href=#797 id=797 data-nosnippet>797</a>    }
-<a href=#798 id=798 data-nosnippet>798</a>    <span class="kw">if </span><span class="kw">crate</span>::memory::tlb_shootdown::tag_invalidation_outstanding().is_none() {
-<a href=#799 id=799 data-nosnippet>799</a>        RETRY_ARMED.store(<span class="bool-val">true</span>, Ordering::Release);
-<a href=#800 id=800 data-nosnippet>800</a>        <span class="kw">crate</span>::task::note_housekeeping();
-<a href=#801 id=801 data-nosnippet>801</a>    }
-<a href=#802 id=802 data-nosnippet>802</a>}
-<a href=#803 id=803 data-nosnippet>803</a>
-<a href=#804 id=804 data-nosnippet>804</a><span class="doccomment">/// Windows registered to [`QUARANTINED_OWNER`]; refreshes
-<a href=#805 id=805 data-nosnippet>805</a>/// [`QUARANTINED_WINDOWS`]. The caller holds `REGISTRY`.
-<a href=#806 id=806 data-nosnippet>806</a></span><span class="kw">fn </span>count_quarantined(registry: <span class="kw-2">&amp;</span>BTreeMap&lt;usize, MmioRegion&gt;) -&gt; usize {
-<a href=#807 id=807 data-nosnippet>807</a>    <span class="kw">let </span>quarantined = registry
-<a href=#808 id=808 data-nosnippet>808</a>        .values()
-<a href=#809 id=809 data-nosnippet>809</a>        .filter(|region| region.owner_tid == QUARANTINED_OWNER)
-<a href=#810 id=810 data-nosnippet>810</a>        .count();
-<a href=#811 id=811 data-nosnippet>811</a>    QUARANTINED_WINDOWS.store(quarantined, Ordering::Release);
-<a href=#812 id=812 data-nosnippet>812</a>    quarantined
-<a href=#813 id=813 data-nosnippet>813</a>}
-<a href=#814 id=814 data-nosnippet>814</a>
-<a href=#815 id=815 data-nosnippet>815</a><span class="doccomment">/// Does a claim of `[base, end)` collide with the registered window at
-<a href=#816 id=816 data-nosnippet>816</a>/// `window_base`? A window being released also refuses a claim that only
-<a href=#817 id=817 data-nosnippet>817</a>/// shares one of its released pages: its lowering runs without `REGISTRY` and
-<a href=#818 id=818 data-nosnippet>818</a>/// would take USER from the new owner's page.
-<a href=#819 id=819 data-nosnippet>819</a></span><span class="kw">fn </span>claim_collides(window_base: usize, region: <span class="kw-2">&amp;</span>MmioRegion, base: usize, end: usize) -&gt; bool {
-<a href=#820 id=820 data-nosnippet>820</a>    <span class="kw">let </span>window_end = window_base + region.len;
-<a href=#821 id=821 data-nosnippet>821</a>    <span class="kw">let </span>(start, stop) = <span class="kw">if </span>region.owner_tid == RELEASING_OWNER {
-<a href=#822 id=822 data-nosnippet>822</a>        <span class="kw">let </span>pages = released_pages(window_base, region.len);
-<a href=#823 id=823 data-nosnippet>823</a>        (window_base.min(pages.start), window_end.max(pages.end))
-<a href=#824 id=824 data-nosnippet>824</a>    } <span class="kw">else </span>{
-<a href=#825 id=825 data-nosnippet>825</a>        (window_base, window_end)
-<a href=#826 id=826 data-nosnippet>826</a>    };
-<a href=#827 id=827 data-nosnippet>827</a>    base &lt; stop &amp;&amp; start &lt; end
-<a href=#828 id=828 data-nosnippet>828</a>}
-<a href=#829 id=829 data-nosnippet>829</a>
-<a href=#830 id=830 data-nosnippet>830</a><span class="doccomment">/// The windows [`revoke_mmio_for`] would release, without releasing them: a
-<a href=#831 id=831 data-nosnippet>831</a>/// revoke lowers their PTEs first and releases exactly these only once the
-<a href=#832 id=832 data-nosnippet>832</a>/// lowering is in force on every hart ([`release_mmio_windows`]).
-<a href=#833 id=833 data-nosnippet>833</a></span><span class="kw">pub fn </span>mmio_windows_for(tid: usize, device_mask: MmioClass) -&gt; alloc::vec::Vec&lt;(usize, usize)&gt; {
-<a href=#834 id=834 data-nosnippet>834</a>    <span class="kw">if </span>device_mask == <span class="number">0 </span>{
-<a href=#835 id=835 data-nosnippet>835</a>        <span class="kw">return </span>alloc::vec::Vec::new();
-<a href=#836 id=836 data-nosnippet>836</a>    }
-<a href=#837 id=837 data-nosnippet>837</a>    <span class="attr">#[cfg(feature = <span class="string">"p01-trace"</span>)]
-<a href=#838 id=838 data-nosnippet>838</a>    </span><span class="kw">let </span>_semantic = <span class="kw">crate</span>::memory::heap::p01_owner::creation(
-<a href=#839 id=839 data-nosnippet>839</a>        <span class="prelude-val">None</span>,
-<a href=#840 id=840 data-nosnippet>840</a>        <span class="kw">crate</span>::memory::heap::p01_owner::DRIVER_SHARED,
-<a href=#841 id=841 data-nosnippet>841</a>    );
-<a href=#842 id=842 data-nosnippet>842</a>    REGISTRY
-<a href=#843 id=843 data-nosnippet>843</a>        .lock()
-<a href=#844 id=844 data-nosnippet>844</a>        .iter()
-<a href=#845 id=845 data-nosnippet>845</a>        .filter(|(<span class="kw">_</span>, region)| region.owner_tid == tid &amp;&amp; region.class &amp; device_mask != <span class="number">0</span>)
-<a href=#846 id=846 data-nosnippet>846</a>        .map(|(<span class="kw-2">&amp;</span>base, region)| (base, region.len))
-<a href=#847 id=847 data-nosnippet>847</a>        .collect()
-<a href=#848 id=848 data-nosnippet>848</a>}
-<a href=#849 id=849 data-nosnippet>849</a>
-<a href=#850 id=850 data-nosnippet>850</a><span class="doccomment">/// Release exactly `windows` of `tid` (bases from [`mmio_windows_for`]); a
-<a href=#851 id=851 data-nosnippet>851</a>/// window claimed since is untouched.
-<a href=#852 id=852 data-nosnippet>852</a></span><span class="kw">pub fn </span>release_mmio_windows(tid: usize, windows: <span class="kw-2">&amp;</span>[(usize, usize)]) {
-<a href=#853 id=853 data-nosnippet>853</a>    REGISTRY.lock().retain(|base, region| {
-<a href=#854 id=854 data-nosnippet>854</a>        !(region.owner_tid == tid &amp;&amp; windows.contains(<span class="kw-2">&amp;</span>(<span class="kw-2">*</span>base, region.len)))
-<a href=#855 id=855 data-nosnippet>855</a>    });
-<a href=#856 id=856 data-nosnippet>856</a>    <span class="kw">crate</span>::dev::ownership::release_mmio_devices_in(tid, windows);
-<a href=#857 id=857 data-nosnippet>857</a>}
-<a href=#858 id=858 data-nosnippet>858</a>
-<a href=#859 id=859 data-nosnippet>859</a><span class="doccomment">/// Release the regions owned by task `tid` whose class is in `device_mask`, and
-<a href=#860 id=860 data-nosnippet>860</a>/// return their `(base, len)` so the caller can remove user accessibility.
-<a href=#861 id=861 data-nosnippet>861</a>///
-<a href=#862 id=862 data-nosnippet>862</a>/// Selective by construction: a class the caller did not name stays owned and
-<a href=#863 id=863 data-nosnippet>863</a>/// mapped, so revoking one device class never disarms another. Used by the
-<a href=#864 id=864 data-nosnippet>864</a>/// MMIO revoke self-test; `sys_cap_revoke` lowers first ([`mmio_windows_for`]),
-<a href=#865 id=865 data-nosnippet>865</a>/// and task retirement uses [`release_mmio_for`], which drops every region
-<a href=#866 id=866 data-nosnippet>866</a>/// regardless of class.
-<a href=#867 id=867 data-nosnippet>867</a></span><span class="kw">pub fn </span>revoke_mmio_for(tid: usize, device_mask: MmioClass) -&gt; alloc::vec::Vec&lt;(usize, usize)&gt; {
-<a href=#868 id=868 data-nosnippet>868</a>    <span class="kw">let </span><span class="kw-2">mut </span>revoked = alloc::vec::Vec::new();
-<a href=#869 id=869 data-nosnippet>869</a>    <span class="kw">if </span>device_mask == <span class="number">0 </span>{
-<a href=#870 id=870 data-nosnippet>870</a>        <span class="kw">return </span>revoked;
-<a href=#871 id=871 data-nosnippet>871</a>    }
-<a href=#872 id=872 data-nosnippet>872</a>    REGISTRY.lock().retain(|<span class="kw-2">&amp;</span>base, region| {
-<a href=#873 id=873 data-nosnippet>873</a>        <span class="kw">let </span>hit = region.owner_tid == tid &amp;&amp; region.class &amp; device_mask != <span class="number">0</span>;
-<a href=#874 id=874 data-nosnippet>874</a>        <span class="kw">if </span>hit {
-<a href=#875 id=875 data-nosnippet>875</a>            <span class="attr">#[cfg(feature = <span class="string">"p01-trace"</span>)]
-<a href=#876 id=876 data-nosnippet>876</a>            </span><span class="kw">let </span>_semantic = <span class="kw">crate</span>::memory::heap::p01_owner::creation(
-<a href=#877 id=877 data-nosnippet>877</a>                <span class="prelude-val">None</span>,
-<a href=#878 id=878 data-nosnippet>878</a>                <span class="kw">crate</span>::memory::heap::p01_owner::DRIVER_SHARED,
-<a href=#879 id=879 data-nosnippet>879</a>            );
-<a href=#880 id=880 data-nosnippet>880</a>            revoked.push((base, region.len));
-<a href=#881 id=881 data-nosnippet>881</a>        }
-<a href=#882 id=882 data-nosnippet>882</a>        !hit
-<a href=#883 id=883 data-nosnippet>883</a>    });
-<a href=#884 id=884 data-nosnippet>884</a>    revoked
-<a href=#885 id=885 data-nosnippet>885</a>}
-<a href=#886 id=886 data-nosnippet>886</a>
-<a href=#887 id=887 data-nosnippet>887</a><span class="doccomment">/// Return the task ID (TID) of the cell that currently owns the MMIO region
-<a href=#888 id=888 data-nosnippet>888</a>/// whose base address exactly matches `base`.
-<a href=#889 id=889 data-nosnippet>889</a>///
-<a href=#890 id=890 data-nosnippet>890</a>/// Returns `None` if no cell has requested that exact base address, or the
-<a href=#891 id=891 data-nosnippet>891</a>/// window is being released or quarantined (no cell owns it any more).
-<a href=#892 id=892 data-nosnippet>892</a>/// Used by the GPIO IRQ handler to route interrupts to the current MMIO owner.
-<a href=#893 id=893 data-nosnippet>893</a></span><span class="kw">pub fn </span>lookup_mmio_owner(base: usize) -&gt; <span class="prelude-ty">Option</span>&lt;usize&gt; {
-<a href=#894 id=894 data-nosnippet>894</a>    REGISTRY
-<a href=#895 id=895 data-nosnippet>895</a>        .lock()
-<a href=#896 id=896 data-nosnippet>896</a>        .get(<span class="kw-2">&amp;</span>base)
-<a href=#897 id=897 data-nosnippet>897</a>        .map(|region| region.owner_tid)
-<a href=#898 id=898 data-nosnippet>898</a>        .filter(|<span class="kw-2">&amp;</span>tid| tid != QUARANTINED_OWNER &amp;&amp; tid != RELEASING_OWNER)
+<a href=#798 id=798 data-nosnippet>798</a>    release.quarantined
+<a href=#799 id=799 data-nosnippet>799</a>}
+<a href=#800 id=800 data-nosnippet>800</a>
+<a href=#801 id=801 data-nosnippet>801</a><span class="doccomment">/// Hart-0 timer hook: while a window is quarantined, arm the retry and the
+<a href=#802 id=802 data-nosnippet>802</a>/// housekeeping pass every [`RETRY_EVERY_TICKS`] once no remote hart owes an
+<a href=#803 id=803 data-nosnippet>803</a>/// invalidation, so [`retry_quarantined_windows`] runs when its flush can
+<a href=#804 id=804 data-nosnippet>804</a>/// confirm. One load while nothing is quarantined; never waits.
+<a href=#805 id=805 data-nosnippet>805</a></span><span class="attr">#[cfg(cellos_wide)]
+<a href=#806 id=806 data-nosnippet>806</a></span><span class="kw">pub fn </span>poll_quarantined_windows() {
+<a href=#807 id=807 data-nosnippet>807</a>    <span class="kw">if </span>QUARANTINED_WINDOWS.load(Ordering::Acquire) == <span class="number">0
+<a href=#808 id=808 data-nosnippet>808</a>        </span>|| !<span class="kw">crate</span>::task::system_ticks().is_multiple_of(RETRY_EVERY_TICKS)
+<a href=#809 id=809 data-nosnippet>809</a>    {
+<a href=#810 id=810 data-nosnippet>810</a>        <span class="kw">return</span>;
+<a href=#811 id=811 data-nosnippet>811</a>    }
+<a href=#812 id=812 data-nosnippet>812</a>    <span class="kw">if </span><span class="kw">crate</span>::memory::tlb_shootdown::tag_invalidation_outstanding().is_none() {
+<a href=#813 id=813 data-nosnippet>813</a>        RETRY_ARMED.store(<span class="bool-val">true</span>, Ordering::Release);
+<a href=#814 id=814 data-nosnippet>814</a>        <span class="kw">crate</span>::task::note_housekeeping();
+<a href=#815 id=815 data-nosnippet>815</a>    }
+<a href=#816 id=816 data-nosnippet>816</a>}
+<a href=#817 id=817 data-nosnippet>817</a>
+<a href=#818 id=818 data-nosnippet>818</a><span class="doccomment">/// Windows registered to [`QUARANTINED_OWNER`]; refreshes
+<a href=#819 id=819 data-nosnippet>819</a>/// [`QUARANTINED_WINDOWS`]. The caller holds `REGISTRY`.
+<a href=#820 id=820 data-nosnippet>820</a></span><span class="kw">fn </span>count_quarantined(registry: <span class="kw-2">&amp;</span>BTreeMap&lt;usize, MmioRegion&gt;) -&gt; usize {
+<a href=#821 id=821 data-nosnippet>821</a>    <span class="kw">let </span>quarantined = registry
+<a href=#822 id=822 data-nosnippet>822</a>        .values()
+<a href=#823 id=823 data-nosnippet>823</a>        .filter(|region| region.owner_tid == QUARANTINED_OWNER)
+<a href=#824 id=824 data-nosnippet>824</a>        .count();
+<a href=#825 id=825 data-nosnippet>825</a>    QUARANTINED_WINDOWS.store(quarantined, Ordering::Release);
+<a href=#826 id=826 data-nosnippet>826</a>    quarantined
+<a href=#827 id=827 data-nosnippet>827</a>}
+<a href=#828 id=828 data-nosnippet>828</a>
+<a href=#829 id=829 data-nosnippet>829</a><span class="doccomment">/// Does a claim of `[base, end)` collide with the registered window at
+<a href=#830 id=830 data-nosnippet>830</a>/// `window_base`? A window being released also refuses a claim that only
+<a href=#831 id=831 data-nosnippet>831</a>/// shares one of its released pages: its lowering runs without `REGISTRY` and
+<a href=#832 id=832 data-nosnippet>832</a>/// would take USER from the new owner's page.
+<a href=#833 id=833 data-nosnippet>833</a></span><span class="kw">fn </span>claim_collides(window_base: usize, region: <span class="kw-2">&amp;</span>MmioRegion, base: usize, end: usize) -&gt; bool {
+<a href=#834 id=834 data-nosnippet>834</a>    <span class="kw">let </span>window_end = window_base + region.len;
+<a href=#835 id=835 data-nosnippet>835</a>    <span class="kw">let </span>(start, stop) = <span class="kw">if </span>region.owner_tid == RELEASING_OWNER {
+<a href=#836 id=836 data-nosnippet>836</a>        <span class="kw">let </span>pages = released_pages(window_base, region.len);
+<a href=#837 id=837 data-nosnippet>837</a>        (window_base.min(pages.start), window_end.max(pages.end))
+<a href=#838 id=838 data-nosnippet>838</a>    } <span class="kw">else </span>{
+<a href=#839 id=839 data-nosnippet>839</a>        (window_base, window_end)
+<a href=#840 id=840 data-nosnippet>840</a>    };
+<a href=#841 id=841 data-nosnippet>841</a>    base &lt; stop &amp;&amp; start &lt; end
+<a href=#842 id=842 data-nosnippet>842</a>}
+<a href=#843 id=843 data-nosnippet>843</a>
+<a href=#844 id=844 data-nosnippet>844</a><span class="doccomment">/// The windows [`revoke_mmio_for`] would release, without releasing them: a
+<a href=#845 id=845 data-nosnippet>845</a>/// revoke lowers their PTEs first and releases exactly these only once the
+<a href=#846 id=846 data-nosnippet>846</a>/// lowering is in force on every hart ([`release_mmio_windows`]).
+<a href=#847 id=847 data-nosnippet>847</a></span><span class="kw">pub fn </span>mmio_windows_for(tid: usize, device_mask: MmioClass) -&gt; alloc::vec::Vec&lt;(usize, usize)&gt; {
+<a href=#848 id=848 data-nosnippet>848</a>    <span class="kw">if </span>device_mask == <span class="number">0 </span>{
+<a href=#849 id=849 data-nosnippet>849</a>        <span class="kw">return </span>alloc::vec::Vec::new();
+<a href=#850 id=850 data-nosnippet>850</a>    }
+<a href=#851 id=851 data-nosnippet>851</a>    <span class="attr">#[cfg(feature = <span class="string">"p01-trace"</span>)]
+<a href=#852 id=852 data-nosnippet>852</a>    </span><span class="kw">let </span>_semantic = <span class="kw">crate</span>::memory::heap::p01_owner::creation(
+<a href=#853 id=853 data-nosnippet>853</a>        <span class="prelude-val">None</span>,
+<a href=#854 id=854 data-nosnippet>854</a>        <span class="kw">crate</span>::memory::heap::p01_owner::DRIVER_SHARED,
+<a href=#855 id=855 data-nosnippet>855</a>    );
+<a href=#856 id=856 data-nosnippet>856</a>    REGISTRY
+<a href=#857 id=857 data-nosnippet>857</a>        .lock()
+<a href=#858 id=858 data-nosnippet>858</a>        .iter()
+<a href=#859 id=859 data-nosnippet>859</a>        .filter(|(<span class="kw">_</span>, region)| region.owner_tid == tid &amp;&amp; region.class &amp; device_mask != <span class="number">0</span>)
+<a href=#860 id=860 data-nosnippet>860</a>        .map(|(<span class="kw-2">&amp;</span>base, region)| (base, region.len))
+<a href=#861 id=861 data-nosnippet>861</a>        .collect()
+<a href=#862 id=862 data-nosnippet>862</a>}
+<a href=#863 id=863 data-nosnippet>863</a>
+<a href=#864 id=864 data-nosnippet>864</a><span class="doccomment">/// Release exactly `windows` of `tid` (bases from [`mmio_windows_for`]); a
+<a href=#865 id=865 data-nosnippet>865</a>/// window claimed since is untouched.
+<a href=#866 id=866 data-nosnippet>866</a></span><span class="kw">pub fn </span>release_mmio_windows(tid: usize, windows: <span class="kw-2">&amp;</span>[(usize, usize)]) {
+<a href=#867 id=867 data-nosnippet>867</a>    REGISTRY.lock().retain(|base, region| {
+<a href=#868 id=868 data-nosnippet>868</a>        !(region.owner_tid == tid &amp;&amp; windows.contains(<span class="kw-2">&amp;</span>(<span class="kw-2">*</span>base, region.len)))
+<a href=#869 id=869 data-nosnippet>869</a>    });
+<a href=#870 id=870 data-nosnippet>870</a>    <span class="kw">crate</span>::dev::ownership::release_mmio_devices_in(tid, windows);
+<a href=#871 id=871 data-nosnippet>871</a>}
+<a href=#872 id=872 data-nosnippet>872</a>
+<a href=#873 id=873 data-nosnippet>873</a><span class="doccomment">/// Release the regions owned by task `tid` whose class is in `device_mask`, and
+<a href=#874 id=874 data-nosnippet>874</a>/// return their `(base, len)` so the caller can remove user accessibility.
+<a href=#875 id=875 data-nosnippet>875</a>///
+<a href=#876 id=876 data-nosnippet>876</a>/// Selective by construction: a class the caller did not name stays owned and
+<a href=#877 id=877 data-nosnippet>877</a>/// mapped, so revoking one device class never disarms another. Used by the
+<a href=#878 id=878 data-nosnippet>878</a>/// MMIO revoke self-test; `sys_cap_revoke` lowers first ([`mmio_windows_for`]),
+<a href=#879 id=879 data-nosnippet>879</a>/// and task retirement uses [`release_mmio_for`], which drops every region
+<a href=#880 id=880 data-nosnippet>880</a>/// regardless of class.
+<a href=#881 id=881 data-nosnippet>881</a></span><span class="kw">pub fn </span>revoke_mmio_for(tid: usize, device_mask: MmioClass) -&gt; alloc::vec::Vec&lt;(usize, usize)&gt; {
+<a href=#882 id=882 data-nosnippet>882</a>    <span class="kw">let </span><span class="kw-2">mut </span>revoked = alloc::vec::Vec::new();
+<a href=#883 id=883 data-nosnippet>883</a>    <span class="kw">if </span>device_mask == <span class="number">0 </span>{
+<a href=#884 id=884 data-nosnippet>884</a>        <span class="kw">return </span>revoked;
+<a href=#885 id=885 data-nosnippet>885</a>    }
+<a href=#886 id=886 data-nosnippet>886</a>    REGISTRY.lock().retain(|<span class="kw-2">&amp;</span>base, region| {
+<a href=#887 id=887 data-nosnippet>887</a>        <span class="kw">let </span>hit = region.owner_tid == tid &amp;&amp; region.class &amp; device_mask != <span class="number">0</span>;
+<a href=#888 id=888 data-nosnippet>888</a>        <span class="kw">if </span>hit {
+<a href=#889 id=889 data-nosnippet>889</a>            <span class="attr">#[cfg(feature = <span class="string">"p01-trace"</span>)]
+<a href=#890 id=890 data-nosnippet>890</a>            </span><span class="kw">let </span>_semantic = <span class="kw">crate</span>::memory::heap::p01_owner::creation(
+<a href=#891 id=891 data-nosnippet>891</a>                <span class="prelude-val">None</span>,
+<a href=#892 id=892 data-nosnippet>892</a>                <span class="kw">crate</span>::memory::heap::p01_owner::DRIVER_SHARED,
+<a href=#893 id=893 data-nosnippet>893</a>            );
+<a href=#894 id=894 data-nosnippet>894</a>            revoked.push((base, region.len));
+<a href=#895 id=895 data-nosnippet>895</a>        }
+<a href=#896 id=896 data-nosnippet>896</a>        !hit
+<a href=#897 id=897 data-nosnippet>897</a>    });
+<a href=#898 id=898 data-nosnippet>898</a>    revoked
 <a href=#899 id=899 data-nosnippet>899</a>}
 <a href=#900 id=900 data-nosnippet>900</a>
-<a href=#901 id=901 data-nosnippet>901</a><span class="doccomment">/// Return whether task `tid` owns exactly `[base, base + len)`.
-<a href=#902 id=902 data-nosnippet>902</a>///
-<a href=#903 id=903 data-nosnippet>903</a>/// Display registration uses this rather than an overlap query: the VideoCore
-<a href=#904 id=904 data-nosnippet>904</a>/// mailbox authority is one fixed capability, so a subrange cannot be confused
-<a href=#905 id=905 data-nosnippet>905</a>/// with an independently granted peripheral window.
-<a href=#906 id=906 data-nosnippet>906</a></span><span class="kw">pub fn </span>owns_exact_mmio(tid: usize, base: usize, len: usize) -&gt; bool {
-<a href=#907 id=907 data-nosnippet>907</a>    REGISTRY
-<a href=#908 id=908 data-nosnippet>908</a>        .lock()
-<a href=#909 id=909 data-nosnippet>909</a>        .get(<span class="kw-2">&amp;</span>base)
-<a href=#910 id=910 data-nosnippet>910</a>        .is_some_and(|region| region.len == len &amp;&amp; region.owner_tid == tid)
-<a href=#911 id=911 data-nosnippet>911</a>}
-<a href=#912 id=912 data-nosnippet>912</a>
-<a href=#913 id=913 data-nosnippet>913</a><span class="doccomment">/// Outcome of atomically reserving one framebuffer mapping transaction.
-<a href=#914 id=914 data-nosnippet>914</a></span><span class="attr">#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-<a href=#915 id=915 data-nosnippet>915</a></span><span class="kw">pub enum </span>DisplayFramebufferReservation {
-<a href=#916 id=916 data-nosnippet>916</a>    Reserved,
-<a href=#917 id=917 data-nosnippet>917</a>    ActiveReplay,
-<a href=#918 id=918 data-nosnippet>918</a>}
-<a href=#919 id=919 data-nosnippet>919</a>
-<a href=#920 id=920 data-nosnippet>920</a><span class="doccomment">/// Why a framebuffer reservation could not be established.
-<a href=#921 id=921 data-nosnippet>921</a></span><span class="attr">#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-<a href=#922 id=922 data-nosnippet>922</a></span><span class="kw">pub enum </span>DisplayFramebufferReservationError {
-<a href=#923 id=923 data-nosnippet>923</a>    <span class="doccomment">/// Another pending or active framebuffer transaction owns the singleton.
-<a href=#924 id=924 data-nosnippet>924</a>    </span>Conflict,
+<a href=#901 id=901 data-nosnippet>901</a><span class="doccomment">/// Return the task ID (TID) of the cell that currently owns the MMIO region
+<a href=#902 id=902 data-nosnippet>902</a>/// whose base address exactly matches `base`.
+<a href=#903 id=903 data-nosnippet>903</a>///
+<a href=#904 id=904 data-nosnippet>904</a>/// Returns `None` if no cell has requested that exact base address, or the
+<a href=#905 id=905 data-nosnippet>905</a>/// window is being released or quarantined (no cell owns it any more).
+<a href=#906 id=906 data-nosnippet>906</a>/// Used by the GPIO IRQ handler to route interrupts to the current MMIO owner.
+<a href=#907 id=907 data-nosnippet>907</a></span><span class="kw">pub fn </span>lookup_mmio_owner(base: usize) -&gt; <span class="prelude-ty">Option</span>&lt;usize&gt; {
+<a href=#908 id=908 data-nosnippet>908</a>    REGISTRY
+<a href=#909 id=909 data-nosnippet>909</a>        .lock()
+<a href=#910 id=910 data-nosnippet>910</a>        .get(<span class="kw-2">&amp;</span>base)
+<a href=#911 id=911 data-nosnippet>911</a>        .map(|region| region.owner_tid)
+<a href=#912 id=912 data-nosnippet>912</a>        .filter(|<span class="kw-2">&amp;</span>tid| tid != QUARANTINED_OWNER &amp;&amp; tid != RELEASING_OWNER)
+<a href=#913 id=913 data-nosnippet>913</a>}
+<a href=#914 id=914 data-nosnippet>914</a>
+<a href=#915 id=915 data-nosnippet>915</a><span class="doccomment">/// Return whether task `tid` owns exactly `[base, base + len)`.
+<a href=#916 id=916 data-nosnippet>916</a>///
+<a href=#917 id=917 data-nosnippet>917</a>/// Display registration uses this rather than an overlap query: the VideoCore
+<a href=#918 id=918 data-nosnippet>918</a>/// mailbox authority is one fixed capability, so a subrange cannot be confused
+<a href=#919 id=919 data-nosnippet>919</a>/// with an independently granted peripheral window.
+<a href=#920 id=920 data-nosnippet>920</a></span><span class="kw">pub fn </span>owns_exact_mmio(tid: usize, base: usize, len: usize) -&gt; bool {
+<a href=#921 id=921 data-nosnippet>921</a>    REGISTRY
+<a href=#922 id=922 data-nosnippet>922</a>        .lock()
+<a href=#923 id=923 data-nosnippet>923</a>        .get(<span class="kw-2">&amp;</span>base)
+<a href=#924 id=924 data-nosnippet>924</a>        .is_some_and(|region| region.len == len &amp;&amp; region.owner_tid == tid)
 <a href=#925 id=925 data-nosnippet>925</a>}
 <a href=#926 id=926 data-nosnippet>926</a>
-<a href=#927 id=927 data-nosnippet>927</a><span class="kw">fn </span>display_framebuffer_candidate(
-<a href=#928 id=928 data-nosnippet>928</a>    owner: CellId,
-<a href=#929 id=929 data-nosnippet>929</a>    base: usize,
-<a href=#930 id=930 data-nosnippet>930</a>    size: usize,
-<a href=#931 id=931 data-nosnippet>931</a>    width: u16,
-<a href=#932 id=932 data-nosnippet>932</a>    height: u16,
-<a href=#933 id=933 data-nosnippet>933</a>    pitch: usize,
-<a href=#934 id=934 data-nosnippet>934</a>) -&gt; DisplayFramebuffer {
-<a href=#935 id=935 data-nosnippet>935</a>    DisplayFramebuffer {
-<a href=#936 id=936 data-nosnippet>936</a>        owner,
-<a href=#937 id=937 data-nosnippet>937</a>        base,
-<a href=#938 id=938 data-nosnippet>938</a>        size,
-<a href=#939 id=939 data-nosnippet>939</a>        width,
-<a href=#940 id=940 data-nosnippet>940</a>        height,
-<a href=#941 id=941 data-nosnippet>941</a>        pitch,
-<a href=#942 id=942 data-nosnippet>942</a>    }
-<a href=#943 id=943 data-nosnippet>943</a>}
-<a href=#944 id=944 data-nosnippet>944</a>
-<a href=#945 id=945 data-nosnippet>945</a><span class="doccomment">/// Reserve one framebuffer mapping before page-table mutation.
-<a href=#946 id=946 data-nosnippet>946</a>///
-<a href=#947 id=947 data-nosnippet>947</a>/// A reservation serializes preflight/map/activation. Only an identical Active
-<a href=#948 id=948 data-nosnippet>948</a>/// replay is accepted; a pending or different active request fails closed.
-<a href=#949 id=949 data-nosnippet>949</a></span><span class="kw">pub fn </span>reserve_display_framebuffer(
-<a href=#950 id=950 data-nosnippet>950</a>    owner: CellId,
-<a href=#951 id=951 data-nosnippet>951</a>    base: usize,
-<a href=#952 id=952 data-nosnippet>952</a>    size: usize,
-<a href=#953 id=953 data-nosnippet>953</a>    width: u16,
-<a href=#954 id=954 data-nosnippet>954</a>    height: u16,
-<a href=#955 id=955 data-nosnippet>955</a>    pitch: usize,
-<a href=#956 id=956 data-nosnippet>956</a>) -&gt; <span class="prelude-ty">Result</span>&lt;DisplayFramebufferReservation, DisplayFramebufferReservationError&gt; {
-<a href=#957 id=957 data-nosnippet>957</a>    <span class="kw">let </span>candidate = display_framebuffer_candidate(owner, base, size, width, height, pitch);
-<a href=#958 id=958 data-nosnippet>958</a>    <span class="kw">let </span><span class="kw-2">mut </span>framebuffer = DISPLAY_FRAMEBUFFER.lock();
-<a href=#959 id=959 data-nosnippet>959</a>    <span class="kw">match </span><span class="kw-2">*</span>framebuffer {
-<a href=#960 id=960 data-nosnippet>960</a>        DisplayFramebufferState::Empty =&gt; {
-<a href=#961 id=961 data-nosnippet>961</a>            <span class="kw-2">*</span>framebuffer = DisplayFramebufferState::Pending(candidate);
-<a href=#962 id=962 data-nosnippet>962</a>            <span class="prelude-val">Ok</span>(DisplayFramebufferReservation::Reserved)
-<a href=#963 id=963 data-nosnippet>963</a>        }
-<a href=#964 id=964 data-nosnippet>964</a>        DisplayFramebufferState::Active(existing) <span class="kw">if </span>existing == candidate =&gt; {
-<a href=#965 id=965 data-nosnippet>965</a>            <span class="prelude-val">Ok</span>(DisplayFramebufferReservation::ActiveReplay)
-<a href=#966 id=966 data-nosnippet>966</a>        }
-<a href=#967 id=967 data-nosnippet>967</a>        DisplayFramebufferState::Pending(<span class="kw">_</span>) | DisplayFramebufferState::Active(<span class="kw">_</span>) =&gt; {
-<a href=#968 id=968 data-nosnippet>968</a>            <span class="prelude-val">Err</span>(DisplayFramebufferReservationError::Conflict)
-<a href=#969 id=969 data-nosnippet>969</a>        }
-<a href=#970 id=970 data-nosnippet>970</a>    }
-<a href=#971 id=971 data-nosnippet>971</a>}
-<a href=#972 id=972 data-nosnippet>972</a>
-<a href=#973 id=973 data-nosnippet>973</a><span class="doccomment">/// Commit a previously reserved mapping after every page was installed.
-<a href=#974 id=974 data-nosnippet>974</a></span><span class="kw">pub fn </span>activate_display_framebuffer(
-<a href=#975 id=975 data-nosnippet>975</a>    owner: CellId,
-<a href=#976 id=976 data-nosnippet>976</a>    base: usize,
-<a href=#977 id=977 data-nosnippet>977</a>    size: usize,
-<a href=#978 id=978 data-nosnippet>978</a>    width: u16,
-<a href=#979 id=979 data-nosnippet>979</a>    height: u16,
-<a href=#980 id=980 data-nosnippet>980</a>    pitch: usize,
-<a href=#981 id=981 data-nosnippet>981</a>) -&gt; bool {
-<a href=#982 id=982 data-nosnippet>982</a>    <span class="kw">let </span>candidate = display_framebuffer_candidate(owner, base, size, width, height, pitch);
-<a href=#983 id=983 data-nosnippet>983</a>    <span class="kw">let </span><span class="kw-2">mut </span>framebuffer = DISPLAY_FRAMEBUFFER.lock();
-<a href=#984 id=984 data-nosnippet>984</a>    <span class="kw">if </span><span class="kw-2">*</span>framebuffer == DisplayFramebufferState::Pending(candidate) {
-<a href=#985 id=985 data-nosnippet>985</a>        <span class="kw-2">*</span>framebuffer = DisplayFramebufferState::Active(candidate);
-<a href=#986 id=986 data-nosnippet>986</a>        <span class="bool-val">true
-<a href=#987 id=987 data-nosnippet>987</a>    </span>} <span class="kw">else </span>{
-<a href=#988 id=988 data-nosnippet>988</a>        <span class="bool-val">false
-<a href=#989 id=989 data-nosnippet>989</a>    </span>}
-<a href=#990 id=990 data-nosnippet>990</a>}
-<a href=#991 id=991 data-nosnippet>991</a>
-<a href=#992 id=992 data-nosnippet>992</a><span class="doccomment">/// Cancel a reservation when preflight or mapping fails before activation.
-<a href=#993 id=993 data-nosnippet>993</a></span><span class="kw">pub fn </span>cancel_display_framebuffer(
-<a href=#994 id=994 data-nosnippet>994</a>    owner: CellId,
-<a href=#995 id=995 data-nosnippet>995</a>    base: usize,
-<a href=#996 id=996 data-nosnippet>996</a>    size: usize,
-<a href=#997 id=997 data-nosnippet>997</a>    width: u16,
-<a href=#998 id=998 data-nosnippet>998</a>    height: u16,
-<a href=#999 id=999 data-nosnippet>999</a>    pitch: usize,
-<a href=#1000 id=1000 data-nosnippet>1000</a>) {
-<a href=#1001 id=1001 data-nosnippet>1001</a>    <span class="kw">let </span>candidate = display_framebuffer_candidate(owner, base, size, width, height, pitch);
-<a href=#1002 id=1002 data-nosnippet>1002</a>    <span class="kw">let </span><span class="kw-2">mut </span>framebuffer = DISPLAY_FRAMEBUFFER.lock();
-<a href=#1003 id=1003 data-nosnippet>1003</a>    <span class="kw">if </span><span class="kw-2">*</span>framebuffer == DisplayFramebufferState::Pending(candidate) {
-<a href=#1004 id=1004 data-nosnippet>1004</a>        <span class="kw-2">*</span>framebuffer = DisplayFramebufferState::Empty;
-<a href=#1005 id=1005 data-nosnippet>1005</a>    }
-<a href=#1006 id=1006 data-nosnippet>1006</a>}
-<a href=#1007 id=1007 data-nosnippet>1007</a>
-<a href=#1008 id=1008 data-nosnippet>1008</a><span class="doccomment">/// Return the active firmware scanout geometry, if registered.
-<a href=#1009 id=1009 data-nosnippet>1009</a></span><span class="kw">pub fn </span>display_framebuffer_resolution() -&gt; <span class="prelude-ty">Option</span>&lt;(u16, u16)&gt; {
-<a href=#1010 id=1010 data-nosnippet>1010</a>    <span class="kw">match </span><span class="kw-2">*</span>DISPLAY_FRAMEBUFFER.lock() {
-<a href=#1011 id=1011 data-nosnippet>1011</a>        DisplayFramebufferState::Active(framebuffer) =&gt; {
-<a href=#1012 id=1012 data-nosnippet>1012</a>            <span class="prelude-val">Some</span>((framebuffer.width, framebuffer.height))
-<a href=#1013 id=1013 data-nosnippet>1013</a>        }
-<a href=#1014 id=1014 data-nosnippet>1014</a>        DisplayFramebufferState::Empty | DisplayFramebufferState::Pending(<span class="kw">_</span>) =&gt; <span class="prelude-val">None</span>,
-<a href=#1015 id=1015 data-nosnippet>1015</a>    }
-<a href=#1016 id=1016 data-nosnippet>1016</a>}
-<a href=#1017 id=1017 data-nosnippet>1017</a>
-<a href=#1018 id=1018 data-nosnippet>1018</a><span class="doccomment">/// Return the active firmware scanout geometry and base, if registered.
-<a href=#1019 id=1019 data-nosnippet>1019</a></span><span class="kw">pub fn </span>display_framebuffer_info() -&gt; <span class="prelude-ty">Option</span>&lt;(usize, usize, u16, u16, usize)&gt; {
-<a href=#1020 id=1020 data-nosnippet>1020</a>    <span class="kw">match </span><span class="kw-2">*</span>DISPLAY_FRAMEBUFFER.lock() {
-<a href=#1021 id=1021 data-nosnippet>1021</a>        DisplayFramebufferState::Active(framebuffer) =&gt; <span class="prelude-val">Some</span>((
-<a href=#1022 id=1022 data-nosnippet>1022</a>            framebuffer.base,
-<a href=#1023 id=1023 data-nosnippet>1023</a>            framebuffer.size,
-<a href=#1024 id=1024 data-nosnippet>1024</a>            framebuffer.width,
-<a href=#1025 id=1025 data-nosnippet>1025</a>            framebuffer.height,
-<a href=#1026 id=1026 data-nosnippet>1026</a>            framebuffer.pitch,
-<a href=#1027 id=1027 data-nosnippet>1027</a>        )),
+<a href=#927 id=927 data-nosnippet>927</a><span class="doccomment">/// Outcome of atomically reserving one framebuffer mapping transaction.
+<a href=#928 id=928 data-nosnippet>928</a></span><span class="attr">#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+<a href=#929 id=929 data-nosnippet>929</a></span><span class="kw">pub enum </span>DisplayFramebufferReservation {
+<a href=#930 id=930 data-nosnippet>930</a>    Reserved,
+<a href=#931 id=931 data-nosnippet>931</a>    ActiveReplay,
+<a href=#932 id=932 data-nosnippet>932</a>}
+<a href=#933 id=933 data-nosnippet>933</a>
+<a href=#934 id=934 data-nosnippet>934</a><span class="doccomment">/// Why a framebuffer reservation could not be established.
+<a href=#935 id=935 data-nosnippet>935</a></span><span class="attr">#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+<a href=#936 id=936 data-nosnippet>936</a></span><span class="kw">pub enum </span>DisplayFramebufferReservationError {
+<a href=#937 id=937 data-nosnippet>937</a>    <span class="doccomment">/// Another pending or active framebuffer transaction owns the singleton.
+<a href=#938 id=938 data-nosnippet>938</a>    </span>Conflict,
+<a href=#939 id=939 data-nosnippet>939</a>}
+<a href=#940 id=940 data-nosnippet>940</a>
+<a href=#941 id=941 data-nosnippet>941</a><span class="kw">fn </span>display_framebuffer_candidate(
+<a href=#942 id=942 data-nosnippet>942</a>    owner: CellId,
+<a href=#943 id=943 data-nosnippet>943</a>    base: usize,
+<a href=#944 id=944 data-nosnippet>944</a>    size: usize,
+<a href=#945 id=945 data-nosnippet>945</a>    width: u16,
+<a href=#946 id=946 data-nosnippet>946</a>    height: u16,
+<a href=#947 id=947 data-nosnippet>947</a>    pitch: usize,
+<a href=#948 id=948 data-nosnippet>948</a>) -&gt; DisplayFramebuffer {
+<a href=#949 id=949 data-nosnippet>949</a>    DisplayFramebuffer {
+<a href=#950 id=950 data-nosnippet>950</a>        owner,
+<a href=#951 id=951 data-nosnippet>951</a>        base,
+<a href=#952 id=952 data-nosnippet>952</a>        size,
+<a href=#953 id=953 data-nosnippet>953</a>        width,
+<a href=#954 id=954 data-nosnippet>954</a>        height,
+<a href=#955 id=955 data-nosnippet>955</a>        pitch,
+<a href=#956 id=956 data-nosnippet>956</a>    }
+<a href=#957 id=957 data-nosnippet>957</a>}
+<a href=#958 id=958 data-nosnippet>958</a>
+<a href=#959 id=959 data-nosnippet>959</a><span class="doccomment">/// Reserve one framebuffer mapping before page-table mutation.
+<a href=#960 id=960 data-nosnippet>960</a>///
+<a href=#961 id=961 data-nosnippet>961</a>/// A reservation serializes preflight/map/activation. Only an identical Active
+<a href=#962 id=962 data-nosnippet>962</a>/// replay is accepted; a pending or different active request fails closed.
+<a href=#963 id=963 data-nosnippet>963</a></span><span class="kw">pub fn </span>reserve_display_framebuffer(
+<a href=#964 id=964 data-nosnippet>964</a>    owner: CellId,
+<a href=#965 id=965 data-nosnippet>965</a>    base: usize,
+<a href=#966 id=966 data-nosnippet>966</a>    size: usize,
+<a href=#967 id=967 data-nosnippet>967</a>    width: u16,
+<a href=#968 id=968 data-nosnippet>968</a>    height: u16,
+<a href=#969 id=969 data-nosnippet>969</a>    pitch: usize,
+<a href=#970 id=970 data-nosnippet>970</a>) -&gt; <span class="prelude-ty">Result</span>&lt;DisplayFramebufferReservation, DisplayFramebufferReservationError&gt; {
+<a href=#971 id=971 data-nosnippet>971</a>    <span class="kw">let </span>candidate = display_framebuffer_candidate(owner, base, size, width, height, pitch);
+<a href=#972 id=972 data-nosnippet>972</a>    <span class="kw">let </span><span class="kw-2">mut </span>framebuffer = DISPLAY_FRAMEBUFFER.lock();
+<a href=#973 id=973 data-nosnippet>973</a>    <span class="kw">match </span><span class="kw-2">*</span>framebuffer {
+<a href=#974 id=974 data-nosnippet>974</a>        DisplayFramebufferState::Empty =&gt; {
+<a href=#975 id=975 data-nosnippet>975</a>            <span class="kw-2">*</span>framebuffer = DisplayFramebufferState::Pending(candidate);
+<a href=#976 id=976 data-nosnippet>976</a>            <span class="prelude-val">Ok</span>(DisplayFramebufferReservation::Reserved)
+<a href=#977 id=977 data-nosnippet>977</a>        }
+<a href=#978 id=978 data-nosnippet>978</a>        DisplayFramebufferState::Active(existing) <span class="kw">if </span>existing == candidate =&gt; {
+<a href=#979 id=979 data-nosnippet>979</a>            <span class="prelude-val">Ok</span>(DisplayFramebufferReservation::ActiveReplay)
+<a href=#980 id=980 data-nosnippet>980</a>        }
+<a href=#981 id=981 data-nosnippet>981</a>        DisplayFramebufferState::Pending(<span class="kw">_</span>) | DisplayFramebufferState::Active(<span class="kw">_</span>) =&gt; {
+<a href=#982 id=982 data-nosnippet>982</a>            <span class="prelude-val">Err</span>(DisplayFramebufferReservationError::Conflict)
+<a href=#983 id=983 data-nosnippet>983</a>        }
+<a href=#984 id=984 data-nosnippet>984</a>    }
+<a href=#985 id=985 data-nosnippet>985</a>}
+<a href=#986 id=986 data-nosnippet>986</a>
+<a href=#987 id=987 data-nosnippet>987</a><span class="doccomment">/// Commit a previously reserved mapping after every page was installed.
+<a href=#988 id=988 data-nosnippet>988</a></span><span class="kw">pub fn </span>activate_display_framebuffer(
+<a href=#989 id=989 data-nosnippet>989</a>    owner: CellId,
+<a href=#990 id=990 data-nosnippet>990</a>    base: usize,
+<a href=#991 id=991 data-nosnippet>991</a>    size: usize,
+<a href=#992 id=992 data-nosnippet>992</a>    width: u16,
+<a href=#993 id=993 data-nosnippet>993</a>    height: u16,
+<a href=#994 id=994 data-nosnippet>994</a>    pitch: usize,
+<a href=#995 id=995 data-nosnippet>995</a>) -&gt; bool {
+<a href=#996 id=996 data-nosnippet>996</a>    <span class="kw">let </span>candidate = display_framebuffer_candidate(owner, base, size, width, height, pitch);
+<a href=#997 id=997 data-nosnippet>997</a>    <span class="kw">let </span><span class="kw-2">mut </span>framebuffer = DISPLAY_FRAMEBUFFER.lock();
+<a href=#998 id=998 data-nosnippet>998</a>    <span class="kw">if </span><span class="kw-2">*</span>framebuffer == DisplayFramebufferState::Pending(candidate) {
+<a href=#999 id=999 data-nosnippet>999</a>        <span class="kw-2">*</span>framebuffer = DisplayFramebufferState::Active(candidate);
+<a href=#1000 id=1000 data-nosnippet>1000</a>        <span class="bool-val">true
+<a href=#1001 id=1001 data-nosnippet>1001</a>    </span>} <span class="kw">else </span>{
+<a href=#1002 id=1002 data-nosnippet>1002</a>        <span class="bool-val">false
+<a href=#1003 id=1003 data-nosnippet>1003</a>    </span>}
+<a href=#1004 id=1004 data-nosnippet>1004</a>}
+<a href=#1005 id=1005 data-nosnippet>1005</a>
+<a href=#1006 id=1006 data-nosnippet>1006</a><span class="doccomment">/// Cancel a reservation when preflight or mapping fails before activation.
+<a href=#1007 id=1007 data-nosnippet>1007</a></span><span class="kw">pub fn </span>cancel_display_framebuffer(
+<a href=#1008 id=1008 data-nosnippet>1008</a>    owner: CellId,
+<a href=#1009 id=1009 data-nosnippet>1009</a>    base: usize,
+<a href=#1010 id=1010 data-nosnippet>1010</a>    size: usize,
+<a href=#1011 id=1011 data-nosnippet>1011</a>    width: u16,
+<a href=#1012 id=1012 data-nosnippet>1012</a>    height: u16,
+<a href=#1013 id=1013 data-nosnippet>1013</a>    pitch: usize,
+<a href=#1014 id=1014 data-nosnippet>1014</a>) {
+<a href=#1015 id=1015 data-nosnippet>1015</a>    <span class="kw">let </span>candidate = display_framebuffer_candidate(owner, base, size, width, height, pitch);
+<a href=#1016 id=1016 data-nosnippet>1016</a>    <span class="kw">let </span><span class="kw-2">mut </span>framebuffer = DISPLAY_FRAMEBUFFER.lock();
+<a href=#1017 id=1017 data-nosnippet>1017</a>    <span class="kw">if </span><span class="kw-2">*</span>framebuffer == DisplayFramebufferState::Pending(candidate) {
+<a href=#1018 id=1018 data-nosnippet>1018</a>        <span class="kw-2">*</span>framebuffer = DisplayFramebufferState::Empty;
+<a href=#1019 id=1019 data-nosnippet>1019</a>    }
+<a href=#1020 id=1020 data-nosnippet>1020</a>}
+<a href=#1021 id=1021 data-nosnippet>1021</a>
+<a href=#1022 id=1022 data-nosnippet>1022</a><span class="doccomment">/// Return the active firmware scanout geometry, if registered.
+<a href=#1023 id=1023 data-nosnippet>1023</a></span><span class="kw">pub fn </span>display_framebuffer_resolution() -&gt; <span class="prelude-ty">Option</span>&lt;(u16, u16)&gt; {
+<a href=#1024 id=1024 data-nosnippet>1024</a>    <span class="kw">match </span><span class="kw-2">*</span>DISPLAY_FRAMEBUFFER.lock() {
+<a href=#1025 id=1025 data-nosnippet>1025</a>        DisplayFramebufferState::Active(framebuffer) =&gt; {
+<a href=#1026 id=1026 data-nosnippet>1026</a>            <span class="prelude-val">Some</span>((framebuffer.width, framebuffer.height))
+<a href=#1027 id=1027 data-nosnippet>1027</a>        }
 <a href=#1028 id=1028 data-nosnippet>1028</a>        DisplayFramebufferState::Empty | DisplayFramebufferState::Pending(<span class="kw">_</span>) =&gt; <span class="prelude-val">None</span>,
 <a href=#1029 id=1029 data-nosnippet>1029</a>    }
 <a href=#1030 id=1030 data-nosnippet>1030</a>}
 <a href=#1031 id=1031 data-nosnippet>1031</a>
-<a href=#1032 id=1032 data-nosnippet>1032</a><span class="doccomment">/// Current number of registered regions (diagnostics).
-<a href=#1033 id=1033 data-nosnippet>1033</a></span><span class="kw">pub fn </span>region_count() -&gt; usize {
-<a href=#1034 id=1034 data-nosnippet>1034</a>    REGISTRY.lock().len()
-<a href=#1035 id=1035 data-nosnippet>1035</a>}
-<a href=#1036 id=1036 data-nosnippet>1036</a>
-<a href=#1037 id=1037 data-nosnippet>1037</a><span class="attr">#[cfg(test)]
-<a href=#1038 id=1038 data-nosnippet>1038</a></span><span class="kw">mod </span>display_tests {
-<a href=#1039 id=1039 data-nosnippet>1039</a>    <span class="kw">use </span>super::<span class="kw-2">*</span>;
-<a href=#1040 id=1040 data-nosnippet>1040</a>
-<a href=#1041 id=1041 data-nosnippet>1041</a>    <span class="attr">#[test]
-<a href=#1042 id=1042 data-nosnippet>1042</a>    </span><span class="kw">fn </span>display_registration_is_fail_stop_after_activation() {
-<a href=#1043 id=1043 data-nosnippet>1043</a>        <span class="kw">let </span>owner = CellId(<span class="number">0x7d01</span>);
-<a href=#1044 id=1044 data-nosnippet>1044</a>        <span class="macro">assert_eq!</span>(
-<a href=#1045 id=1045 data-nosnippet>1045</a>            reserve_display_framebuffer(owner, <span class="number">0x3e00_0000</span>, <span class="number">0x1000</span>, <span class="number">800</span>, <span class="number">480</span>, <span class="number">3200</span>,),
-<a href=#1046 id=1046 data-nosnippet>1046</a>            <span class="prelude-val">Ok</span>(DisplayFramebufferReservation::Reserved)
-<a href=#1047 id=1047 data-nosnippet>1047</a>        );
-<a href=#1048 id=1048 data-nosnippet>1048</a>        cancel_display_framebuffer(owner, <span class="number">0x3e00_0000</span>, <span class="number">0x1000</span>, <span class="number">800</span>, <span class="number">480</span>, <span class="number">3200</span>);
-<a href=#1049 id=1049 data-nosnippet>1049</a>        <span class="macro">assert_eq!</span>(display_framebuffer_resolution(), <span class="prelude-val">None</span>);
-<a href=#1050 id=1050 data-nosnippet>1050</a>        <span class="macro">assert_eq!</span>(
-<a href=#1051 id=1051 data-nosnippet>1051</a>            reserve_display_framebuffer(owner, <span class="number">0x3e00_0000</span>, <span class="number">0x1000</span>, <span class="number">800</span>, <span class="number">480</span>, <span class="number">3200</span>,),
-<a href=#1052 id=1052 data-nosnippet>1052</a>            <span class="prelude-val">Ok</span>(DisplayFramebufferReservation::Reserved)
-<a href=#1053 id=1053 data-nosnippet>1053</a>        );
-<a href=#1054 id=1054 data-nosnippet>1054</a>        <span class="macro">assert!</span>(activate_display_framebuffer(
-<a href=#1055 id=1055 data-nosnippet>1055</a>            owner,
-<a href=#1056 id=1056 data-nosnippet>1056</a>            <span class="number">0x3e00_0000</span>,
-<a href=#1057 id=1057 data-nosnippet>1057</a>            <span class="number">0x1000</span>,
-<a href=#1058 id=1058 data-nosnippet>1058</a>            <span class="number">800</span>,
-<a href=#1059 id=1059 data-nosnippet>1059</a>            <span class="number">480</span>,
-<a href=#1060 id=1060 data-nosnippet>1060</a>            <span class="number">3200</span>,
-<a href=#1061 id=1061 data-nosnippet>1061</a>        ));
-<a href=#1062 id=1062 data-nosnippet>1062</a>        <span class="macro">assert_eq!</span>(
-<a href=#1063 id=1063 data-nosnippet>1063</a>            reserve_display_framebuffer(owner, <span class="number">0x3e00_0000</span>, <span class="number">0x1000</span>, <span class="number">800</span>, <span class="number">480</span>, <span class="number">3200</span>,),
-<a href=#1064 id=1064 data-nosnippet>1064</a>            <span class="prelude-val">Ok</span>(DisplayFramebufferReservation::ActiveReplay)
-<a href=#1065 id=1065 data-nosnippet>1065</a>        );
-<a href=#1066 id=1066 data-nosnippet>1066</a>        <span class="macro">assert!</span>(
-<a href=#1067 id=1067 data-nosnippet>1067</a>            reserve_display_framebuffer(CellId(<span class="number">0x7d02</span>), <span class="number">0x3e00_0000</span>, <span class="number">0x1000</span>, <span class="number">800</span>, <span class="number">480</span>, <span class="number">3200</span>,)
-<a href=#1068 id=1068 data-nosnippet>1068</a>                .is_err()
-<a href=#1069 id=1069 data-nosnippet>1069</a>        );
-<a href=#1070 id=1070 data-nosnippet>1070</a>        <span class="macro">assert_eq!</span>(display_framebuffer_resolution(), <span class="prelude-val">Some</span>((<span class="number">800</span>, <span class="number">480</span>)));
-<a href=#1071 id=1071 data-nosnippet>1071</a>        release_mmio_for(owner.<span class="number">0 </span><span class="kw">as </span>usize);
-<a href=#1072 id=1072 data-nosnippet>1072</a>        <span class="macro">assert_eq!</span>(display_framebuffer_resolution(), <span class="prelude-val">Some</span>((<span class="number">800</span>, <span class="number">480</span>)));
-<a href=#1073 id=1073 data-nosnippet>1073</a>    }
-<a href=#1074 id=1074 data-nosnippet>1074</a>}
-<a href=#1075 id=1075 data-nosnippet>1075</a>
-<a href=#1076 id=1076 data-nosnippet>1076</a><span class="attr">#[cfg(feature = <span class="string">"test-hooks"</span>)]
-<a href=#1077 id=1077 data-nosnippet>1077</a>#[path = <span class="string">"resource_registry_selftest.rs"</span>]
-<a href=#1078 id=1078 data-nosnippet>1078</a></span><span class="kw">mod </span>selftest;
-<a href=#1079 id=1079 data-nosnippet>1079</a>
-<a href=#1080 id=1080 data-nosnippet>1080</a><span class="attr">#[cfg(feature = <span class="string">"test-hooks"</span>)]
-<a href=#1081 id=1081 data-nosnippet>1081</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>pcie_bar_window_self_test() -&gt; bool {
-<a href=#1082 id=1082 data-nosnippet>1082</a>    selftest::run()
-<a href=#1083 id=1083 data-nosnippet>1083</a>}
-<a href=#1084 id=1084 data-nosnippet>1084</a>
-<a href=#1085 id=1085 data-nosnippet>1085</a><span class="attr">#[cfg(any(target_arch = <span class="string">"aarch64"</span>, target_arch = <span class="string">"riscv64"</span>, test))]
-<a href=#1086 id=1086 data-nosnippet>1086</a>#[path = <span class="string">"resource_registry_mediation.rs"</span>]
-<a href=#1087 id=1087 data-nosnippet>1087</a></span><span class="kw">mod </span>mediation;
-<a href=#1088 id=1088 data-nosnippet>1088</a><span class="attr">#[cfg(any(target_arch = <span class="string">"aarch64"</span>, target_arch = <span class="string">"riscv64"</span>))]
-<a href=#1089 id=1089 data-nosnippet>1089</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">use </span>mediation::user_pages;
-<a href=#1090 id=1090 data-nosnippet>1090</a>
-<a href=#1091 id=1091 data-nosnippet>1091</a><span class="attr">#[cfg(test)]
-<a href=#1092 id=1092 data-nosnippet>1092</a>#[path = <span class="string">"resource_registry_tests.rs"</span>]
-<a href=#1093 id=1093 data-nosnippet>1093</a></span><span class="kw">mod </span>tests;
+<a href=#1032 id=1032 data-nosnippet>1032</a><span class="doccomment">/// Return the active firmware scanout geometry and base, if registered.
+<a href=#1033 id=1033 data-nosnippet>1033</a></span><span class="kw">pub fn </span>display_framebuffer_info() -&gt; <span class="prelude-ty">Option</span>&lt;(usize, usize, u16, u16, usize)&gt; {
+<a href=#1034 id=1034 data-nosnippet>1034</a>    <span class="kw">match </span><span class="kw-2">*</span>DISPLAY_FRAMEBUFFER.lock() {
+<a href=#1035 id=1035 data-nosnippet>1035</a>        DisplayFramebufferState::Active(framebuffer) =&gt; <span class="prelude-val">Some</span>((
+<a href=#1036 id=1036 data-nosnippet>1036</a>            framebuffer.base,
+<a href=#1037 id=1037 data-nosnippet>1037</a>            framebuffer.size,
+<a href=#1038 id=1038 data-nosnippet>1038</a>            framebuffer.width,
+<a href=#1039 id=1039 data-nosnippet>1039</a>            framebuffer.height,
+<a href=#1040 id=1040 data-nosnippet>1040</a>            framebuffer.pitch,
+<a href=#1041 id=1041 data-nosnippet>1041</a>        )),
+<a href=#1042 id=1042 data-nosnippet>1042</a>        DisplayFramebufferState::Empty | DisplayFramebufferState::Pending(<span class="kw">_</span>) =&gt; <span class="prelude-val">None</span>,
+<a href=#1043 id=1043 data-nosnippet>1043</a>    }
+<a href=#1044 id=1044 data-nosnippet>1044</a>}
+<a href=#1045 id=1045 data-nosnippet>1045</a>
+<a href=#1046 id=1046 data-nosnippet>1046</a><span class="doccomment">/// Current number of registered regions (diagnostics).
+<a href=#1047 id=1047 data-nosnippet>1047</a></span><span class="kw">pub fn </span>region_count() -&gt; usize {
+<a href=#1048 id=1048 data-nosnippet>1048</a>    REGISTRY.lock().len()
+<a href=#1049 id=1049 data-nosnippet>1049</a>}
+<a href=#1050 id=1050 data-nosnippet>1050</a>
+<a href=#1051 id=1051 data-nosnippet>1051</a><span class="attr">#[cfg(test)]
+<a href=#1052 id=1052 data-nosnippet>1052</a></span><span class="kw">mod </span>display_tests {
+<a href=#1053 id=1053 data-nosnippet>1053</a>    <span class="kw">use </span>super::<span class="kw-2">*</span>;
+<a href=#1054 id=1054 data-nosnippet>1054</a>
+<a href=#1055 id=1055 data-nosnippet>1055</a>    <span class="attr">#[test]
+<a href=#1056 id=1056 data-nosnippet>1056</a>    </span><span class="kw">fn </span>display_registration_is_fail_stop_after_activation() {
+<a href=#1057 id=1057 data-nosnippet>1057</a>        <span class="kw">let </span>owner = CellId(<span class="number">0x7d01</span>);
+<a href=#1058 id=1058 data-nosnippet>1058</a>        <span class="macro">assert_eq!</span>(
+<a href=#1059 id=1059 data-nosnippet>1059</a>            reserve_display_framebuffer(owner, <span class="number">0x3e00_0000</span>, <span class="number">0x1000</span>, <span class="number">800</span>, <span class="number">480</span>, <span class="number">3200</span>,),
+<a href=#1060 id=1060 data-nosnippet>1060</a>            <span class="prelude-val">Ok</span>(DisplayFramebufferReservation::Reserved)
+<a href=#1061 id=1061 data-nosnippet>1061</a>        );
+<a href=#1062 id=1062 data-nosnippet>1062</a>        cancel_display_framebuffer(owner, <span class="number">0x3e00_0000</span>, <span class="number">0x1000</span>, <span class="number">800</span>, <span class="number">480</span>, <span class="number">3200</span>);
+<a href=#1063 id=1063 data-nosnippet>1063</a>        <span class="macro">assert_eq!</span>(display_framebuffer_resolution(), <span class="prelude-val">None</span>);
+<a href=#1064 id=1064 data-nosnippet>1064</a>        <span class="macro">assert_eq!</span>(
+<a href=#1065 id=1065 data-nosnippet>1065</a>            reserve_display_framebuffer(owner, <span class="number">0x3e00_0000</span>, <span class="number">0x1000</span>, <span class="number">800</span>, <span class="number">480</span>, <span class="number">3200</span>,),
+<a href=#1066 id=1066 data-nosnippet>1066</a>            <span class="prelude-val">Ok</span>(DisplayFramebufferReservation::Reserved)
+<a href=#1067 id=1067 data-nosnippet>1067</a>        );
+<a href=#1068 id=1068 data-nosnippet>1068</a>        <span class="macro">assert!</span>(activate_display_framebuffer(
+<a href=#1069 id=1069 data-nosnippet>1069</a>            owner,
+<a href=#1070 id=1070 data-nosnippet>1070</a>            <span class="number">0x3e00_0000</span>,
+<a href=#1071 id=1071 data-nosnippet>1071</a>            <span class="number">0x1000</span>,
+<a href=#1072 id=1072 data-nosnippet>1072</a>            <span class="number">800</span>,
+<a href=#1073 id=1073 data-nosnippet>1073</a>            <span class="number">480</span>,
+<a href=#1074 id=1074 data-nosnippet>1074</a>            <span class="number">3200</span>,
+<a href=#1075 id=1075 data-nosnippet>1075</a>        ));
+<a href=#1076 id=1076 data-nosnippet>1076</a>        <span class="macro">assert_eq!</span>(
+<a href=#1077 id=1077 data-nosnippet>1077</a>            reserve_display_framebuffer(owner, <span class="number">0x3e00_0000</span>, <span class="number">0x1000</span>, <span class="number">800</span>, <span class="number">480</span>, <span class="number">3200</span>,),
+<a href=#1078 id=1078 data-nosnippet>1078</a>            <span class="prelude-val">Ok</span>(DisplayFramebufferReservation::ActiveReplay)
+<a href=#1079 id=1079 data-nosnippet>1079</a>        );
+<a href=#1080 id=1080 data-nosnippet>1080</a>        <span class="macro">assert!</span>(
+<a href=#1081 id=1081 data-nosnippet>1081</a>            reserve_display_framebuffer(CellId(<span class="number">0x7d02</span>), <span class="number">0x3e00_0000</span>, <span class="number">0x1000</span>, <span class="number">800</span>, <span class="number">480</span>, <span class="number">3200</span>,)
+<a href=#1082 id=1082 data-nosnippet>1082</a>                .is_err()
+<a href=#1083 id=1083 data-nosnippet>1083</a>        );
+<a href=#1084 id=1084 data-nosnippet>1084</a>        <span class="macro">assert_eq!</span>(display_framebuffer_resolution(), <span class="prelude-val">Some</span>((<span class="number">800</span>, <span class="number">480</span>)));
+<a href=#1085 id=1085 data-nosnippet>1085</a>        release_mmio_for(owner.<span class="number">0 </span><span class="kw">as </span>usize);
+<a href=#1086 id=1086 data-nosnippet>1086</a>        <span class="macro">assert_eq!</span>(display_framebuffer_resolution(), <span class="prelude-val">Some</span>((<span class="number">800</span>, <span class="number">480</span>)));
+<a href=#1087 id=1087 data-nosnippet>1087</a>    }
+<a href=#1088 id=1088 data-nosnippet>1088</a>}
+<a href=#1089 id=1089 data-nosnippet>1089</a>
+<a href=#1090 id=1090 data-nosnippet>1090</a><span class="attr">#[cfg(feature = <span class="string">"test-hooks"</span>)]
+<a href=#1091 id=1091 data-nosnippet>1091</a>#[path = <span class="string">"resource_registry_selftest.rs"</span>]
+<a href=#1092 id=1092 data-nosnippet>1092</a></span><span class="kw">mod </span>selftest;
+<a href=#1093 id=1093 data-nosnippet>1093</a>
+<a href=#1094 id=1094 data-nosnippet>1094</a><span class="attr">#[cfg(feature = <span class="string">"test-hooks"</span>)]
+<a href=#1095 id=1095 data-nosnippet>1095</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>pcie_bar_window_self_test() -&gt; bool {
+<a href=#1096 id=1096 data-nosnippet>1096</a>    selftest::run()
+<a href=#1097 id=1097 data-nosnippet>1097</a>}
+<a href=#1098 id=1098 data-nosnippet>1098</a>
+<a href=#1099 id=1099 data-nosnippet>1099</a><span class="attr">#[cfg(any(target_arch = <span class="string">"aarch64"</span>, target_arch = <span class="string">"riscv64"</span>, test))]
+<a href=#1100 id=1100 data-nosnippet>1100</a>#[path = <span class="string">"resource_registry_mediation.rs"</span>]
+<a href=#1101 id=1101 data-nosnippet>1101</a></span><span class="kw">mod </span>mediation;
+<a href=#1102 id=1102 data-nosnippet>1102</a><span class="attr">#[cfg(any(target_arch = <span class="string">"aarch64"</span>, target_arch = <span class="string">"riscv64"</span>))]
+<a href=#1103 id=1103 data-nosnippet>1103</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">use </span>mediation::user_pages;
+<a href=#1104 id=1104 data-nosnippet>1104</a>
+<a href=#1105 id=1105 data-nosnippet>1105</a><span class="attr">#[cfg(test)]
+<a href=#1106 id=1106 data-nosnippet>1106</a>#[path = <span class="string">"resource_registry_tests.rs"</span>]
+<a href=#1107 id=1107 data-nosnippet>1107</a></span><span class="kw">mod </span>tests;
 </code></pre></div></section></main></body></html>
