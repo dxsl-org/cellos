@@ -433,3 +433,56 @@ fn tree_walker_filters_text_and_native_font_readiness_and_media_changes_are_real
         "true|true|true"
     );
 }
+
+std::thread_local! {
+    /// Fake scheduler clock: `(now, step per read, reads)`. Frozen (step 0) unless a
+    /// test advances it, so the other tests never meet the tick deadline.
+    static TICKS: core::cell::Cell<(u64, u64, u64)> = const { core::cell::Cell::new((1_000, 0, 0)) };
+}
+
+pub(super) fn fake_ticks() -> Option<u64> {
+    TICKS.with(|ticks| {
+        let (now, step, reads) = ticks.get();
+        ticks.set((now + step, step, reads + 1));
+        Some(now)
+    })
+}
+
+/// 13 S-6: an endless script is interrupted by the tick deadline, long before the
+/// poll budget (~10^9 operations) would stop it, and the context stays usable.
+/// The fake clock advances one tick per read and the budget reads it once per
+/// interrupt poll, so the read count is the number of polls the loop consumed.
+#[test]
+fn endless_script_is_interrupted_at_the_tick_deadline() {
+    let (mut c, _, _, _, _) = fixture();
+    TICKS.with(|ticks| ticks.set((1_000, 1, 0)));
+    let error = c
+        .eval("for(;;){}")
+        .expect_err("an endless loop must be interrupted");
+    let (_, _, reads) = TICKS.with(|ticks| ticks.replace((1_000, 0, 0)));
+    assert!(error.message.contains("interrupted"), "{}", error.message);
+    // The deadline was reached, and well before the poll budget ran out (the
+    // slack covers the short queue evaluations that follow the script).
+    assert!(
+        (MAX_EVAL_TICKS..=MAX_EVAL_TICKS + 32).contains(&reads),
+        "interrupt was not driven by the tick deadline ({reads} clock reads)"
+    );
+    assert_eq!(c.eval("6*7").unwrap(), "42");
+}
+
+#[test]
+fn budget_expires_on_either_limit() {
+    let mut by_polls = Budget {
+        polls: 2,
+        deadline: None,
+    };
+    assert!(!by_polls.expired());
+    assert!(!by_polls.expired());
+    assert!(by_polls.expired());
+
+    let mut by_time = Budget {
+        polls: MAX_INTERRUPT_POLLS,
+        deadline: fake_ticks(),
+    };
+    assert!(by_time.expired(), "a deadline already reached expires");
+}

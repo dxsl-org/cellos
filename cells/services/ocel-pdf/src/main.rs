@@ -7,7 +7,9 @@ extern crate ostd;
 extern crate posix_shim;
 
 use alloc::{string::String, vec::Vec};
-use ocel_pdf_proto::{DocumentOwner, Request, Response, IPC_BYTES, MAX_DOCUMENT_BYTES};
+use ocel_pdf_proto::{
+    openable_path, DocumentOwner, Request, Response, IPC_BYTES, MAX_DOCUMENT_BYTES,
+};
 use ostd::syscall::{sys_recv, sys_yield, SyscallResult};
 
 mod engine;
@@ -40,8 +42,10 @@ struct OwnedDocument {
 }
 
 fn read_document(path: &str) -> Result<Vec<u8>, String> {
-    if path.is_empty() || path.len() > 512 || path.as_bytes().contains(&0) {
-        return Err(String::from("Invalid PDF file path"));
+    if !openable_path(path) {
+        return Err(String::from(
+            "PDF path refused: only .pdf files under /data, /tmp, /mnt/sd or /mnt/disk",
+        ));
     }
     let mut file = ostd::fs::File::open(path).map_err(|_| String::from("Cannot open PDF file"))?;
     let mut bytes = Vec::new();

@@ -30,6 +30,8 @@ pub(crate) fn response(status: u16, content_type: &str, body: &[u8], json: bool)
         200 => "OK",
         204 => "No Content",
         400 => "Bad Request",
+        401 => "Unauthorized",
+        403 => "Forbidden",
         408 => "Request Timeout",
         413 => "Payload Too Large",
         404 => "Not Found",
@@ -102,7 +104,7 @@ pub(crate) fn index() -> Response {
     <li><a href="/api/cells">&#9658; REST API: /api/cells (Active Services)</a></li>
     <li><a href="/api/cluster">&#9658; REST API: /api/cluster (C2C Cluster Status)</a></li>
     <li><a href="/api/gateway/stats">&#9658; REST API: /api/gateway/stats (Async Gateway Engine)</a></li>
-    <li><a href="/api/files?path=/tmp">&#9658; REST API: /api/files?path=/tmp (VFS Browser)</a></li>
+    <li><a href="/api/files?path=/">&#9658; REST API: /api/files?path=/ (Web Root Listing)</a></li>
     <li><a href="/files/readme.txt">&#9658; Static File: /files/readme.txt</a></li>
 </div>
 </body></html>"#,
@@ -224,26 +226,23 @@ pub(crate) fn api_gateway_stats(active: usize, peak: usize, refused: usize) -> R
     json(200, &text)
 }
 
-pub(crate) fn api_c2c_dispatch(body: &[u8]) -> Response {
-    if body.is_empty() {
-        return json(400, r#"{"error":"empty request payload"}"#);
-    }
-    let text = format!(
-        r#"{{"dispatch":"acknowledged","envelope":"C2C-112B","status":"routed","payload_len":{}}}"#,
-        body.len()
-    );
-    json(200, &text)
-}
-
 pub(crate) fn api_files(path: &str, raw: &[u8]) -> Response {
     let listing = core::str::from_utf8(raw).unwrap_or("");
     let entries: Vec<String> = listing
         .lines()
         .filter(|l| !l.is_empty())
-        .map(|name| format!(r#"{{"name":"{}"}}"#, name))
+        .map(|name| format!(r#"{{"name":"{}"}}"#, json_escape(name)))
         .collect();
-    let text = format!(r#"{{"path":"{}","entries":[{}]}}"#, path, entries.join(","));
+    let text = format!(
+        r#"{{"path":"{}","entries":[{}]}}"#,
+        json_escape(path),
+        entries.join(",")
+    );
     json(200, &text)
+}
+
+pub(crate) fn unauthorized() -> Response {
+    json(401, r#"{"error":"bearer token required"}"#)
 }
 
 #[cfg(target_os = "none")]
@@ -287,7 +286,6 @@ pub(crate) fn infer_failed(error: &str) -> Response {
     )
 }
 
-#[cfg(target_os = "none")]
 /// Escape a string for a JSON string literal.
 fn json_escape(text: &str) -> String {
     let mut out = String::with_capacity(text.len() + 8);
@@ -305,7 +303,16 @@ fn json_escape(text: &str) -> String {
     out
 }
 
-pub(crate) fn api_restart() -> Response {
-    // Restart via init IPC is not yet implemented — preserve the existing accepted response.
-    json(200, r#"{"ok":true,"note":"restart not yet wired to init"}"#)
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn listing_json_survives_quotes_and_backslashes() {
+        let reply = api_files("/www/a\"b", b"plain\nq\"uote\nback\\slash\n");
+        let value: serde_json::Value = serde_json::from_slice(&reply.body).expect("valid JSON");
+        assert_eq!(value["path"], "/www/a\"b");
+        assert_eq!(value["entries"][1]["name"], "q\"uote");
+        assert_eq!(value["entries"][2]["name"], "back\\slash");
+    }
 }

@@ -35,8 +35,8 @@ abi::declare_manifest!(
 );
 abi::declare_syscalls![Log, Recv, Send, SendGather, TryRecv, GetTime];
 
-// Cell heap includes QuickJS's 3 MiB accounted heap, Rust transfer buffers,
-// snapshot source and allocator overhead; the engine's own ceiling stays lower.
+// Cell heap includes QuickJS's 20 MiB accounted heap (`MAX_HEAP_BYTES`), Rust
+// transfer buffers, snapshot source and allocator overhead in the 4 MiB above it.
 #[cfg(all(not(qjs_c_unavailable), target_os = "none"))]
 ostd::declare_custom_heap!(24 * 1024 * 1024);
 

@@ -93,6 +93,10 @@ pub(crate) fn handle_udp_request(
             } else {
                 Some(*port)
             };
+            if port.is_some_and(|port| table.udp_port_held_by_other(sockets, port, owner)) {
+                send_typed(sender, R::Err(NetError::AddrInUse as u8));
+                return true;
+            }
             let ok = match (table.get(cap, owner), port) {
                 (Some(h), Some(port)) => sockets.get_mut::<udp::Socket>(h).bind(port).is_ok(),
                 _ => false,

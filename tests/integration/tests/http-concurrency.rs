@@ -50,14 +50,14 @@ fn incomplete_body_does_not_block_unrelated_request_or_dispatch_inference() {
     );
     qemu.wait_for("Cellos >", 90).expect("shell ready");
     qemu.wait_for("[ai] model ready", 90).expect("AI ready");
-    qemu.send_line("httpd &");
+    qemu.send_line("httpd --api-token http-concurrency-token &");
     qemu.wait_for("httpd: listening on :8080", 20)
         .expect("httpd ready");
 
     let mut slow = TcpStream::connect(("127.0.0.1", port)).expect("slow connect");
     slow.set_read_timeout(Some(Duration::from_millis(200)))
         .expect("slow timeout");
-    slow.write_all(b"POST /api/infer?max_tokens=1 HTTP/1.1\r\nHost: localhost\r\nContent-Length: 100\r\nConnection: close\r\n\r\nx")
+    slow.write_all(b"POST /api/infer?max_tokens=1 HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer http-concurrency-token\r\nContent-Length: 100\r\nConnection: close\r\n\r\nx")
         .expect("partial body");
 
     let started = Instant::now();

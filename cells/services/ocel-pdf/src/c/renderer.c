@@ -10,19 +10,74 @@
 #define ALLOCATION_BYTES (10u * 1024u * 1024u)
 
 /* No asynchronous claim: cancellation of caller IPC cannot interrupt MuPDF.
- * Allocation checkpoints enforce this cooperative deadline. Work between
+ * Cooperative checkpoints enforce the deadline: every allocation, and every
+ * CHECKPOINT_BYTES slice of the document MuPDF reads (so an allocation-free
+ * content stream is checked too). An expired checkpoint sets work_cookie.abort,
+ * which MuPDF's content interpreter polls before each token. Work between
  * checkpoints may finish later; the caller result is then discarded below.
  * A NULL clock is reserved for the hosted native harness. */
 static uint64_t (*runtime_ticks)(void);
 static uint64_t work_started;
 static int work_active;
+static fz_cookie work_cookie;
 void ocel_pdf_set_clock(uint64_t (*clock)(void)) { runtime_ticks = clock; }
-static void begin_work(void) { work_started = runtime_ticks ? runtime_ticks() : 0; work_active = 1; }
+static void begin_work(void)
+{
+    work_started = runtime_ticks ? runtime_ticks() : 0;
+    work_active = 1;
+    memset(&work_cookie, 0, sizeof(work_cookie));
+}
 static int work_expired(void) {
-    return work_active && runtime_ticks &&
+    int expired = work_active && runtime_ticks &&
         (work_started == UINT64_MAX || runtime_ticks() - work_started >= 400);
+    if (expired) work_cookie.abort = 1;
+    return expired;
 }
 static void end_work(void) { work_active = 0; }
+
+/* The document bytes, served in slices so each refill is a deadline checkpoint.
+ * At zlib's maximum ratio a slice inflates to about 1 MiB of content. */
+#define CHECKPOINT_BYTES 1024u
+typedef struct { const unsigned char *data; size_t length; } checkpoint_source;
+static int checkpoint_next(fz_context *ctx, fz_stream *stm, size_t max)
+{
+    checkpoint_source *src = stm->state;
+    (void)ctx;
+    (void)max;
+    /* Past the deadline the data ends here. Not a throw: fz_available would turn
+     * it into a sticky stream error on the shared document stream. work_expired
+     * has set the cookie, and the caller's own checks report FZ_ERROR_LIMIT. */
+    if (work_expired()) return EOF;
+    size_t pos = (size_t)stm->pos;
+    if (pos >= src->length) return EOF;
+    size_t n = src->length - pos;
+    if (n > CHECKPOINT_BYTES) n = CHECKPOINT_BYTES;
+    stm->rp = (unsigned char *)src->data + pos;
+    stm->wp = stm->rp + n;
+    stm->pos += (int64_t)n;
+    return *stm->rp++;
+}
+/* fz_seek hands over an absolute offset (whence 0) or one from the end (2). */
+static void checkpoint_seek(fz_context *ctx, fz_stream *stm, int64_t offset, int whence)
+{
+    checkpoint_source *src = stm->state;
+    (void)ctx;
+    if (whence == 2) offset += (int64_t)src->length;
+    if (offset < 0) offset = 0;
+    if (offset > (int64_t)src->length) offset = (int64_t)src->length;
+    stm->rp = stm->wp = (unsigned char *)src->data + offset;
+    stm->pos = offset;
+}
+static void checkpoint_drop(fz_context *ctx, void *state) { fz_free(ctx, state); }
+static fz_stream *open_checkpointed(fz_context *ctx, const unsigned char *data, size_t length)
+{
+    checkpoint_source *src = fz_malloc_struct(ctx, checkpoint_source);
+    src->data = data;
+    src->length = length;
+    fz_stream *stm = fz_new_stream(ctx, src, checkpoint_next, checkpoint_drop);
+    stm->seek = checkpoint_seek;
+    return stm;
+}
 
 typedef union { size_t size; max_align_t align; } allocation_header;
 /* Include our header, POSIX malloc metadata and worst-case 16-byte rounding. */
@@ -91,7 +146,7 @@ void ocel_pdf_close(cell_pdf *pdf)
     free(pdf);
 }
 
-/* The caller retains bytes until AFTER ocel_pdf_close: fz_open_memory does not
+/* The caller retains bytes until AFTER ocel_pdf_close: the document stream does not
  * copy its input, and pdf_document retains the underlying stream. */
 cell_pdf *ocel_pdf_open(const unsigned char *bytes, size_t length,
     unsigned int *pages, char *error, size_t capacity)
@@ -110,7 +165,7 @@ cell_pdf *ocel_pdf_open(const unsigned char *bytes, size_t length,
     fz_var(stream);
     fz_var(failed);
     fz_try(pdf->ctx) {
-        stream = fz_open_memory(pdf->ctx, bytes, length);
+        stream = open_checkpointed(pdf->ctx, bytes, length);
         pdf->doc = pdf_open_document_with_stream(pdf->ctx, stream);
         if (pdf_needs_password(pdf->ctx, pdf->doc))
             fz_throw(pdf->ctx, FZ_ERROR_ARGUMENT, "PDF requires a password");
@@ -173,7 +228,7 @@ int ocel_pdf_render(cell_pdf *pdf, unsigned int number, unsigned int max_width,
             fz_make_irect(0, 0, (int)pw, (int)ph), NULL, 1);
         fz_clear_pixmap_with_value(pdf->ctx, pixmap, 255);
         device = fz_new_draw_device(pdf->ctx, matrix, pixmap);
-        fz_run_page(pdf->ctx, (fz_page *)page, device, fz_identity, NULL);
+        fz_run_page(pdf->ctx, (fz_page *)page, device, fz_identity, &work_cookie);
         if (work_expired()) fz_throw(pdf->ctx, FZ_ERROR_LIMIT, "PDF work deadline exceeded; result abandoned");
         fz_close_device(pdf->ctx, device);
         fz_drop_device(pdf->ctx, device);

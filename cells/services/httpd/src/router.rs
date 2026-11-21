@@ -1,6 +1,10 @@
 //! Route classification is pure: all network and backend work belongs to the reactor.
 use crate::net_ipc::{request_complete_len, RequestReadError};
 
+/// Bounds for the operator-supplied `--api-token`; shorter tokens are guessable over the LAN.
+pub(crate) const API_TOKEN_MIN: usize = 16;
+pub(crate) const API_TOKEN_MAX: usize = 128;
+
 pub(crate) enum Route<'a> {
     Index,
     Status,
@@ -8,23 +12,25 @@ pub(crate) enum Route<'a> {
     ApiCells,
     ApiCluster,
     ApiGatewayStats,
-    ApiC2cDispatch {
-        body: &'a [u8],
-    },
+    /// The single file the operator named on the command line.
     File(&'a str),
+    /// A client-named file, relative to the web root (always starts with `/`).
+    WebFile(&'a str),
+    /// A client-named directory, relative to the web root (always starts with `/`).
     Files(&'a str),
-    #[cfg(target_os = "none")]
     Infer {
         body: &'a [u8],
         max_tokens: u16,
     },
-    Restart,
+    Unauthorized,
     NotFound,
 }
 
+/// `api_token` is the operator's bearer token; without one, control endpoints do not exist.
 pub(crate) fn classify<'a>(
     raw: &'a [u8],
     file_to_serve: Option<&'a str>,
+    api_token: Option<&str>,
 ) -> Result<Route<'a>, RequestReadError> {
     let len = request_complete_len(raw)?.ok_or(RequestReadError::Incomplete)?;
     if raw.len() < len {
@@ -35,7 +41,6 @@ pub(crate) fn classify<'a>(
     }
     let mut headers = [httparse::EMPTY_HEADER; 16];
     let mut req = httparse::Request::new(&mut headers);
-    #[cfg_attr(not(target_os = "none"), allow(unused_variables))]
     let header_end = match req.parse(&raw[..len]) {
         Ok(httparse::Status::Complete(n)) => n,
         _ => return Err(RequestReadError::BadRequest),
@@ -45,28 +50,59 @@ pub(crate) fn classify<'a>(
     Ok(match (req.method.unwrap_or("GET"), path_only) {
         ("GET", "/") => Route::Index,
         ("GET", "/status") => Route::Status,
-        ("GET", path) if path.starts_with("/files/") => Route::File(&path["/files".len()..]),
+        ("GET", path) if path.starts_with("/files/") => Route::WebFile(&path["/files".len()..]),
         ("GET", "/api/status") | ("GET", "/api/system") => Route::ApiStatus,
         ("GET", "/api/cells") => Route::ApiCells,
         ("GET", "/api/cluster") | ("GET", "/api/cluster/status") => Route::ApiCluster,
         ("GET", "/api/gateway") | ("GET", "/api/gateway/stats") => Route::ApiGatewayStats,
-        ("POST", "/api/c2c/dispatch") => Route::ApiC2cDispatch {
-            body: &raw[header_end..len],
+        ("GET", "/api/files") => match extract_query_param(path, "path").unwrap_or("/") {
+            dir if dir.starts_with('/') => Route::Files(dir),
+            _ => Route::NotFound,
         },
-        ("GET", "/api/files") => Route::Files(extract_query_param(path, "path").unwrap_or("/")),
-        #[cfg(target_os = "none")]
-        ("POST", "/api/infer") => Route::Infer {
-            body: &raw[header_end..len],
-            max_tokens: extract_query_param(path, "max_tokens")
-                .and_then(|value| value.parse::<u16>().ok())
-                .unwrap_or(24)
-                .clamp(1, 64),
+        ("POST", "/api/infer") => match api_token {
+            None => Route::NotFound,
+            Some(token) if !bearer_matches(req.headers, token) => Route::Unauthorized,
+            Some(_) => Route::Infer {
+                body: &raw[header_end..len],
+                max_tokens: extract_query_param(path, "max_tokens")
+                    .and_then(|value| value.parse::<u16>().ok())
+                    .unwrap_or(24)
+                    .clamp(1, 64),
+            },
         },
-        ("POST", path) if path.starts_with("/api/cells/") && path.ends_with("/restart") => {
-            Route::Restart
-        }
         _ => Route::NotFound,
     })
+}
+
+pub(crate) fn valid_api_token(token: &str) -> bool {
+    (API_TOKEN_MIN..=API_TOKEN_MAX).contains(&token.len())
+        && token.bytes().all(|b| b.is_ascii_graphic())
+}
+
+/// Constant-time in the token bytes so response timing does not leak a matching prefix.
+fn bearer_matches(headers: &[httparse::Header<'_>], token: &str) -> bool {
+    let Some(value) = headers
+        .iter()
+        .find(|h| h.name.eq_ignore_ascii_case("authorization"))
+        .map(|h| h.value)
+    else {
+        return false;
+    };
+    let Some(presented) = value
+        .get(..7)
+        .filter(|scheme| scheme.eq_ignore_ascii_case(b"Bearer "))
+        .map(|_| &value[7..])
+    else {
+        return false;
+    };
+    if presented.len() != token.len() {
+        return false;
+    }
+    presented
+        .iter()
+        .zip(token.bytes())
+        .fold(0u8, |acc, (a, b)| acc | (a ^ b))
+        == 0
 }
 
 pub fn extract_query_param<'a>(url: &'a str, key: &str) -> Option<&'a str> {
@@ -85,26 +121,87 @@ pub fn extract_query_param<'a>(url: &'a str, key: &str) -> Option<&'a str> {
 mod tests {
     use super::*;
 
+    const TOKEN: &str = "0123456789abcdef-test";
+
     #[test]
     fn test_classify_cluster_and_gateway_routes() {
         let req = b"GET /api/cluster HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
-        assert!(matches!(classify(req, None), Ok(Route::ApiCluster)));
+        assert!(matches!(classify(req, None, None), Ok(Route::ApiCluster)));
 
         let req_stats = b"GET /api/gateway/stats HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
         assert!(matches!(
-            classify(req_stats, None),
+            classify(req_stats, None, None),
             Ok(Route::ApiGatewayStats)
         ));
     }
 
     #[test]
-    fn test_classify_c2c_dispatch_payload() {
-        let req = b"POST /api/c2c/dispatch HTTP/1.1\r\nContent-Length: 9\r\n\r\nhello-c2c";
-        match classify(req, None) {
-            Ok(Route::ApiC2cDispatch { body }) => {
-                assert_eq!(body, b"hello-c2c");
-            }
-            other => panic!("expected ApiC2cDispatch, got {:?}", other.err()),
+    fn unimplemented_control_endpoints_are_gone() {
+        for req in [
+            &b"POST /api/c2c/dispatch HTTP/1.1\r\nContent-Length: 9\r\n\r\nhello-c2c"[..],
+            &b"POST /api/cells/net/restart HTTP/1.1\r\nContent-Length: 0\r\n\r\n"[..],
+        ] {
+            assert!(matches!(
+                classify(req, None, Some(TOKEN)),
+                Ok(Route::NotFound)
+            ));
         }
+    }
+
+    #[test]
+    fn client_paths_stay_relative_to_the_web_root() {
+        let file = b"GET /files/mnt/sd/etc/cellos/cluster.key HTTP/1.1\r\n\r\n";
+        assert!(matches!(
+            classify(file, None, None),
+            Ok(Route::WebFile("/mnt/sd/etc/cellos/cluster.key"))
+        ));
+        let dir = b"GET /api/files?path=/mnt/sd/etc/cellos HTTP/1.1\r\n\r\n";
+        assert!(matches!(
+            classify(dir, None, None),
+            Ok(Route::Files("/mnt/sd/etc/cellos"))
+        ));
+        let relative = b"GET /api/files?path=etc HTTP/1.1\r\n\r\n";
+        assert!(matches!(
+            classify(relative, None, None),
+            Ok(Route::NotFound)
+        ));
+    }
+
+    #[test]
+    fn infer_needs_an_operator_token_and_a_matching_bearer() {
+        let bare = b"POST /api/infer HTTP/1.1\r\nContent-Length: 2\r\n\r\nhi";
+        assert!(matches!(classify(bare, None, None), Ok(Route::NotFound)));
+        assert!(matches!(
+            classify(bare, None, Some(TOKEN)),
+            Ok(Route::Unauthorized)
+        ));
+
+        let wrong = b"POST /api/infer HTTP/1.1\r\nAuthorization: Bearer 0123456789abcdef-tesT\r\nContent-Length: 2\r\n\r\nhi";
+        assert!(matches!(
+            classify(wrong, None, Some(TOKEN)),
+            Ok(Route::Unauthorized)
+        ));
+        let prefix = b"POST /api/infer HTTP/1.1\r\nAuthorization: Bearer 0123456789abcdef\r\nContent-Length: 2\r\n\r\nhi";
+        assert!(matches!(
+            classify(prefix, None, Some(TOKEN)),
+            Ok(Route::Unauthorized)
+        ));
+
+        let good = b"POST /api/infer?max_tokens=3 HTTP/1.1\r\nauthorization: bearer 0123456789abcdef-test\r\nContent-Length: 2\r\n\r\nhi";
+        match classify(good, None, Some(TOKEN)) {
+            Ok(Route::Infer { body, max_tokens }) => {
+                assert_eq!(body, b"hi");
+                assert_eq!(max_tokens, 3);
+            }
+            other => panic!("expected Infer, got {:?}", other.err()),
+        }
+    }
+
+    #[test]
+    fn api_tokens_must_be_long_visible_ascii() {
+        assert!(valid_api_token(TOKEN));
+        assert!(!valid_api_token("short"));
+        assert!(!valid_api_token("0123456789abcdef 0123"));
+        assert!(!valid_api_token(&"x".repeat(API_TOKEN_MAX + 1)));
     }
 }

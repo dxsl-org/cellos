@@ -48,9 +48,22 @@ fn parse_u16(s: &str) -> Option<u16> {
 fn cell_main() {
     #[cfg(target_os = "none")]
     init_custom_heap();
-    let argv = ostd::args();
+    let mut argv = ostd::args();
     let mut port = HTTPD_PORT;
     let mut file_to_serve: Option<String> = None;
+
+    // `--api-token <t>` enables the control endpoint (`/api/infer`) for clients that present
+    // `Authorization: Bearer <t>`; without it the endpoint does not exist on this listener.
+    let mut api_token: Option<String> = None;
+    if let Some(at) = argv.iter().position(|arg| arg == "--api-token") {
+        let token = argv.get(at + 1).filter(|t| router::valid_api_token(t));
+        let Some(token) = token.cloned() else {
+            println("httpd: --api-token needs 16..=128 visible ASCII bytes");
+            return;
+        };
+        api_token = Some(token);
+        argv.drain(at..at + 2);
+    }
 
     if let Some(first) = argv.first() {
         if let Some(p) = parse_u16(first).filter(|&p| p > 0) {
@@ -83,7 +96,13 @@ fn cell_main() {
         ostd::io::print_usize(port as usize);
         println("");
     }
-    reactor::run(listen_cap, net_ep, vfs_ep, file_to_serve.as_deref());
+    reactor::run(
+        listen_cap,
+        net_ep,
+        vfs_ep,
+        file_to_serve.as_deref(),
+        api_token.as_deref(),
+    );
 }
 
 /// Resolve a well-known service TID, retrying up to 100 times with yield.

@@ -29,6 +29,22 @@ const CLOSE_TIMEOUT: u64 = 1_000;
 const IDLE_TICKS: u64 = 2;
 const TCP_CHUNK: usize = 2048;
 
+/// Every client-named path resolves under this directory; nothing outside it is reachable
+/// from the network (the VFS root and `/mnt/sd` are world-readable to httpd itself).
+const WEB_ROOT: &str = "/www";
+
+/// Map a client path (`/` or `/a/b`) to its location under [`WEB_ROOT`]; `None` for anything
+/// that is not a plain absolute path of valid components.
+fn web_path(relative: &str) -> Option<String> {
+    let full = if relative == "/" {
+        WEB_ROOT.to_string()
+    } else {
+        format!("{WEB_ROOT}{relative}")
+    };
+    wire::dir_name::validate_dir_path(full.as_bytes()).ok()?;
+    Some(full)
+}
+
 fn push_interest(out: &mut [u8; 256 * 5], used: &mut usize, cap: u32, mask: u8) {
     if *used == out.len() {
         return;
@@ -85,6 +101,9 @@ struct FileSession {
     components: Vec<String>,
     dir_index: usize,
     dirs: Vec<ViDirHandle>,
+    /// The cwd grant `dirs` starts from, when httpd was launched with one. It
+    /// belongs to the launch, not to this session, so it is never closed here.
+    grant: Option<ViDirHandle>,
     file: Option<ViVfsFileHandle>,
     bytes: Vec<u8>,
     stage: FileStep,
@@ -103,13 +122,28 @@ enum FileStep {
     Done,
 }
 
+/// `path` relative to the directory `cwd` (no leading `/`), or `None` when it
+/// lies outside it.
+fn below<'a>(cwd: &str, path: &'a str) -> Option<&'a str> {
+    let rest = path.strip_prefix(cwd.trim_end_matches('/'))?;
+    rest.strip_prefix('/')
+}
+
 impl FileSession {
-    fn new(path: &str) -> Result<Self, ()> {
+    /// A session reading the absolute `path`. With a cwd grant `(handle, cwd)`
+    /// the VFS has sealed this cell against path strings, so the file is reached
+    /// by `OpenDir` down from the grant and must lie below `cwd`; without one the
+    /// path is named directly.
+    fn new(path: &str, cwd: Option<(ViDirHandle, &str)>) -> Result<Self, ()> {
         wire::dir_name::validate_dir_path(path.as_bytes()).map_err(|_| ())?;
         if path.starts_with("/srv") || path.starts_with("/etc") || path.starts_with("/.cellos") {
             return Err(());
         }
-        let components = path[1..]
+        let relative = match cwd {
+            Some((_, cwd)) => below(cwd, path).ok_or(())?,
+            None => &path[1..],
+        };
+        let components = relative
             .split('/')
             .map(|part| {
                 wire::dir_name::validate_dir_component(part.as_bytes()).map(|_| part.to_string())
@@ -119,16 +153,33 @@ impl FileSession {
         if components.is_empty() {
             return Err(());
         }
+        let (dirs, grant, stage) = match cwd {
+            Some((dir, _)) => (
+                alloc::vec![dir],
+                Some(dir),
+                if components.len() > 1 {
+                    FileStep::Dir
+                } else {
+                    FileStep::Open
+                },
+            ),
+            None => (Vec::new(), None, FileStep::Preflight),
+        };
         Ok(Self {
             path: path.to_string(),
             components,
             dir_index: 0,
-            dirs: Vec::new(),
+            dirs,
+            grant,
             file: None,
             bytes: Vec::new(),
-            stage: FileStep::Preflight,
+            stage,
             outcome: 200,
         })
+    }
+    /// Directory handles this session acquired and must close.
+    fn owned_dirs(&self) -> usize {
+        self.dirs.len() - usize::from(self.grant.is_some())
     }
     fn cleanup(&mut self, status: u16) {
         self.outcome = status;
@@ -228,13 +279,13 @@ impl FileSession {
                     self.outcome = 500;
                 }
                 self.dirs.pop();
-                if self.dirs.is_empty() {
+                if self.owned_dirs() == 0 {
                     self.stage = FileStep::Done;
                 }
             }
             FileStep::Done => {}
         }
-        if matches!(self.stage, FileStep::CloseDir) && self.dirs.is_empty() {
+        if matches!(self.stage, FileStep::CloseDir) && self.owned_dirs() == 0 {
             self.stage = FileStep::Done;
         }
     }
@@ -441,6 +492,11 @@ struct Reactor<'a> {
     net: usize,
     vfs: usize,
     file: Option<&'a str>,
+    /// The cwd grant a shell launch hands httpd, and the directory it names.
+    /// The VFS then refuses path strings from this cell, so files are reached
+    /// below this handle only.
+    cwd: Option<(ViDirHandle, String)>,
+    api_token: Option<&'a str>,
     accepting: Option<Op>,
     ready_op: Option<Op>,
     cursor: u16,
@@ -489,13 +545,27 @@ pub(crate) fn listen(net: usize, port: u16) -> Option<u32> {
     None
 }
 
-pub(crate) fn run(listener: u32, net: usize, vfs: usize, file: Option<&str>) -> ! {
+pub(crate) fn run(
+    listener: u32,
+    net: usize,
+    vfs: usize,
+    file: Option<&str>,
+    api_token: Option<&str>,
+) -> ! {
     let mut reactor = Reactor {
         sockets: Vec::new(),
         listener,
         net,
         vfs,
         file,
+        cwd: ostd::child_context::ChildContext::read_own()
+            .ok()
+            .and_then(|context| {
+                let grant = context.cwd_grant()?;
+                let cwd = core::str::from_utf8(context.cwd()).ok()?;
+                Some((ViDirHandle(grant.id), String::from(cwd)))
+            }),
+        api_token,
         accepting: None,
         ready_op: None,
         cursor: 0,
@@ -995,7 +1065,7 @@ impl Reactor<'_> {
     }
 
     fn dispatch(&mut self, conn: &mut Connection, now: u64) {
-        let route = router::classify(&conn.request, self.file);
+        let route = router::classify(&conn.request, self.file, self.api_token);
         let result = match route {
             Ok(Route::Index) => Some(handlers::index()),
             Ok(Route::Status) => Some(handlers::status_page()),
@@ -1011,16 +1081,11 @@ impl Reactor<'_> {
                 self.accepted_peak,
                 self.refused,
             )),
-            Ok(Route::ApiC2cDispatch { body }) => Some(handlers::api_c2c_dispatch(body)),
             Ok(Route::NotFound) => Some(handlers::not_found()),
-            Ok(Route::Restart) => Some(handlers::api_restart()),
-            Ok(Route::Files(path)) => {
-                if path.starts_with("/srv")
-                    || path.starts_with("/etc")
-                    || path.starts_with("/.cellos")
-                {
-                    Some(handlers::response(403, "text/plain", b"Forbidden", false))
-                } else if self.backend_count() >= MAX_BACKENDS {
+            Ok(Route::Unauthorized) => Some(handlers::unauthorized()),
+            Ok(Route::Files(relative)) => match web_path(relative) {
+                None => Some(handlers::not_found()),
+                Some(_) if self.backend_count() >= MAX_BACKENDS => {
                     self.refused += 1;
                     Some(handlers::response(
                         503,
@@ -1028,37 +1093,24 @@ impl Reactor<'_> {
                         b"Service Unavailable",
                         false,
                     ))
-                } else {
-                    conn.phase = Phase::Listing(path.to_string());
+                }
+                Some(path) => {
+                    conn.phase = Phase::Listing(path);
                     conn.deadline = now + BACKEND_TIMEOUT;
                     None
                 }
-            }
+            },
             Ok(Route::File(path)) => {
-                if self.backend_count() >= MAX_BACKENDS {
-                    self.refused += 1;
-                    Some(handlers::response(
-                        503,
-                        "text/plain",
-                        b"Service Unavailable",
-                        false,
-                    ))
-                } else {
-                    match FileSession::new(path) {
-                        Ok(session) => {
-                            conn.phase = Phase::File(session);
-                            conn.deadline = now + BACKEND_TIMEOUT;
-                            None
-                        }
-                        Err(_) => Some(handlers::response(
-                            500,
-                            "text/plain",
-                            b"500 Internal Server Error",
-                            false,
-                        )),
-                    }
-                }
+                self.start_file(&mut conn.phase, &mut conn.deadline, Some(path), now)
             }
+            Ok(Route::WebFile(relative)) => self.start_file(
+                &mut conn.phase,
+                &mut conn.deadline,
+                web_path(relative).as_deref(),
+                now,
+            ),
+            #[cfg(not(target_os = "none"))]
+            Ok(Route::Infer { .. }) => Some(handlers::not_found()),
             #[cfg(target_os = "none")]
             Ok(Route::Infer { body, max_tokens }) => {
                 if self.backend_count() >= MAX_BACKENDS
@@ -1108,6 +1160,38 @@ impl Reactor<'_> {
         }
     }
 
+    /// `path: None` means the client named something outside the web root.
+    fn start_file(
+        &mut self,
+        phase: &mut Phase,
+        deadline: &mut u64,
+        path: Option<&str>,
+        now: u64,
+    ) -> Option<Response> {
+        let Some(path) = path else {
+            return Some(handlers::not_found());
+        };
+        if self.backend_count() >= MAX_BACKENDS {
+            self.refused += 1;
+            return Some(handlers::response(
+                503,
+                "text/plain",
+                b"Service Unavailable",
+                false,
+            ));
+        }
+        let cwd = self.cwd.as_ref().map(|(dir, path)| (*dir, path.as_str()));
+        match FileSession::new(path, cwd) {
+            Ok(session) => {
+                *phase = Phase::File(session);
+                *deadline = now + BACKEND_TIMEOUT;
+                None
+            }
+            // A refused, malformed or out-of-reach path names nothing httpd serves.
+            Err(_) => Some(handlers::not_found()),
+        }
+    }
+
     fn backend_count(&self) -> usize {
         self.sockets
             .iter()
@@ -1154,10 +1238,10 @@ impl Reactor<'_> {
 
 #[cfg(test)]
 mod state_tests {
-    use super::{Connection, FileSession, FileStep, Phase, READ_TIMEOUT, SEND_TIMEOUT};
+    use super::{web_path, Connection, FileSession, FileStep, Phase, READ_TIMEOUT, SEND_TIMEOUT};
     use crate::handlers;
     use abi::dir_handles::ViDirHandle;
-    use wire::ipc::VfsResponse;
+    use wire::ipc::{VfsRequest, VfsResponse};
     use wire::proto::vfs::VfsError;
     use wire::vfs_file_handles::ViVfsFileHandle;
 
@@ -1181,7 +1265,7 @@ mod state_tests {
     }
     #[test]
     fn existing_empty_file_is_not_a_missing_file() {
-        let mut file = FileSession::new("/readme.txt").unwrap();
+        let mut file = FileSession::new("/readme.txt", None).unwrap();
         file.stage = FileStep::Read;
         file.file = Some(ViVfsFileHandle(9));
         file.dirs.push(ViDirHandle(2));
@@ -1197,11 +1281,11 @@ mod state_tests {
 
     #[test]
     fn missing_and_invalid_file_preflight_do_not_open_a_handle() {
-        let mut missing = FileSession::new("/missing").unwrap();
+        let mut missing = FileSession::new("/missing", None).unwrap();
         missing.complete(Some(VfsResponse::Err(VfsError::Io as u8)));
         assert!(matches!(missing.stage, FileStep::Done));
         assert_eq!(missing.outcome, 404);
-        let mut invalid = FileSession::new("/directory").unwrap();
+        let mut invalid = FileSession::new("/directory", None).unwrap();
         invalid.complete(Some(VfsResponse::Stat {
             size: 0,
             is_dir: true,
@@ -1212,14 +1296,68 @@ mod state_tests {
 
     #[test]
     fn sensitive_paths_are_refused() {
-        assert!(FileSession::new("/srv/secret").is_err());
-        assert!(FileSession::new("/etc/passwd").is_err());
-        assert!(FileSession::new("/.cellos-machine").is_err());
+        assert!(FileSession::new("/srv/secret", None).is_err());
+        assert!(FileSession::new("/etc/passwd", None).is_err());
+        assert!(FileSession::new("/.cellos-machine", None).is_err());
+    }
+
+    /// A shell launch seals httpd against path strings: the file is reached by
+    /// handle below the cwd grant, a missing one is a 404, and the grant itself
+    /// is never closed.
+    #[test]
+    fn sealed_session_walks_below_the_cwd_grant() {
+        let grant = ViDirHandle(7);
+        assert!(FileSession::new("/www/x", Some((grant, "/home"))).is_err());
+        let mut file = FileSession::new("/www/readme.txt", Some((grant, "/"))).unwrap();
+        assert!(matches!(
+            file.request(),
+            Some(VfsRequest::OpenDir {
+                dir: ViDirHandle(7),
+                name: "www"
+            })
+        ));
+        file.complete(Some(VfsResponse::DirHandle(ViDirHandle(8))));
+        assert!(matches!(
+            file.request(),
+            Some(VfsRequest::OpenFileAt {
+                dir: ViDirHandle(8),
+                name: "readme.txt"
+            })
+        ));
+        file.complete(Some(VfsResponse::Err(VfsError::Io as u8)));
+        assert!(matches!(
+            file.request(),
+            Some(VfsRequest::CloseDir {
+                dir: ViDirHandle(8)
+            })
+        ));
+        file.complete(Some(VfsResponse::Ok));
+        assert!(matches!(file.stage, FileStep::Done));
+        assert_eq!(file.outcome, 404);
+        assert_eq!(file.dirs, alloc::vec![grant]);
+    }
+
+    #[test]
+    fn client_paths_cannot_leave_the_web_root() {
+        assert_eq!(web_path("/").as_deref(), Some("/www"));
+        assert_eq!(
+            web_path("/mnt/sd/etc/cellos/cluster.key").as_deref(),
+            Some("/www/mnt/sd/etc/cellos/cluster.key")
+        );
+        for escape in [
+            "/../mnt/sd/etc/cellos/cluster.key",
+            "/a/../../etc",
+            "/./x",
+            "//x",
+            "/x/",
+        ] {
+            assert_eq!(web_path(escape), None, "{escape}");
+        }
     }
 
     #[test]
     fn failed_file_read_closes_acquired_handles() {
-        let mut file = FileSession::new("/readme.txt").unwrap();
+        let mut file = FileSession::new("/readme.txt", None).unwrap();
         file.stage = FileStep::Read;
         file.file = Some(ViVfsFileHandle(9));
         file.dirs.push(ViDirHandle(2));

@@ -1,7 +1,7 @@
 use alloc::vec;
 
 use super::net_buf::{RxBuffer, TxBuffer};
-use super::{EthernetAddress, VirtIONetRaw};
+use super::{EthernetAddress, VirtIONetRaw, NET_HDR_SIZE};
 use crate::{hal::Hal, transport::Transport, Error, Result};
 
 /// Driver for a VirtIO network device.
@@ -77,8 +77,11 @@ impl<H: Hal, T: Transport, const QUEUE_SIZE: usize> VirtIONet<H, T, QUEUE_SIZE> 
     /// NIC queue.
     pub fn receive(&mut self) -> Result<RxBuffer> {
         if let Some(token) = self.inner.poll_receive() {
-            let mut rx_buf = self.rx_buffers[token as usize]
-                .take()
+            // The token is the device's used-ring id: never index with it unchecked.
+            let mut rx_buf = self
+                .rx_buffers
+                .get_mut(usize::from(token))
+                .and_then(Option::take)
                 .ok_or(Error::WrongToken)?;
             if token != rx_buf.idx {
                 return Err(Error::WrongToken);
@@ -88,7 +91,9 @@ impl<H: Hal, T: Transport, const QUEUE_SIZE: usize> VirtIONet<H, T, QUEUE_SIZE> 
             // buffer as we passed to `VirtQueue::add` and it is still valid.
             let (_hdr_len, pkt_len) =
                 unsafe { self.inner.receive_complete(token, rx_buf.as_bytes_mut())? };
-            rx_buf.set_packet_len(pkt_len);
+            // The used length is device-reported; the packet cannot extend past the buffer.
+            let room = rx_buf.as_bytes().len().saturating_sub(NET_HDR_SIZE);
+            rx_buf.set_packet_len(pkt_len.min(room));
             Ok(rx_buf)
         } else {
             Err(Error::NotReady)
@@ -121,5 +126,87 @@ impl<H: Hal, T: Transport, const QUEUE_SIZE: usize> VirtIONet<H, T, QUEUE_SIZE> 
     /// completed.
     pub fn send(&mut self, tx_buf: TxBuffer) -> Result {
         self.inner.send(tx_buf.packet())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        device::net::{Config, Status, QUEUE_RECEIVE},
+        hal::fake::FakeHal,
+        transport::{
+            fake::{FakeTransport, QueueStatus, State},
+            DeviceType,
+        },
+        volatile::ReadOnly,
+    };
+    use alloc::sync::Arc;
+    use core::ptr::NonNull;
+    use std::sync::Mutex;
+
+    const QUEUE_SIZE: usize = 4;
+    const BUF_LEN: usize = 2048;
+
+    fn config() -> Config {
+        Config {
+            mac: ReadOnly::new([0x52, 0x54, 0, 0x12, 0x34, 0x56]),
+            status: ReadOnly::new(Status::empty()),
+            max_virtqueue_pairs: ReadOnly::new(1),
+            mtu: ReadOnly::new(1500),
+        }
+    }
+
+    fn device(
+        config: &mut Config,
+    ) -> (
+        VirtIONet<FakeHal, FakeTransport<Config>, QUEUE_SIZE>,
+        Arc<Mutex<State>>,
+    ) {
+        let state = Arc::new(Mutex::new(State {
+            queues: vec![QueueStatus::default(), QueueStatus::default()],
+            ..Default::default()
+        }));
+        let transport = FakeTransport {
+            device_type: DeviceType::Network,
+            max_queue_size: QUEUE_SIZE as u32,
+            device_features: 0,
+            config_space: NonNull::from(config),
+            state: state.clone(),
+        };
+        (VirtIONet::new(transport, BUF_LEN).unwrap(), state)
+    }
+
+    /// 07 S-10: a used-ring id past the queue is refused, not used as an index.
+    #[test]
+    fn receive_refuses_a_used_id_outside_the_queue() {
+        let mut config = config();
+        let (mut net, state) = device(&mut config);
+        state
+            .lock()
+            .unwrap()
+            .write_to_queue_reporting::<QUEUE_SIZE>(
+                QUEUE_RECEIVE,
+                &[0xAB; 64],
+                0xFFFF,
+                (NET_HDR_SIZE + 64) as u32,
+            );
+        assert!(matches!(net.receive(), Err(Error::WrongToken)));
+    }
+
+    /// 07 S-10: a used length past the buffer yields a packet clamped to the buffer.
+    #[test]
+    fn receive_clamps_a_used_length_past_the_buffer() {
+        let mut config = config();
+        let (mut net, state) = device(&mut config);
+        state
+            .lock()
+            .unwrap()
+            .write_to_queue_reporting::<QUEUE_SIZE>(QUEUE_RECEIVE, &[0xAB; 64], 0, 0x10000);
+        let rx = net.receive().ok().expect("clamped packet");
+        assert_eq!(rx.packet_len(), BUF_LEN - NET_HDR_SIZE);
+        assert_eq!(rx.packet().len(), BUF_LEN - NET_HDR_SIZE);
+        // The fake device wrote the 64 bytes from the start of the buffer (header included).
+        assert_eq!(rx.packet()[..4], [0xAB; 4]);
     }
 }

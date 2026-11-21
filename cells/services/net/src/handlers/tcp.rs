@@ -124,6 +124,10 @@ pub(crate) fn handle_tcp_request(
             true
         }
         NetRequest::TcpListen { port } => {
+            if table.tcp_port_held_by_other(*port, owner) {
+                send_typed(sender, R::Err(NetError::AddrInUse as u8));
+                return true;
+            }
             let (handle, cap) = match make_tcp(sockets, table, owner) {
                 Ok(t) => t,
                 Err(_) => {

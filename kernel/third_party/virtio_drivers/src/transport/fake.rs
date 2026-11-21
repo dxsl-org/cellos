@@ -1,6 +1,6 @@
 use super::{DeviceStatus, DeviceType, Transport};
 use crate::{
-    queue::{fake_read_write_queue, Descriptor},
+    queue::{fake_read_write_queue, fake_read_write_queue_reporting, Descriptor},
     PhysAddr, Result,
 };
 use alloc::{sync::Arc, vec::Vec};
@@ -130,6 +130,29 @@ impl State {
                 assert_eq!(input, Vec::new());
                 data.to_owned()
             },
+        ));
+    }
+
+    /// Like [`Self::write_to_queue`], but publishes the used element `(id, len)` instead of the
+    /// honest one, as a buggy or hostile device would.
+    pub fn write_to_queue_reporting<const QUEUE_SIZE: usize>(
+        &mut self,
+        queue_index: u16,
+        data: &[u8],
+        id: u32,
+        len: u32,
+    ) {
+        let queue = &self.queues[queue_index as usize];
+        assert_ne!(queue.descriptors, 0);
+        assert!(fake_read_write_queue_reporting(
+            queue.descriptors as *const [Descriptor; QUEUE_SIZE],
+            queue.driver_area as *const u8,
+            queue.device_area as *mut u8,
+            |input| {
+                assert_eq!(input, Vec::new());
+                data.to_owned()
+            },
+            |_, _| (id, len),
         ));
     }
 

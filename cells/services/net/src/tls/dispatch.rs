@@ -33,6 +33,14 @@ const CONNECT_FAILED_REPLY: [u8; 8] = tls::CONNECT_FAILED.to_le_bytes();
 const SEND_ERROR_REPLY: [u8; 4] = tls::SEND_ERROR.to_le_bytes();
 const RECV_ERROR_REPLY: [u8; 2] = tls::RECV_ERROR.to_le_bytes();
 const REPLY_TIMEOUT: u64 = 300_000_000; // legacy receiver may not yet be scheduled
+/// Requests one owner may stack behind an in-flight TLS operation; more are
+/// refused at once so a flood cannot grow the net heap (07 S-9).
+const MAX_QUEUED_PER_OP: usize = 4;
+/// Legacy replies retained for retry, in total and per owner. A legacy caller
+/// sends synchronously, so it has one reply outstanding; anything beyond the
+/// bound is dropped, which the caller sees as a refused operation (07 S-9).
+const MAX_RETAINED_REPLIES: usize = 64;
+const MAX_RETAINED_PER_OWNER: usize = 4;
 
 type Handshake = Pin<Box<dyn Future<Output = Result<TlsSocketEntry, embedded_tls::TlsError>>>>;
 type Sending =
@@ -151,7 +159,7 @@ impl TlsPending {
         table: &SocketTable,
     ) {
         if let Some(op) = self.operations.get_mut(&cap) {
-            if op.owner == owner {
+            if op.owner == owner && op.queue.len() < MAX_QUEUED_PER_OP {
                 op.queue.push_back(Queued { reply, request });
             } else {
                 self.answer(reply, owner, None, failed(&request));
@@ -179,8 +187,9 @@ impl TlsPending {
     }
 
     /// Async callers have kernel operation tokens. Legacy callers use their
-    /// original sender TID; a nonblocking send is retried until their masked
-    /// receive is ready, never holding the net dispatcher hostage.
+    /// original sender TID: one nonblocking send now, then a bounded retention
+    /// retried until their masked receive is ready, never holding the net
+    /// dispatcher hostage. `false` means the reply was not delivered or kept.
     fn answer(
         &mut self,
         reply: ReplyTo,
@@ -191,6 +200,18 @@ impl TlsPending {
         match reply {
             ReplyTo::Async(token) => ostd::ipc::reply(token, bytes).is_ok(),
             ReplyTo::Legacy(sender) => {
+                // An earlier retained reply to the same sender goes first.
+                let queued_for_sender = self.replies.iter().any(|r| r.sender == sender);
+                if !queued_for_sender && matches!(sys_try_send(sender, bytes), SyscallResult::Ok(0))
+                {
+                    return true;
+                }
+                let held_by_owner = self.replies.iter().filter(|r| r.owner == owner).count();
+                if self.replies.len() >= MAX_RETAINED_REPLIES
+                    || held_by_owner >= MAX_RETAINED_PER_OWNER
+                {
+                    return false;
+                }
                 self.replies.push_back(LegacyReply {
                     sender,
                     owner,
@@ -535,3 +556,7 @@ fn poll_future<T>(
     clear_tls_context();
     result
 }
+
+#[cfg(test)]
+#[path = "dispatch-tests.rs"]
+mod tests;

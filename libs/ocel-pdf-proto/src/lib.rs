@@ -43,6 +43,27 @@ impl DocumentOwner {
     }
 }
 
+/// User-data trees the renderer opens `Open { path }` from. The service reads with
+/// its own VFS identity, so a path outside these would let any sender have it read
+/// files the sender itself cannot (13 S-10).
+pub const OPENABLE_PREFIXES: &[&str] = &["/data/", "/tmp/", "/mnt/sd/", "/mnt/disk/"];
+
+/// An absolute `.pdf` path under [`OPENABLE_PREFIXES`] with no empty, `.` or `..`
+/// component, so the prefix cannot be escaped.
+pub fn openable_path(path: &str) -> bool {
+    path.len() <= 512
+        && !path.contains('\0')
+        && OPENABLE_PREFIXES
+            .iter()
+            .any(|prefix| path.starts_with(prefix))
+        && path[1..]
+            .split('/')
+            .all(|part| !matches!(part, "" | "." | ".."))
+        && path
+            .rsplit_once('.')
+            .is_some_and(|(_, ext)| ext.eq_ignore_ascii_case("pdf"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -62,6 +83,29 @@ mod tests {
         assert!(!owner.matches(7, 1));
         assert!(!owner.matches(8, 1));
         assert!(owner.matches(8, 2));
+    }
+    #[test]
+    fn only_pdfs_under_user_data_trees_open() {
+        for path in [
+            "/data/ocel-pdf-demo.pdf",
+            "/tmp/a/B.PDF",
+            "/mnt/sd/docs/x.pdf",
+        ] {
+            assert!(openable_path(path), "{path}");
+        }
+        for path in [
+            "/etc/cellos/x.pdf",
+            "/srv/cellos/x.pdf",
+            "/x.pdf",
+            "/data/../etc/x.pdf",
+            "/data/./x.pdf",
+            "/data//x.pdf",
+            "/mnt/sd/etc/cellos/cluster.key",
+            "/data/x.pdf\0",
+            "data/x.pdf",
+        ] {
+            assert!(!openable_path(path), "{path:?}");
+        }
     }
 }
 

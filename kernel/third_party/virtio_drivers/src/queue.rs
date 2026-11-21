@@ -850,6 +850,25 @@ pub(crate) fn fake_read_write_queue<const QUEUE_SIZE: usize>(
     queue_device_area: *mut u8,
     handler: impl FnOnce(Vec<u8>) -> Vec<u8>,
 ) -> bool {
+    fake_read_write_queue_reporting(
+        descriptors,
+        queue_driver_area,
+        queue_device_area,
+        handler,
+        |id, len| (id, len),
+    )
+}
+
+/// [`fake_read_write_queue`], except that `report` maps the honest used element `(id, len)` to
+/// the one the fake device publishes, so tests can play a buggy or hostile device.
+#[cfg(test)]
+pub(crate) fn fake_read_write_queue_reporting<const QUEUE_SIZE: usize>(
+    descriptors: *const [Descriptor; QUEUE_SIZE],
+    queue_driver_area: *const u8,
+    queue_device_area: *mut u8,
+    handler: impl FnOnce(Vec<u8>) -> Vec<u8>,
+    report: impl FnOnce(u32, u32) -> (u32, u32),
+) -> bool {
     use core::{ops::Deref, slice};
 
     let available_ring = queue_driver_area as *const AvailRing<QUEUE_SIZE>;
@@ -964,8 +983,12 @@ pub(crate) fn fake_read_write_queue<const QUEUE_SIZE: usize>(
         }
 
         // Mark the buffer as used.
-        (*used_ring).ring[next_slot as usize].id = head_descriptor_index.into();
-        (*used_ring).ring[next_slot as usize].len = (input_length + output.len()) as u32;
+        let (id, len) = report(
+            head_descriptor_index.into(),
+            (input_length + output.len()) as u32,
+        );
+        (*used_ring).ring[next_slot as usize].id = id;
+        (*used_ring).ring[next_slot as usize].len = len;
         (*used_ring).idx.fetch_add(1, Ordering::AcqRel);
 
         true

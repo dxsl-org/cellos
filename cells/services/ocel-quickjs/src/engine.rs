@@ -36,27 +36,60 @@ const MAX_STACK_BYTES: usize = 192 * 1024;
 // QuickJS polls during interpretation/parsing; additionally cap promise jobs.
 const MAX_INTERRUPT_POLLS: usize = 100_000;
 const MAX_PENDING_JOBS: usize = 10_000;
+/// Wall-clock ceiling for one evaluation and its job drain, in 10 ms scheduler
+/// ticks. The poll count alone allows ~10^9 operations, which stalls every
+/// context this single-threaded engine serves; time is what callers wait on.
+const MAX_EVAL_TICKS: u64 = 200;
+
+/// The clock [`Budget`] reads; `None` when the kernel does not provide it.
+#[cfg(not(test))]
+fn scheduler_ticks() -> Option<u64> {
+    ostd::syscall::sys_get_scheduler_ticks()
+}
+#[cfg(test)]
+fn scheduler_ticks() -> Option<u64> {
+    tests::fake_ticks()
+}
+
+/// What one evaluation may still spend: interrupt polls and a tick deadline.
+struct Budget {
+    polls: usize,
+    deadline: Option<u64>,
+}
+
+impl Budget {
+    fn start() -> Self {
+        Self {
+            polls: MAX_INTERRUPT_POLLS,
+            deadline: scheduler_ticks().map(|now| now.saturating_add(MAX_EVAL_TICKS)),
+        }
+    }
+
+    /// One interrupt poll: `true` once either limit is spent.
+    fn expired(&mut self) -> bool {
+        if self.polls == 0 {
+            return true;
+        }
+        self.polls -= 1;
+        matches!((self.deadline, scheduler_ticks()), (Some(deadline), Some(now)) if now >= deadline)
+    }
+}
 
 unsafe extern "C" fn interrupt_budget(
     _: *mut ffi::JSRuntime,
     opaque: *mut core::ffi::c_void,
 ) -> core::ffi::c_int {
-    let remaining = &mut *opaque.cast::<usize>();
-    if *remaining == 0 {
-        1
-    } else {
-        *remaining -= 1;
-        0
-    }
+    let budget = &mut *opaque.cast::<Budget>();
+    core::ffi::c_int::from(budget.expired())
 }
 
 struct InterruptGuard<'a> {
     rt: *mut ffi::JSRuntime,
-    _budget: core::marker::PhantomData<&'a mut usize>,
+    _budget: core::marker::PhantomData<&'a mut Budget>,
 }
 impl<'a> InterruptGuard<'a> {
-    unsafe fn new(rt: *mut ffi::JSRuntime, budget: &'a mut usize) -> Self {
-        ffi::JS_SetInterruptHandler(rt, Some(interrupt_budget), (budget as *mut usize).cast());
+    unsafe fn new(rt: *mut ffi::JSRuntime, budget: &'a mut Budget) -> Self {
+        ffi::JS_SetInterruptHandler(rt, Some(interrupt_budget), (budget as *mut Budget).cast());
         Self {
             rt,
             _budget: core::marker::PhantomData,
@@ -199,7 +232,7 @@ impl QuickJsContext {
         let name = alloc::ffi::CString::new(filename)
             .unwrap_or_else(|_| alloc::ffi::CString::new("<script>").expect("literal has no NUL"));
         unsafe {
-            let mut budget = MAX_INTERRUPT_POLLS;
+            let mut budget = Budget::start();
             let guard = InterruptGuard::new(self.rt, &mut budget);
             let value = ffi::JS_Eval(
                 self.ctx,
@@ -439,7 +472,7 @@ impl QuickJsContext {
         };
         let name = c"<ocel-queue>".as_ptr();
         unsafe {
-            let mut budget = MAX_INTERRUPT_POLLS;
+            let mut budget = Budget::start();
             let _guard = InterruptGuard::new(self.rt, &mut budget);
             let value = ffi::JS_Eval(
                 self.ctx,

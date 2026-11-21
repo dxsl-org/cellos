@@ -168,6 +168,35 @@ impl SocketTable {
             None
         }
     }
+
+    /// Whether a TCP listener on `port` belongs to an owner other than `caller`.
+    /// smoltcp hands an inbound SYN to the first listener on the port, so a second
+    /// owner's listener would take the first owner's connections (07 S-8).
+    pub fn tcp_port_held_by_other(&self, port: u16, caller: SocketOwner) -> bool {
+        self.listen_ports
+            .iter()
+            .any(|(cap, &bound)| bound == port && self.owners.get(cap) != Some(&caller))
+    }
+
+    /// Whether a UDP socket bound to `port` is anything but one of `caller`'s caps.
+    /// Sockets outside the table (DHCP, DNS) count as foreign: binding their port
+    /// would divert their datagrams.
+    pub fn udp_port_held_by_other(
+        &self,
+        sockets: &smoltcp::iface::SocketSet<'_>,
+        port: u16,
+        caller: SocketOwner,
+    ) -> bool {
+        sockets.iter().any(|(handle, socket)| {
+            matches!(socket, smoltcp::socket::Socket::Udp(s) if s.endpoint().port == port)
+                && !self.entries.iter().any(|(cap, &owned)| {
+                    owned == handle
+                        && self.udp_caps.contains(cap)
+                        && self.owners.get(cap) == Some(&caller)
+                })
+        })
+    }
+
     /// Repoint an existing cap at a new smoltcp handle.
     ///
     /// Used by ACCEPT to swap the exhausted listening handle for a fresh one

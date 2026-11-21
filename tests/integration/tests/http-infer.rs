@@ -28,6 +28,8 @@ const LISTEN_TIMEOUT: u64 = 20;
 const HTTP_TIMEOUT_SECS: u64 = 20;
 /// Port `httpd` binds inside the guest.
 const GUEST_PORT: u16 = 8080;
+/// Operator token the guest httpd is launched with; `/api/infer` refuses requests without it.
+const API_TOKEN: &str = "http-infer-lane-token";
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -93,8 +95,15 @@ fn http_request(host_port: u16, request: &[u8]) -> Vec<u8> {
 }
 
 fn post_infer(host_port: u16, path: &str, prompt: &str) -> String {
+    post_infer_as(host_port, path, prompt, Some(API_TOKEN))
+}
+
+fn post_infer_as(host_port: u16, path: &str, prompt: &str, token: Option<&str>) -> String {
+    let auth = token
+        .map(|token| format!("Authorization: Bearer {token}\r\n"))
+        .unwrap_or_default();
     let request = format!(
-        "POST {path} HTTP/1.1\r\nHost: localhost\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{prompt}",
+        "POST {path} HTTP/1.1\r\nHost: localhost\r\n{auth}Content-Type: text/plain\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{prompt}",
         prompt.len()
     );
     String::from_utf8_lossy(&http_request(host_port, request.as_bytes())).into_owned()
@@ -119,7 +128,7 @@ fn http_infer_serves_a_completion_from_the_model_cell() {
             )
         });
 
-    qemu.send_line("httpd &");
+    qemu.send_line(&format!("httpd --api-token {API_TOKEN} &"));
     qemu.wait_for("httpd: listening on :8080", LISTEN_TIMEOUT)
         .unwrap_or_else(|e| panic!("httpd did not listen: {e}\n--- output ---\n{}", qemu.dump()));
     std::thread::sleep(Duration::from_millis(300));
@@ -184,6 +193,15 @@ fn http_infer_serves_a_completion_from_the_model_cell() {
         too_large.starts_with("HTTP/1.1 400") && too_large.contains("prompt is too large"),
         "oversized prompt must be rejected before inference\n--- response ---\n{too_large}"
     );
+
+    // 5. The control endpoint is closed to clients without the operator's bearer token.
+    for token in [None, Some("http-infer-lane-tokeN")] {
+        let refused = post_infer_as(host_port, "/api/infer", "Once upon a time", token);
+        assert!(
+            refused.starts_with("HTTP/1.1 401"),
+            "inference without the operator token must be a 401\n--- response ---\n{refused}"
+        );
+    }
 
     qemu.wait_for("[ai-test] PASS", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("oracle did not pass: {e}\n--- QEMU ---\n{}", qemu.dump()));

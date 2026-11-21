@@ -128,3 +128,86 @@ fn unbound_udp_port_skips_ports_already_bound() {
     );
     assert!(calls > 1, "the search is bounded but retries");
 }
+
+/// 07 S-8: a port another owner listens on or binds is refused with `AddrInUse`
+/// (the second listener would otherwise take the first owner's connections or
+/// datagrams), the holder may add backlog listeners, and closing frees the port.
+#[test]
+fn listen_and_bind_refuse_a_port_another_owner_holds() {
+    let (mut device, _, mut iface, mut table, mut tls_table) = setup_test_env();
+    let mut storage = [SocketStorage::EMPTY; 8];
+    let mut sockets = SocketSet::new(&mut storage[..]);
+    let owner_a = SocketOwner {
+        cell_id: 10,
+        generation: 1,
+    };
+    let owner_b = SocketOwner {
+        cell_id: 20,
+        generation: 1,
+    };
+    let caps_of = |table: &SocketTable, owner| {
+        (1..table.next_cap_for_test())
+            .filter(|&cap| table.is_owner(cap, owner))
+            .count()
+    };
+    let mut tcp_listen = |sockets: &mut SocketSet<'_>, table: &mut SocketTable, owner, port| {
+        tcp::handle_tcp_request(
+            &NetRequest::TcpListen { port },
+            1,
+            owner,
+            &mut iface,
+            sockets,
+            table,
+            &mut tls_table,
+        )
+    };
+
+    tcp_listen(&mut sockets, &mut table, owner_a, 8080);
+    assert_eq!(caps_of(&table, owner_a), 1);
+    tcp_listen(&mut sockets, &mut table, owner_b, 8080);
+    assert_eq!(caps_of(&table, owner_b), 0, "B must not listen on A's port");
+    tcp_listen(&mut sockets, &mut table, owner_a, 8080);
+    assert_eq!(caps_of(&table, owner_a), 2, "the holder may add backlog");
+    tcp_listen(&mut sockets, &mut table, owner_b, 8081);
+    assert_eq!(caps_of(&table, owner_b), 1, "a free port is not refused");
+
+    let udp_cap = |sockets: &mut SocketSet<'_>, table: &mut SocketTable, owner| {
+        let cap = table
+            .insert(sockets.add(small_udp_socket()), owner)
+            .expect("insert udp");
+        table.mark_udp(cap);
+        cap
+    };
+    let mut udp_bind = |sockets: &mut SocketSet<'_>, table: &mut SocketTable, owner, cap, port| {
+        super::udp::handle_udp_request(
+            &NetRequest::UdpBind {
+                cap_id: cap as u32,
+                port,
+            },
+            1,
+            owner,
+            &mut iface,
+            &mut device,
+            sockets,
+            table,
+        );
+        table.get_state(cap, owner) == Some(SocketState::Listening)
+    };
+    let a_udp = udp_cap(&mut sockets, &mut table, owner_a);
+    let b_udp = udp_cap(&mut sockets, &mut table, owner_b);
+    assert!(udp_bind(&mut sockets, &mut table, owner_a, a_udp, 5353));
+    assert!(!udp_bind(&mut sockets, &mut table, owner_b, b_udp, 5353));
+    let b_handle = table.get(b_udp, owner_b).unwrap();
+    assert!(!sockets.get::<smoltcp_udp::Socket>(b_handle).is_open());
+
+    // A management socket outside the table (the DHCP client's port 68).
+    let mut dhcp = small_udp_socket();
+    dhcp.bind(68).expect("bind 68");
+    sockets.add(dhcp);
+    assert!(!udp_bind(&mut sockets, &mut table, owner_b, b_udp, 68));
+
+    // Closing A's socket releases the port.
+    let a_handle = table.remove(a_udp, owner_a).unwrap();
+    sockets.remove(a_handle);
+    assert!(udp_bind(&mut sockets, &mut table, owner_b, b_udp, 5353));
+}
