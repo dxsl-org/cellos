@@ -302,13 +302,20 @@ impl Stage2Table {
     /// # All-or-nothing
     /// Every table the range needs is built before the first leaf is written,
     /// so an error leaves the existing mapping unchanged.
+    ///
+    /// # Stale translations
+    /// `Ok(true)` when a leaf that was already valid now holds a different
+    /// descriptor (a remap, or a downgrade to read-only). The guest's VMID may
+    /// still cache the old translation, so the caller must invalidate Stage-2
+    /// before the change is in force. Rewriting a leaf with the same
+    /// descriptor, or filling an invalid one, reports `false`.
     pub fn map(
         &mut self,
         ipa: u64,
         hpa: u64,
         n_pages: usize,
         writable: bool,
-    ) -> Result<(), S2MapError> {
+    ) -> Result<bool, S2MapError> {
         if self.guest_ram_pages > 0 && n_pages > self.guest_ram_pages {
             return Err(S2MapError::SasViolation);
         }
@@ -333,15 +340,19 @@ impl Stage2Table {
         }
 
         self.build_tables(ipa, n_pages)?;
+        let mut replaced = false;
         for page in 0..n_pages as u64 {
             let offset = page * PAGE_SIZE as u64;
             let l3 = self.leaf_table(ipa + offset)?;
+            let desc = page_desc(hpa + offset, writable);
             // SAFETY: l3 is a live L3 table; l3_idx < 512.
             unsafe {
-                *l3.add(l3_idx(ipa + offset)) = page_desc(hpa + offset, writable);
+                let slot = l3.add(l3_idx(ipa + offset));
+                replaced |= *slot & DESC_VALID != 0 && *slot != desc;
+                *slot = desc;
             }
         }
-        Ok(())
+        Ok(replaced)
     }
 
     /// Unmap `n_pages` pages starting at guest IPA `ipa`.

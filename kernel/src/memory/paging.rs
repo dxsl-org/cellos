@@ -914,7 +914,7 @@ pub fn clear_mmio_user(base: usize, len: usize) -> PagingResult<usize> {
         return Ok(0);
     };
     let start = base & !(PAGE_SIZE - 1);
-    restore_mmio_run(start, (end - start) / PAGE_SIZE).map_err(|(va, e)| {
+    restore_mmio_run(start, (end - start) / PAGE_SIZE, &mut true).map_err(|(va, e)| {
         log::error!("[paging] clear_mmio_user: {va:#x} still user-reachable ({e:?})");
         e
     })
@@ -930,23 +930,28 @@ const MMIO_LOWER_CHUNK_PAGES: usize = 512;
 /// [`MMIO_LOWER_CHUNK_PAGES`]: each step's mapped leaves are rewritten and the
 /// whole step, absent leaves included, is invalidated with one shared flush
 /// (`protect_mapped_range`). Every page is attempted, even after one failed.
-/// Once a step's flush is unconfirmed the lowering has failed (its window is
-/// quarantined), so the remaining steps still rewrite their leaves but only
-/// request their flushes, without waiting a probe bound each.
+/// `await_flush` is the caller's one flag for its whole lowering: once a flush
+/// is unconfirmed the lowering has failed (its window is quarantined) and the
+/// flag is cleared, so every later step and run of that lowering still
+/// rewrites its leaves but only requests its flush, without waiting a probe
+/// bound each.
 /// Returns the pages cleared, or the first failure.
 #[cfg(cellos_wide)]
-pub fn restore_mmio_run(start: usize, pages: usize) -> Result<usize, (usize, PageTableError)> {
+pub fn restore_mmio_run(
+    start: usize,
+    pages: usize,
+    await_flush: &mut bool,
+) -> Result<usize, (usize, PageTableError)> {
     let mut cleared = 0;
     let mut failure = None;
     let mut done = 0;
-    let mut await_flush = true;
     while done < pages {
         let step = (pages - done).min(MMIO_LOWER_CHUNK_PAGES);
         match super::page_protect::protect_mapped_range(
             start + done * PAGE_SIZE,
             step,
             mmio_kernel_flags(),
-            &mut await_flush,
+            await_flush,
         ) {
             Ok(stepped) => cleared += stepped,
             Err(error) => {
@@ -1590,28 +1595,21 @@ pub fn virt_to_phys(vaddr: VAddr) -> Option<PhysAddr> {
 ///
 /// Decision tree:
 ///   - Kernel-mode fault: panic — a true kernel bug.
-///   - User-mode PROTECTION violation (error_code bit 0 = P set): the page is
-///     mapped and the access simply is not allowed. Terminate the cell. Never
-///     demand-page it: after W^X a cell writing its own `.text` lands here, and
+///   - Any user-mode fault: terminate the cell, matching the riscv64 / aarch64
+///     trap handlers. A PROTECTION violation (error_code bit 0 = P set) is never
+///     repaired: after W^X a cell writing its own `.text` lands here, and
 ///     re-installing the mapping would hand back the writable page the loader
-///     deliberately took away.
-///   - User-mode fault on a NOT-PRESENT page: look up the current task's VMA
-///     list; if a region covers `va`, install the mapping and return so the
-///     faulting instruction is retried.
-///   - User-mode fault with no VMA match: terminate the cell, matching the
-///     riscv64 / aarch64 trap handlers. Only when there is no cell context to
-///     charge the fault to does this panic.
+///     deliberately took away. A NOT-PRESENT page is never mapped on demand:
+///     the loader maps every page a cell may touch before it runs. Only when
+///     there is no cell context to charge the fault to does this panic.
 ///
 /// # Safety
 /// Must only be called from the #PF exception handler while the faulting
 /// context is suspended on the interrupt stack. The caller must NOT hold any
-/// spinlock that this function might try to acquire (KERNEL_ROOT, SCHEDULER,
-/// FRAME_ALLOCATOR).
+/// spinlock that this function might try to acquire (SCHEDULER).
 #[cfg(target_arch = "x86_64")]
 #[no_mangle]
 pub extern "Rust" fn vi_handle_page_fault(va: usize, error_code: u64, rip: u64, cs: u64, rsp: u64) {
-    use crate::task::SCHEDULER;
-
     log::warn!(
         "[#PF-debug] va={:#x} err={:#x} rip={:#x} cs={:#x} rsp={:#x}",
         va,
@@ -1648,67 +1646,12 @@ pub extern "Rust" fn vi_handle_page_fault(va: usize, error_code: u64, rip: u64, 
         );
     }
 
-    // Bit 0 of the error code = P: the page WAS present, so this is a permission
-    // violation, not a missing mapping. Demand paging must not run — it would
-    // re-install the page with the VMA's flags and undo the loader's W^X pass,
-    // turning "cell tried to write its own .text" into "cell may write its own
-    // .text, once per fault". Terminate instead, as riscv64/aarch64 already do.
-    if error_code & 1 != 0 {
-        fault_kill_cell(va, error_code, rip, cs, "permission violation");
-        return;
-    }
-
-    // Try to find the faulting VA in the current task's VMA list.
-    // We identify the current task via the scheduler's running-task pointer.
-    let result: Option<(PhysAddr, Flags)> = {
-        let mut sched = SCHEDULER.lock();
-        if let Some(s) = sched.as_mut() {
-            // `current_task_mut()` returns the task currently marked Running
-            // (the one whose exception context we are inside).
-            s.current_task_mut().and_then(|task| {
-                task.vma.find(va).map(|region| {
-                    let offset = va - region.va_start;
-                    let pa = region.pa_start + offset;
-                    let flags = region.flags;
-                    (pa, flags)
-                })
-            })
-        } else {
-            None
-        }
+    let why = if error_code & 1 != 0 {
+        "permission violation"
+    } else {
+        "page not present"
     };
-
-    match result {
-        Some((paddr, flags)) => {
-            // Install the mapping on demand. For ELF-backed segments the ELF loader
-            // (Phase 04) sets pa_start to the physical frame it copied the segment
-            // into; we just wire it up here. For demand-allocated regions (Stack/Heap)
-            // the ELF loader leaves pa_start = 0 and the fault handler allocates.
-            //
-            // The VMA list is empty for ELF-backed cells today (segments are
-            // mapped eagerly by the loader), so in practice only future
-            // demand-allocated regions reach here.
-            let mut batch = Batch::new();
-            crate::memory::frame::with(|alloc| {
-                let effective_pa = if paddr == 0 {
-                    // Demand-allocate a new zeroed frame. Exempt from the
-                    // quarantine cap: this dormant path panics on `None`, and
-                    // the cap must never turn a quarantine into a panic.
-                    alloc.allocate_frame_uncapped().unwrap_or_else(|| {
-                        panic!("[#PF] OOM allocating demand page at va={:#x}", va)
-                    })
-                } else {
-                    paddr
-                };
-                let _ = map_page(alloc, &mut batch, va & !0xFFF, effective_pa & !0xFFF, flags);
-            })
-            .unwrap_or_else(|| panic!("[#PF] frame allocator unavailable at va={:#x}", va));
-            let _ = batch.complete();
-        }
-        None => {
-            fault_kill_cell(va, error_code, rip, cs, "no VMA covers this address");
-        }
-    }
+    fault_kill_cell(va, error_code, rip, cs, why);
 }
 
 #[cfg(target_arch = "x86_64")]

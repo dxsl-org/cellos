@@ -21,6 +21,8 @@
 //!   * a revoked domain record refuses a new receiver slice, a new owner slice and
 //!     a new share whether its revoke completed or deferred, and its receiver
 //!     mapping is gone either way;
+//!   * a row the grant table refuses leaves no translation of its frames in the
+//!     owner's root or the shared root;
 //!   * the denies themselves consume and leak no frame.
 //!
 //! Emits one marker per property, plus a single terminal:
@@ -84,6 +86,7 @@ struct GateProbe {
     slice: bool,
     retired: bool,
     sas: bool,
+    refused_row: bool,
     frames: bool,
     /// The post-revoke refusal invariant, and whether the revoke deferred.
     retire_refusal: bool,
@@ -99,6 +102,7 @@ impl GateProbe {
             && self.slice
             && self.retired
             && self.sas
+            && self.refused_row
             && self.frames
             && self.retire_refusal
     }
@@ -191,6 +195,32 @@ fn retire_probe(grant_id: usize, receiver_space: &Arc<AddressSpace>) -> RetirePr
             && receiver_mapping_gone,
         deferred,
     }
+}
+
+/// The cleanup a refused `GrantAlloc`/`GrantRegister` row takes removes what
+/// its allocation published: the domain owner's RW leaf in its own root, and a
+/// SAS owner's USER leaf in the shared root. Each leaf is checked present
+/// first, so a cleanup that removed nothing cannot pass.
+fn refused_row_unpublished(domain_space: &Arc<AddressSpace>) -> bool {
+    use super::syscall::{
+        test_alloc_owned_grant, test_free_refused_grant, test_unpublish_refused_grant,
+    };
+    let unpublished = |tid: usize, published: &dyn Fn(usize) -> bool| {
+        let Some(run) = test_alloc_owned_grant(tid) else {
+            return false;
+        };
+        let base = run.base();
+        let was_published = published(base);
+        test_unpublish_refused_grant(tid, &run);
+        let gone = !published(base);
+        test_free_refused_grant(tid, run);
+        was_published && gone
+    };
+    unpublished(DOMAIN_TID, &|base| {
+        ledger_has(domain_space, base, Flags::READ | Flags::WRITE)
+    }) && unpublished(SAS_OWNER_TID, &|base| {
+        super::domain_grant::sas_root_state(base).1
+    })
 }
 
 /// Drive every grant entry point and return what the ABI observed.
@@ -292,6 +322,10 @@ fn probe(
         None => false,
     };
 
+    // 8. A refused row takes back every translation its allocation published;
+    //    the frames are a live row's, so the caller must keep none of them.
+    let refused_row = refused_row_unpublished(domain_space);
+
     // Teardown: release whatever the probe published, then prove the denies
     // themselves did not consume or leak a frame. The domain owner's own
     // `GrantFree` is also the post-revoke refusal invariant (see `retire_probe`),
@@ -380,6 +414,7 @@ fn probe(
         slice,
         retired,
         sas,
+        refused_row,
         frames,
         retire_refusal: retire.invariant,
         retire_deferred: retire.deferred,
@@ -433,6 +468,7 @@ pub(crate) fn run_primary() {
     report("SLICE", probe.slice);
     report("RETIRED", probe.retired);
     report("SAS", probe.sas);
+    report("REFUSED-ROW", probe.refused_row);
     report("RETIRE-REFUSAL", probe.retire_refusal);
     report("FRAMES", probe.frames);
     // Which outcome the revoke took is reported rather than asserted: the

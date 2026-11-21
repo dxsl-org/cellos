@@ -1124,6 +1124,63 @@ fn refuse_duplicate_row(what: &str, id: usize, refused: Region) {
     drop(refused);
 }
 
+/// Refuse a `GrantAlloc`/`GrantRegister` row after [`alloc_owned_grant`]
+/// already published its frames. Those frames are a live row's
+/// ([`refuse_duplicate_row`]), so the caller must keep no translation of them
+/// once that row frees them: every translation this allocation published is
+/// removed first, then the run is leaked (counted), never freed. Called with no
+/// table lock held.
+fn refuse_owned_grant(what: &str, id: usize, owner_space: &Option<DomainRoot>, refused: Region) {
+    log::error!("[grant] {what}: id {id:#x} already names a live row; the new row is refused");
+    let Some(run) = refused.into_run() else {
+        return;
+    };
+    unpublish_owned_grant(owner_space, &run);
+    crate::memory::frame_run::PENDING.leak(run, "refused grant row names a live row's frames");
+}
+
+/// Remove every translation [`alloc_owned_grant`] published for `run`; the run
+/// itself stays with the caller.
+///
+/// A domain owner's pages leave its own root and its tag is confirmed once. An
+/// unconfirmed tag is only logged: these frames cannot be held back behind it,
+/// because the live row owns them. A SAS owner's USER leaves are unpublished
+/// from the shared root (flushed, copy windows drained) and, where RAM has no
+/// identity alias (x86_64), the tables they needed are detached. The identity
+/// alias they replaced (RV64, AArch64) is not restored: the frames are not this
+/// run's to hand back to the kernel, and a missing leaf faults rather than
+/// exposes them.
+fn unpublish_owned_grant(
+    owner_space: &Option<DomainRoot>,
+    run: &crate::memory::frame_run::FrameRun,
+) {
+    match owner_space {
+        #[cfg(cellos_domain_grants)]
+        Some(space) => {
+            unmap_owner_pages(space, run.base(), run.pages());
+            if crate::memory::tlb_shootdown::confirm_tag_invalidation(space.asid()).is_err() {
+                log::warn!(
+                    "[grant] refused row at {:#x}: owner tag {} unconfirmed after its unmap",
+                    run.base(),
+                    space.asid()
+                );
+            }
+        }
+        // `alloc_owned_grant` gives a domain owner no run on this target.
+        #[cfg(not(cellos_domain_grants))]
+        Some(_) => {}
+        None => {
+            let (base, pages) = (run.base(), run.pages());
+            let mut batch = crate::memory::frame_run::Batch::new();
+            crate::task::stack::unpublish_user_frames(&mut batch, base, pages);
+            if run.alias() == crate::memory::frame_run::KernelAlias::Intact {
+                prune_unpublished_tables(&mut batch, base, pages);
+            }
+            let _ = batch.complete();
+        }
+    }
+}
+
 /// Record `ShmAlloc` frame `frame`, `size` bytes requested, as a region of
 /// `owner` that owns the frame and its `charge` (exactly the frame, refunded
 /// when it is freed) from here on; `recipient` is the cell it was handed to,
@@ -1564,6 +1621,54 @@ pub(crate) fn test_retire_grant_pages_into(
     n_pages: usize,
 ) {
     retire_grant_run_into(batch, grant_run(base, n_pages));
+}
+
+/// Test-hooks: one page of grant backing for `caller_id`, mapped exactly as
+/// `GrantAlloc` maps it before its row is recorded.
+#[cfg(all(
+    cellos_domain_grants,
+    feature = "test-hooks",
+    not(cellos_posture = "release")
+))]
+pub(crate) fn test_alloc_owned_grant(
+    caller_id: usize,
+) -> Option<crate::memory::frame_run::FrameRun> {
+    alloc_owned_grant(
+        "refusal fixture",
+        caller_id,
+        &live_domain_space(caller_id),
+        1,
+    )
+}
+
+/// Test-hooks: the translation removal a refused row takes
+/// ([`refuse_owned_grant`]) before it leaks the run.
+#[cfg(all(
+    cellos_domain_grants,
+    feature = "test-hooks",
+    not(cellos_posture = "release")
+))]
+pub(crate) fn test_unpublish_refused_grant(
+    caller_id: usize,
+    run: &crate::memory::frame_run::FrameRun,
+) {
+    unpublish_owned_grant(&live_domain_space(caller_id), run);
+}
+
+/// Test-hooks: return a fixture run to the allocator after
+/// [`test_unpublish_refused_grant`]. Unlike a refused row's, its frames name no
+/// live row. A domain owner's leaves are already gone and its fixture task never
+/// runs on a hart, so the run is released with nothing left to unmap.
+#[cfg(all(
+    cellos_domain_grants,
+    feature = "test-hooks",
+    not(cellos_posture = "release")
+))]
+pub(crate) fn test_free_refused_grant(caller_id: usize, run: crate::memory::frame_run::FrameRun) {
+    match live_domain_space(caller_id) {
+        Some(space) => release_owner_mapped_backing(&space, run, 0),
+        None => free_grant_pages(run),
+    }
 }
 
 /// Exercise registered-grant teardown without decoder or scheduler pre-locks.
@@ -2303,7 +2408,7 @@ pub(super) fn grant_alloc(caller_id: usize, size: usize) -> SyscallResult {
     );
     drop(table);
     if let Some(refused) = inserted {
-        refuse_duplicate_row("GrantAlloc", paddr, refused);
+        refuse_owned_grant("GrantAlloc", paddr, &owner_space, refused);
         return Err(SyscallError::Unknown);
     }
     Ok(paddr)
@@ -2599,7 +2704,7 @@ pub(super) fn grant_register(caller_id: usize, size: usize) -> SyscallResult {
     );
     drop(table);
     if let Some(refused) = inserted {
-        refuse_duplicate_row("GrantRegister", paddr, refused);
+        refuse_owned_grant("GrantRegister", paddr, &owner_space, refused);
         return Err(SyscallError::Unknown);
     }
     Ok(paddr)

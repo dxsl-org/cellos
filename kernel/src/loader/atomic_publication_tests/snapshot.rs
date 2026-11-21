@@ -21,13 +21,6 @@ pub(super) struct TaskSnapshot {
     critical: bool,
     replacement: Option<usize>,
     dirs: (u64, u64, usize),
-    mappings: alloc::vec::Vec<(
-        usize,
-        usize,
-        usize,
-        crate::memory::paging::Flags,
-        crate::memory::vma::VmaKind,
-    )>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -76,20 +69,6 @@ pub(super) fn snapshot() -> StateSnapshot {
                         task.inherited_dirs.spawner_generation,
                         task.inherited_dirs.set.len(),
                     ),
-                    mappings: task
-                        .vma
-                        .0
-                        .iter()
-                        .map(|mapping| {
-                            (
-                                mapping.va_start,
-                                mapping.va_end,
-                                mapping.pa_start,
-                                mapping.flags,
-                                mapping.kind,
-                            )
-                        })
-                        .collect(),
                 })
                 .collect(),
             sched
@@ -410,13 +389,6 @@ fn report_task_mismatches(
             expected.id,
             "dirs",
             expected.dirs != actual.dirs,
-        );
-        report_task_field(
-            case,
-            stage,
-            expected.id,
-            "mappings",
-            expected.mappings != actual.mappings,
         );
     }
     if before.len() != after.len() {

@@ -246,11 +246,7 @@ fn release_owner_mapped_backing(
     mut backing: crate::memory::frame_run::FrameRun,
     mapped: usize,
 ) {
-    const PAGE_SIZE: usize = 4096;
-    let base = backing.base();
-    for undo in 0..mapped {
-        let _ = space.unmap_grant_page(base + undo * PAGE_SIZE);
-    }
+    unmap_owner_pages(space, backing.base(), mapped);
     // The owner root's leaves are gone; the shared root never had one.
     let unpublished = backing.unpublish();
     debug_assert!(unpublished.is_ok(), "domain backing released twice");
@@ -260,6 +256,17 @@ fn release_owner_mapped_backing(
         batch.await_tag(space.asid());
     }
     let _ = batch.complete();
+}
+
+/// Remove the first `pages` pages of the domain backing at `base` from the
+/// owner's own root. The caller confirms the owner's tag before any frame
+/// behind them can be reused.
+#[cfg(cellos_domain_grants)]
+fn unmap_owner_pages(space: &DomainRoot, base: usize, pages: usize) {
+    const PAGE_SIZE: usize = 4096;
+    for page in 0..pages {
+        let _ = space.unmap_grant_page(base + page * PAGE_SIZE);
+    }
 }
 
 /// Allocate `n_pages` contiguous frames, zero them through the kernel's own

@@ -659,9 +659,16 @@ pub(crate) fn map_guest_memory(
         .get_mut(&VmKey::new(owner, vm_id))
         .ok_or(ViError::NotFound)?;
     // Extend guest RAM mapping to cover the requested IPA range.
-    vm.stage2
+    let replaced = vm
+        .stage2
         .map(ipa, vm.guest_pa, pages, writable)
         .map_err(|_| ViError::OutOfMemory)?;
+    if replaced {
+        // A vCPU's VMID may still cache the replaced leaf (a remap or a
+        // read-only downgrade), and nothing else invalidates it until reap.
+        // SAFETY: a VM exists only once the EL2 host or monitor is ready.
+        unsafe { s2_tlb_flush_all() };
+    }
     Ok(())
 }
 

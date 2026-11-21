@@ -124,7 +124,7 @@ fn a_device_window_goes_only_to_the_owner_of_its_device() {
     // the record is left free.
     ownership::register_mmio_device(SLOT, 0x1000, DeviceKind::VirtioSlot, Some(LINE));
     assert_eq!(request_mmio_unchecked(OTHER, SLOT, 0x1000), Ok(()));
-    let _ = release_windows(OTHER, |start, _| {
+    let _ = release_windows(OTHER, |start, _, _| {
         Err((start, PageTableError::InvalidationUnconfirmed))
     });
     assert_eq!(
@@ -150,22 +150,60 @@ fn a_device_window_goes_only_to_the_owner_of_its_device() {
 }
 
 /// A claim overlapping another owner's window reads owner liveness without
-/// holding RESOURCE_REGISTRY (SCHEDULER ranks above it); the overlap is refused
-/// and the holder keeps its window.
+/// holding RESOURCE_REGISTRY (SCHEDULER ranks above it; a held REGISTRY here
+/// panics the host rank check): `request_mmio`'s device path reaches
+/// `grant_window` with a collider, refuses the overlap while its holder is live
+/// and keeps the holder's window, then grants it once the holder is gone.
 #[test]
 fn a_claim_over_a_held_window_is_refused_without_a_rank_inversion() {
-    use super::{lookup_mmio_owner, release_mmio_for, request_mmio_unchecked};
-    const WIN: usize = 0x7D20_0000;
+    use super::{
+        lookup_mmio_owner, release_mmio_for, request_mmio, request_mmio_unchecked, DEV_PCIE,
+    };
+    use crate::sched::scheduler::Scheduler;
+    use crate::task::{tcb::Task, SCHEDULER};
+    const BDF: u32 = 0x00_D2;
+    const BAR: usize = 0xFD20_0000;
+    const HELD: usize = BAR + 0x1000;
     const HOLDER: usize = 0x7D11;
     const OTHER: usize = 0x7D12;
     let _guard = crate::TEST_STATE_LOCK.lock();
-    assert_eq!(request_mmio_unchecked(HOLDER, WIN, 0x2000), Ok(()));
+    let saved = SCHEDULER.lock().take();
+    let mut scheduler = Scheduler::new();
+    scheduler.tasks.insert(
+        HOLDER,
+        alloc::boxed::Box::new(Task::new(
+            HOLDER,
+            types::CellId(83),
+            "mmio-holder",
+            alloc::vec::Vec::new(),
+        )),
+    );
+    *SCHEDULER.lock() = Some(scheduler);
+    crate::dev::ownership::register_pci_bar(BDF, BAR, 0x2000);
+    assert_eq!(request_mmio_unchecked(HOLDER, HELD, 0x1000), Ok(()));
+    assert!(claim_pci(BDF, OTHER));
+
     assert_eq!(
-        request_mmio_unchecked(OTHER, WIN + 0x1000, 0x1000),
+        request_mmio(OTHER, BAR, 0x2000, DEV_PCIE),
         Err(ViError::AlreadyExists)
     );
-    assert_eq!(lookup_mmio_owner(WIN), Some(HOLDER));
+    assert_eq!(lookup_mmio_owner(HELD), Some(HOLDER));
+    assert_eq!(lookup_mmio_owner(BAR), None);
+
+    // Gone from the scheduler, the holder is seen dead: the overlap is granted.
+    SCHEDULER
+        .lock()
+        .as_mut()
+        .expect("installed above")
+        .tasks
+        .remove(&HOLDER);
+    assert_eq!(request_mmio(OTHER, BAR, 0x2000, DEV_PCIE), Ok(()));
+    assert_eq!(lookup_mmio_owner(BAR), Some(OTHER));
+
+    release_mmio_for(OTHER);
     release_mmio_for(HOLDER);
+    release_for(OTHER, Scope::Retired);
+    *SCHEDULER.lock() = saved;
 }
 
 /// Phase 16: a released window whose lowering is not confirmed on every hart
@@ -195,7 +233,7 @@ fn an_unlowered_window_is_quarantined_until_an_armed_retry_lowers_it() {
     assert!(request_mmio_unchecked(OWNER, LOWERED, 0x1000).is_ok());
 
     let before = quarantined();
-    let release = release_windows(OWNER, |start, _| {
+    let release = release_windows(OWNER, |start, _, _| {
         if start == UNLOWERED {
             Err((start, PageTableError::InvalidationUnconfirmed))
         } else {
@@ -256,7 +294,7 @@ fn a_release_lowers_without_the_registry_and_refuses_claims_meanwhile() {
     assert!(request_mmio_unchecked(OWNER, BASE, 0x20).is_ok());
 
     let mut lowered = alloc::vec::Vec::new();
-    let release = release_windows(OWNER, |start, pages| {
+    let release = release_windows(OWNER, |start, pages, _| {
         assert!(REGISTRY.try_lock().is_some(), "lowering under REGISTRY");
         assert_eq!(lookup_mmio_owner(BASE), None);
         assert!(!owns_exact_mmio(OWNER, BASE, 0x20));
@@ -278,6 +316,46 @@ fn a_release_lowers_without_the_registry_and_refuses_claims_meanwhile() {
     // Released: the page is free for the neighbour's claim.
     assert!(request_mmio_unchecked(OWNER + 1, NEIGHBOUR, 0x10).is_ok());
     super::release_mmio_for(OWNER + 1);
+}
+
+/// One release waits for at most one unconfirmed flush: the flag the first
+/// failing run clears reaches every later run of every window of that release,
+/// and the next release starts waiting again.
+#[test]
+fn one_unconfirmed_flush_stops_every_later_lowering_of_the_release_waiting() {
+    use super::{release_windows, request_mmio_unchecked, QUARANTINED_OWNER};
+    use crate::memory::paging::PageTableError;
+    const OWNER: usize = 0x7E2E;
+    const BASE: usize = 0x7E2E_0000_0000;
+    const PAGE: usize = 0x1000;
+    let _guard = crate::TEST_STATE_LOCK.lock();
+    // Three windows, the first two pages apart so each window is its own run.
+    for window in 0..3 {
+        assert!(request_mmio_unchecked(OWNER, BASE + 2 * window * PAGE, PAGE).is_ok());
+    }
+
+    let mut waited = alloc::vec::Vec::new();
+    let release = release_windows(OWNER, |start, _, await_flush| {
+        waited.push(*await_flush);
+        if start == BASE {
+            // `restore_mmio_run` clears the flag when its flush is unconfirmed.
+            *await_flush = false;
+            Err((start, PageTableError::InvalidationUnconfirmed))
+        } else {
+            Ok(())
+        }
+    });
+    assert_eq!(waited, [true, false, false]);
+    assert_eq!(release.unlowered.len(), 1);
+
+    // The quarantined window's retry is a new release: it waits again.
+    let mut retried = alloc::vec::Vec::new();
+    let retry = release_windows(QUARANTINED_OWNER, |_, _, await_flush| {
+        retried.push(*await_flush);
+        Ok(())
+    });
+    assert_eq!(retried, [true]);
+    assert_eq!(retry.released, [(BASE, PAGE)]);
 }
 
 /// A release lowers its window's pages as contiguous runs, skips a page

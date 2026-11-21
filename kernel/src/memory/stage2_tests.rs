@@ -125,6 +125,32 @@ fn a_map_that_runs_out_of_tables_writes_no_leaf() {
     assert_eq!(arena.used(), 4);
 }
 
+/// A map reports a valid leaf it changed (a remap or a read-only downgrade),
+/// so `map_guest_memory` invalidates the VMID's cached translation; filling an
+/// invalid leaf or rewriting the same descriptor needs no flush.
+#[test]
+fn a_map_reports_only_a_changed_valid_leaf() {
+    const PAGE: u64 = PAGE_SIZE as u64;
+    let _arena = FrameArena::new(4);
+    let mut table = Stage2Table::new(Reservation::kernel(Account::Guest)).expect("root pair");
+    assert_eq!(table.map(IPA, HPA, 2, true), Ok(false), "fresh leaves");
+    assert_eq!(table.map(IPA, HPA, 2, true), Ok(false), "same descriptors");
+    assert_eq!(
+        table.map(IPA + PAGE, HPA + PAGE, 1, false),
+        Ok(true),
+        "read-only downgrade"
+    );
+    assert_eq!(leaf(&table, IPA + PAGE), page_desc(HPA + PAGE, false));
+    assert_eq!(
+        table.map(IPA + PAGE, HPA + PAGE, 1, false),
+        Ok(false),
+        "same read-only descriptor"
+    );
+    assert_eq!(table.map(IPA, HPA + 2 * PAGE, 1, true), Ok(true), "remap");
+    table.unmap(IPA, 1);
+    assert_eq!(table.map(IPA, HPA, 1, true), Ok(false), "refilled leaf");
+}
+
 /// Phase 16 row 10: the table owns its frames as runs. Dropping it returns
 /// every one — root pair, sub-tables, guest RAM — and a second carve is
 /// refused rather than dropping RAM the table may already map.

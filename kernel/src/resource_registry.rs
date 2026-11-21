@@ -592,13 +592,20 @@ struct Release {
 
 /// Release `owner`'s windows: mark them releasing under `REGISTRY`, lower
 /// their runs through `lower` without it, then re-take it to release each
-/// window whose lowering is in force and quarantine the others.
+/// window whose lowering is in force and quarantine the others. Every run of
+/// the release gets the same `await_flush` flag
+/// (`paging::restore_mmio_run`): once one flush is unconfirmed, no later run
+/// waits a probe bound for its own.
 fn release_windows(
     owner: usize,
-    lower: impl FnMut(usize, usize) -> Result<(), (usize, crate::memory::paging::PageTableError)>,
+    lower: impl FnMut(
+        usize,
+        usize,
+        &mut bool,
+    ) -> Result<(), (usize, crate::memory::paging::PageTableError)>,
 ) -> Release {
     let windows = begin_release(&mut REGISTRY.lock(), owner);
-    let unlowered = lower_windows(&windows, lower);
+    let unlowered = lower_windows(&windows, &mut true, lower);
     let quarantined = finish_release(&mut REGISTRY.lock(), &windows, &unlowered);
     let released = windows
         .iter()
@@ -689,18 +696,23 @@ fn lowering_runs(
     runs
 }
 
-/// Lower every run of `windows` through `lower`, with no `REGISTRY` held.
-/// Every run is attempted; a window is reported with its first page that
-/// failed.
+/// Lower every run of `windows` through `lower`, with no `REGISTRY` held,
+/// passing each the one `await_flush` flag of the release. Every run is
+/// attempted; a window is reported with its first page that failed.
 fn lower_windows(
     windows: &[Releasing],
-    mut lower: impl FnMut(usize, usize) -> Result<(), (usize, crate::memory::paging::PageTableError)>,
+    await_flush: &mut bool,
+    mut lower: impl FnMut(
+        usize,
+        usize,
+        &mut bool,
+    ) -> Result<(), (usize, crate::memory::paging::PageTableError)>,
 ) -> alloc::vec::Vec<Unlowered> {
     let mut unlowered = alloc::vec::Vec::new();
     for window in windows {
         let mut failed = None;
         for &(start, pages) in &window.runs {
-            if let Err(failure) = lower(start, pages) {
+            if let Err(failure) = lower(start, pages, await_flush) {
                 failed.get_or_insert(failure);
             }
         }
@@ -717,8 +729,9 @@ fn lower_windows(
 fn lower_run(
     start: usize,
     pages: usize,
+    await_flush: &mut bool,
 ) -> Result<(), (usize, crate::memory::paging::PageTableError)> {
-    crate::memory::paging::restore_mmio_run(start, pages).map(drop)
+    crate::memory::paging::restore_mmio_run(start, pages, await_flush).map(drop)
 }
 
 /// Nothing to lower: host tests have no page tables, and the 32-bit targets
@@ -727,6 +740,7 @@ fn lower_run(
 fn lower_run(
     _start: usize,
     _pages: usize,
+    _await_flush: &mut bool,
 ) -> Result<(), (usize, crate::memory::paging::PageTableError)> {
     Ok(())
 }

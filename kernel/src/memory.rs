@@ -34,4 +34,3 @@ pub mod stage2;
 pub(crate) mod tag_pool;
 /// Completion boundary for changed translations before execution or memory reuse.
 pub mod tlb_shootdown;
-pub mod vma;

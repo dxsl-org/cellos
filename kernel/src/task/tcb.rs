@@ -416,15 +416,6 @@ pub struct Task {
     /// = heartbeat disabled (the default; most cells don't opt in).
     pub heartbeat_deadline: Option<u64>,
 
-    /// Per-cell virtual memory area list for demand-paging.
-    ///
-    /// Populated by the ELF loader (Phase 04) with one entry per ELF segment.
-    /// The #PF handler consults this list when a user-mode page fault occurs to
-    /// decide whether to map the page on demand or kill the cell.
-    /// Empty until the ELF loader runs; demand-paging is inert on RISC-V/AArch64
-    /// (those arches use identity-mapped segments today).
-    pub vma: crate::memory::vma::VmaList,
-
     /// Hot-swap replacement state.
     pub hotswap: HotswapState,
 
@@ -614,7 +605,6 @@ impl Task {
             syscall_allowlist: u64::MAX, // permit-all until ELF section is read
             sched_stats: SchedStats::default(),
             heartbeat_deadline: None,
-            vma: crate::memory::vma::VmaList::new(),
             hotswap: HotswapState::default(),
             is_critical: false,
             pending_msgs: PendingMailbox::new(),
