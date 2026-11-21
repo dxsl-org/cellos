@@ -12,7 +12,9 @@
 //!    OR-ing them across PT_LOADs that share a boundary page.
 //! 2. `reloc::apply_relocations` patches each owned frame through its kernel
 //!    alias (every arch), never through the cell's USER mapping.
-//! 3. `enforce` lowers each page to its recorded target flags.
+//! 3. `enforce` publishes the code bytes to instruction fetch on every online
+//!    hart (AArch64 cache maintenance; RV64 local + remote `fence.i`), then
+//!    lowers each page to its recorded target flags.
 //! 4. Only then may the spawn path register the task with the scheduler.
 //!
 //! Applying step 3 per-segment instead of per-page would break a page shared by
@@ -181,6 +183,16 @@ pub fn enforce(pages: &[(VAddr, Flags)], cell: &str) -> ViResult<()> {
         }
     }
 
+    // RV64 instruction fetch is not coherent with stores either, and the hart
+    // that dequeues the task may not be this one.
+    #[cfg(target_arch = "riscv64")]
+    if pages
+        .iter()
+        .any(|(_, flags)| flags.bits() & Flags::EXECUTE != 0)
+    {
+        sync_instruction_caches(cell)?;
+    }
+
     // One batch (phase 07b R1): `protect_pages` writes every leaf, then flushes
     // each contiguous run once — on the error path too — and returns `Ok` only
     // when every online CPU acknowledged. An unconfirmed CPU is the
@@ -207,6 +219,113 @@ pub fn enforce(pages: &[(VAddr, Flags)], cell: &str) -> ViResult<()> {
         lowered,
         pages.len()
     );
+    Ok(())
+}
+
+/// How long the RV64 IPI fallback waits for every asked hart's `fence.i`
+/// before refusing the spawn: the same 200 ms budget a TLB probe gets.
+#[cfg(target_arch = "riscv64")]
+const ICACHE_SYNC_PROBE_TICKS: u64 = 20 * hal::common::timer::TICKS_PER_10MS;
+
+/// Test-hooks: whether this boot already drove the IPI fallback once to emit
+/// the lane's evidence marker.
+#[cfg(all(target_arch = "riscv64", feature = "test-hooks"))]
+static ICACHE_SYNC_WITNESSED: core::sync::atomic::AtomicBool =
+    core::sync::atomic::AtomicBool::new(false);
+
+/// Make the loader's code stores fetchable on every online hart before the
+/// task can be registered, so no hart can dequeue it and fetch stale bytes a
+/// previous owner of the frame left in its instruction cache.
+///
+/// Local `fence.i`, then SBI RFENCE `remote_fence_i` to each other online hart.
+/// A hart whose RFENCE fails is asked through the IPI epoch path instead and
+/// must publish its own `fence.i` within the probe; a silent one refuses the
+/// spawn. The set is the harts online now: a later hart never fetched these
+/// bytes.
+///
+/// # Errors
+/// `ViError::IO` when a hart asked through the fallback does not confirm.
+#[cfg(target_arch = "riscv64")]
+fn sync_instruction_caches(cell: &str) -> ViResult<()> {
+    use crate::sched::smp;
+    use core::sync::atomic::Ordering;
+
+    #[cfg(feature = "test-hooks")]
+    let mut remote = [false; smp::MAX_HARTS];
+    let mut fallback = [false; smp::MAX_HARTS];
+    let mut rfence_failed = false;
+    // Masked so the local fence and "every other hart" name the same hart.
+    let sstatus = hal::arch::save_and_disable_interrupts();
+    let me = crate::sched::hart_local::current_hart_id();
+    // Order the loader's stores before any remote hart is asked to fence.
+    core::sync::atomic::fence(Ordering::SeqCst);
+    smp::local_fence_i();
+    for hart in smp::online_harts().filter(|hart| *hart != me) {
+        #[cfg(feature = "test-hooks")]
+        {
+            remote[hart] = true;
+        }
+        let sent = smp::logical_sbi_target(hart)
+            .map(|(mask, base)| hal::sbi::sbi_remote_fence_i(mask, base));
+        if !matches!(sent, Some(Ok(()))) {
+            fallback[hart] = true;
+            rfence_failed = true;
+        }
+    }
+    // SAFETY: restores exactly the interrupt state captured above.
+    unsafe { hal::arch::restore_sstatus(sstatus) };
+
+    if rfence_failed {
+        log::warn!(
+            "[wx] '{}': RFENCE remote_fence_i failed; using the IPI fallback",
+            cell
+        );
+    }
+    // Once per boot the fallback also runs after a successful RFENCE, so the
+    // lane witnesses both paths on every remote hart.
+    #[cfg(feature = "test-hooks")]
+    let harts = 1 + remote.iter().filter(|asked| **asked).count();
+    #[cfg(feature = "test-hooks")]
+    let witness = harts > 1 && !ICACHE_SYNC_WITNESSED.swap(true, Ordering::AcqRel);
+    #[cfg(feature = "test-hooks")]
+    if witness {
+        fallback = remote;
+    }
+
+    let asked = smp::RemoteEpochs::broadcast(
+        (0..smp::MAX_HARTS).filter(|hart| fallback[*hart]),
+        smp::request_icache_sync,
+    );
+    let deadline = hal::common::timer::read_mtime() + ICACHE_SYNC_PROBE_TICKS;
+    while let Some((hart, epoch)) = asked.first_outstanding(smp::icache_sync_completed) {
+        if hal::common::timer::read_mtime() > deadline {
+            log::error!(
+                "[wx] '{}': hart {} did not confirm fence.i epoch {} — refusing spawn",
+                cell,
+                hart,
+                epoch
+            );
+            return Err(ViError::IO);
+        }
+        core::hint::spin_loop();
+        // Answer peers' requests so two harts waiting on each other cannot
+        // deadlock. The hart is re-read under the mask: with interrupts open
+        // between passes this context may have moved, and answering for a
+        // stale id would forge that hart's completion.
+        let sstatus = hal::arch::save_and_disable_interrupts();
+        smp::answer_tlb_flush_in_spin(crate::sched::hart_local::current_hart_id());
+        // SAFETY: restores exactly the interrupt state captured above.
+        unsafe { hal::arch::restore_sstatus(sstatus) };
+    }
+
+    #[cfg(feature = "test-hooks")]
+    if witness {
+        log::info!(
+            "[wx] icache sync: local+remote PASS harts={} rfence={} ipi-fallback=PASS",
+            harts,
+            if rfence_failed { "failed" } else { "ok" }
+        );
+    }
     Ok(())
 }
 

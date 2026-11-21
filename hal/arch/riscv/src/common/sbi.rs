@@ -12,6 +12,7 @@ const SBI_FID_DBCN_WRITE: usize = 0;
 const SBI_EID_BASE: usize = 0x10;
 const SBI_FID_PROBE_EXTENSION: usize = 3;
 const SBI_EID_RFENCE: usize = 0x5246_4E43;
+const SBI_FID_REMOTE_FENCE_I: usize = 0;
 const SBI_FID_REMOTE_SFENCE_VMA: usize = 1;
 
 #[inline(always)]
@@ -70,6 +71,26 @@ pub fn sbi_rfence_available() -> Result<bool, usize> {
     let (error, value) = sbi_call(SBI_EID_BASE, SBI_FID_PROBE_EXTENSION, SBI_EID_RFENCE, 0, 0);
     if error == 0 {
         Ok(value != 0)
+    } else {
+        Err(error)
+    }
+}
+
+/// Synchronously execute `fence.i` on selected remote harts.
+///
+/// `hart_mask` uses the SBI hart-mask encoding relative to `hart_mask_base`.
+/// The firmware returns only after every selected hart has fenced, so code
+/// bytes stored before the call are fetchable there afterwards.
+pub fn sbi_remote_fence_i(hart_mask: usize, hart_mask_base: usize) -> Result<(), usize> {
+    let (error, _) = sbi_call(
+        SBI_EID_RFENCE,
+        SBI_FID_REMOTE_FENCE_I,
+        hart_mask,
+        hart_mask_base,
+        0,
+    );
+    if error == 0 {
+        Ok(())
     } else {
         Err(error)
     }

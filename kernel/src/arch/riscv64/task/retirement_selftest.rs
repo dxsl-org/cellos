@@ -744,6 +744,7 @@ pub fn run_primary() {
     FORCED_SSIP_DELIVERED.store(false, Ordering::Release);
     FORCED_SSIP_EARLY.store(false, Ordering::Release);
     CELL_ID_RELEASE_ORDER_OK.store(false, Ordering::Release);
+    CELL_ID_RELEASE_OBSERVED.store(false, Ordering::Release);
     FAULT_ARMED.store(false, Ordering::Release);
     FAULT_DIRECT_TRIGGERED.store(false, Ordering::Release);
     FAULT_TASK_ENTRY.store(false, Ordering::Release);

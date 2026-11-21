@@ -213,7 +213,16 @@ pub fn run_primary() {
     // flushed the whole TLB). A timer tick on either hart runs the scheduler's
     // housekeeping, whose reaps flush locally and RFENCE the peer, so both harts
     // mask the timer for the round: hart 0 from arming to the verdict, hart 1
-    // from its prime to its stale write.
+    // from its prime to its stale write. Masking harts 0 and 1 is enough only
+    // while those are the only online harts: once `MAX_HARTS` rises above 2,
+    // every online hart must mask its timer for this round (a hart 2+ reap can
+    // RFENCE hart 1 and fail the negative control spuriously), and a round must
+    // prove a flush reaches a hart other than hart 1. The assertion below
+    // forces that rework instead of letting the round run unchanged.
+    const _: () = assert!(
+        crate::sched::smp::MAX_HARTS == 2,
+        "tlb_shootdown_selftest masks the timer on harts 0 and 1 only"
+    );
     let primary_sstatus = crate::hal::arch::save_and_disable_interrupts();
     set_phase(NEGATIVE_ARMED);
     let negative = if !wait_for(NEGATIVE_PRIMED) {

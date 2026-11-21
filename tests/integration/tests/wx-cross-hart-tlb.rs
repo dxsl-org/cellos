@@ -1,5 +1,7 @@
 //! RV64 W^X shootdown proof: two harts, physical-byte oracle, negative control,
-//! and the IPI epoch fallback when every RFENCE fails.
+//! and the IPI epoch fallback when every RFENCE fails. Also requires the
+//! loader's instruction-cache sync to reach the remote hart through both SBI
+//! RFENCE `remote_fence_i` and the IPI fallback before a task is registered.
 
 use std::path::PathBuf;
 use vicell_integration_tests::{ci_guard, qemu_binary, skip_notice, QemuRunner};
@@ -57,13 +59,29 @@ fn rv64_rfence_blocks_the_remote_stale_write() {
 
         // Phase 16: with every RFENCE failing, the IPI epoch fallback alone
         // must put the lowering in force on hart 1.
-        qemu.wait_for("[selftest] TLB-SHOOTDOWN-RFENCE-FALLBACK: PASS", BOOT_TIMEOUT)
-            .unwrap_or_else(|error| {
-                panic!(
-                    "RFENCE-failure fallback iteration {iteration} failed: {error}\n{}",
-                    qemu.dump()
-                )
-            });
+        qemu.wait_for(
+            "[selftest] TLB-SHOOTDOWN-RFENCE-FALLBACK: PASS",
+            BOOT_TIMEOUT,
+        )
+        .unwrap_or_else(|error| {
+            panic!(
+                "RFENCE-failure fallback iteration {iteration} failed: {error}\n{}",
+                qemu.dump()
+            )
+        });
+
+        // A spawn after hart 1 came online must fence.i on both harts, and the
+        // IPI fallback must be answered by the remote hart's own fence.i.
+        qemu.wait_for(
+            "[wx] icache sync: local+remote PASS harts=2 rfence=ok ipi-fallback=PASS",
+            BOOT_TIMEOUT,
+        )
+        .unwrap_or_else(|error| {
+            panic!(
+                "instruction-cache sync iteration {iteration} failed: {error}\n{}",
+                qemu.dump()
+            )
+        });
 
         let output = qemu.dump();
         let boot_zero = output.contains("[smp] physical 0 -> logical 0 boot")

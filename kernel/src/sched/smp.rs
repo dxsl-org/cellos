@@ -195,6 +195,8 @@ fn service_tlb_flush_captured(hart_id: usize) -> (usize, bool) {
     if hart_id >= MAX_HARTS {
         return (0, false);
     }
+    #[cfg(target_arch = "riscv64")]
+    service_icache_sync(hart_id);
     let epoch = TLB_FLUSH_REQUEST[hart_id].load(Ordering::Acquire);
     if TLB_FLUSH_COMPLETE[hart_id].load(Ordering::Acquire) < epoch {
         crate::memory::paging::tlb_flush_all();
@@ -216,6 +218,58 @@ fn service_tlb_flush_captured(hart_id: usize) -> (usize, bool) {
 /// before the requester's Acquire observation.
 fn publish_completion(complete: &AtomicUsize, epoch: usize) -> bool {
     complete.fetch_max(epoch, Ordering::Release) < epoch
+}
+
+/// RV64 instruction-cache sync epochs: the IPI fallback a code publisher takes
+/// when SBI RFENCE `remote_fence_i` fails. Kept apart from the TLB epochs so a
+/// routine invalidation never pays for an instruction-cache flush. Served on
+/// the same trap path and in the same spin answers as the TLB request.
+#[cfg(target_arch = "riscv64")]
+static ICACHE_SYNC_REQUEST: [AtomicUsize; MAX_HARTS] = [const { AtomicUsize::new(0) }; MAX_HARTS];
+#[cfg(target_arch = "riscv64")]
+static ICACHE_SYNC_COMPLETE: [AtomicUsize; MAX_HARTS] = [const { AtomicUsize::new(0) }; MAX_HARTS];
+
+/// Make this hart's later instruction fetches observe every store it has
+/// observed (RV64 does not keep instruction fetch coherent with stores).
+#[cfg(target_arch = "riscv64")]
+#[inline]
+pub fn local_fence_i() {
+    // SAFETY: `fence.i` only orders this hart's later instruction fetches after
+    // the stores it has observed; it writes no register or memory.
+    unsafe { core::arch::asm!("fence.i", options(nostack, preserves_flags)) };
+}
+
+/// Ask `hart_id` to execute `fence.i` and return the epoch it must publish.
+///
+/// The Release half of the request orders the requester's code stores before
+/// the target's Acquire of the epoch, so the target's `fence.i` covers them.
+#[cfg(target_arch = "riscv64")]
+pub fn request_icache_sync(hart_id: usize) -> usize {
+    if hart_id >= MAX_HARTS {
+        return 0;
+    }
+    let epoch = ICACHE_SYNC_REQUEST[hart_id].fetch_add(1, Ordering::AcqRel) + 1;
+    send_ipi(hart_id);
+    epoch
+}
+
+/// Is `epoch` known complete on `hart_id`? Epoch 0 means "nothing requested".
+#[cfg(target_arch = "riscv64")]
+pub fn icache_sync_completed(hart_id: usize, epoch: usize) -> bool {
+    epoch == 0
+        || ICACHE_SYNC_COMPLETE
+            .get(hart_id)
+            .is_some_and(|complete| complete.load(Ordering::Acquire) >= epoch)
+}
+
+/// Serve one captured instruction-cache sync request on this hart.
+#[cfg(target_arch = "riscv64")]
+fn service_icache_sync(hart_id: usize) {
+    let epoch = ICACHE_SYNC_REQUEST[hart_id].load(Ordering::Acquire);
+    if ICACHE_SYNC_COMPLETE[hart_id].load(Ordering::Acquire) < epoch {
+        local_fence_i();
+        publish_completion(&ICACHE_SYNC_COMPLETE[hart_id], epoch);
+    }
 }
 
 /// Test view of the last invalidation epoch `hart_id` confirmed.
