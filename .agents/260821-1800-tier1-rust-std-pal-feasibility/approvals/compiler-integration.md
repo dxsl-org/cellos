@@ -2,12 +2,12 @@
 
 Artifact: `artifacts/compiler-strategy-decision.md`
 Canonical approval input: `artifacts/approval-input-manifest.json`
-Approval-input-manifest SHA-256: `ecb06f80c6130eee5865bd72233ab83ee4ec044ceb0c742c691550e6811c4ec6`
+Approval-input-manifest SHA-256: `baf514598589ec4680151dc0629bacb8396baaf3b2bfba0ac6dbe6d724b8761d`
 
 | Named signer role | Decision | Approval-input-manifest digest | Date | Independence |
 |---|---|---|---|---|
-| Compiler/toolchain owner (maintainer) | APPROVED_FOR_LATER_IMPLEMENTATION_CHECKPOINT | `ecb06f80c6130eee5865bd72233ab83ee4ec044ceb0c742c691550e6811c4ec6` | 2026-09-16 | implementation owner permitted |
-| Independent PAL reviewer (maintainer approval recorded) | APPROVED_FOR_LATER_IMPLEMENTATION_CHECKPOINT | `ecb06f80c6130eee5865bd72233ab83ee4ec044ceb0c742c691550e6811c4ec6` | 2026-09-16 | ratified under solo-first governance |
+| Compiler/toolchain owner (maintainer) | APPROVED_FOR_LATER_IMPLEMENTATION_CHECKPOINT | `baf514598589ec4680151dc0629bacb8396baaf3b2bfba0ac6dbe6d724b8761d` | 2026-09-16 | implementation owner permitted |
+| Independent PAL reviewer (maintainer approval recorded) | APPROVED_FOR_LATER_IMPLEMENTATION_CHECKPOINT | `baf514598589ec4680151dc0629bacb8396baaf3b2bfba0ac6dbe6d724b8761d` | 2026-09-16 | ratified under solo-first governance |
 
 This record approves nothing until both rows name a human signer, say `APPROVED_FOR_LATER_IMPLEMENTATION_CHECKPOINT`, bind this same independently verified manifest digest/date, satisfy independence, and confirm the exact kernel security-backing path set plus the no-`dev-weak-rng` production tuple are bound into the compiler/sysroot/kernel evidence tuple. It never authorizes target publication or promotion.
 

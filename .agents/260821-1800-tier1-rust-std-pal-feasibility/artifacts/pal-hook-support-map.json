@@ -1379,7 +1379,7 @@
     "closure": "exact-set",
     "digest_algorithm": "sha256(canonical-json(entries))",
     "entry_count": 11,
-    "inventory_digest": "37a64431f70401174467530195703e64db3df16ab10239b04411ce20e8d7f597",
+    "inventory_digest": "d869e5ea61081ee70b7d21991492f954fe9524c80a68af6b2ea7a3107b66eb9d",
     "entries": [
       {
         "path": "kernel/Cargo.toml",
@@ -1416,21 +1416,21 @@
         "roles": [
           "user-buffer validation primitives"
         ],
-        "sha256": "5027f334fbaf46d2714b3a5b5870a26eff171c35a10eadbb9a643cd146c68e91"
+        "sha256": "57faed7ba5c933eeeac9371613d9c446c9f73ec88376fab08ab250cf051cdc09"
       },
       {
         "path": "kernel/src/task/syscall/grant.rs",
         "roles": [
           "grant-teardown lock ordering for the GetRandom write"
         ],
-        "sha256": "6136da53532ee957ae6a2853a34e02da4bfe51e6a11c3b3400fed97ae49c6651"
+        "sha256": "5233096187bd61cc0ab732d0233b587baf0d065ddb2307feccd8373d8cb62b84"
       },
       {
         "path": "kernel/src/task/syscall/ipc.rs",
         "roles": [
           "GetRandom handler"
         ],
-        "sha256": "0ebc8c9648922e8ac999e21d178fd44a606ef787ef2efc6f802c175b9772acf6"
+        "sha256": "97f3b465aeef9b86ebbad9bdddf6e2fa544373fe354d7d83cea36a61c77f8045"
       },
       {
         "path": "kernel/src/task/syscall/misc.rs",
@@ -1445,7 +1445,7 @@
           "allowlist gate",
           "architecture dispatch"
         ],
-        "sha256": "5f70a7d67790c54db981485412969964f3f7eaca656d623a317b201b817efc1a"
+        "sha256": "088d0d5ea45c09685ad842c846c00943150057f5cc3300e8532e4b7f77a49cab"
       },
       {
         "path": "libs/abi/src/syscall.rs",

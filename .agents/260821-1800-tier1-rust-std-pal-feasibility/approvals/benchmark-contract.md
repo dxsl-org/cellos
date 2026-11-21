@@ -2,12 +2,12 @@
 
 Artifacts: `artifacts/workload-parity-spec.md`, `artifacts/benchmark-validator-contract.md`
 Canonical approval input: `artifacts/approval-input-manifest.json`
-Approval-input-manifest SHA-256: `ecb06f80c6130eee5865bd72233ab83ee4ec044ceb0c742c691550e6811c4ec6`
+Approval-input-manifest SHA-256: `baf514598589ec4680151dc0629bacb8396baaf3b2bfba0ac6dbe6d724b8761d`
 
 | Named signer role | Decision | Approval-input-manifest digest | Date | Independence |
 |---|---|---|---|---|
-| Performance owner (maintainer) | APPROVED_FOR_LATER_IMPLEMENTATION_CHECKPOINT | `ecb06f80c6130eee5865bd72233ab83ee4ec044ceb0c742c691550e6811c4ec6` | 2026-09-16 | workload owner permitted |
-| Independent measurement reviewer (maintainer approval recorded) | APPROVED_FOR_LATER_IMPLEMENTATION_CHECKPOINT | `ecb06f80c6130eee5865bd72233ab83ee4ec044ceb0c742c691550e6811c4ec6` | 2026-09-16 | ratified under solo-first governance |
+| Performance owner (maintainer) | APPROVED_FOR_LATER_IMPLEMENTATION_CHECKPOINT | `baf514598589ec4680151dc0629bacb8396baaf3b2bfba0ac6dbe6d724b8761d` | 2026-09-16 | workload owner permitted |
+| Independent measurement reviewer (maintainer approval recorded) | APPROVED_FOR_LATER_IMPLEMENTATION_CHECKPOINT | `baf514598589ec4680151dc0629bacb8396baaf3b2bfba0ac6dbe6d724b8761d` | 2026-09-16 | ratified under solo-first governance |
 
 Both named human signers must explicitly approve this same independently verified manifest digest only after the `PAL-019` production entropy tuple and `PAL-031` hostile direct-syscall pointer cases are part of the required live evidence plan. Approval covers fixture behavior only; synthetic reports remain non-promotional and cannot replace authenticated live evidence.
 
