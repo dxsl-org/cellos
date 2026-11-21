@@ -4,6 +4,28 @@
 
 ## [Unreleased] Intel x86-64 C2C-only direction
 
+- **2026-11-21 — Architecture-review residuals N-2 to N-7 closed.** With N-8 and N-9 already done, no `N-` residual from the 2026-11-10 review remains open. The owner chose the recommended option for each.
+  - **N-2** (`022e181632`): five unsafe-hygiene items.
+    - Lua `vnet` helpers are safe methods on `LuaStack`, whose `unsafe fn new` carries the live-state contract.
+    - Doom skips a frame when `DG_ScreenBuffer` is null.
+    - NVMe reads CQ fields through `addr_of!` raw pointers, never `&`.
+    - The net TLS `sockets()`/`poll_network()` helpers gain `# Safety` contracts.
+    - silo-guest `publish_response` asserts the 4072-byte mailbox capacity.
+  - **N-3** (`f42fc6f694`): every virtio-blk request is bounded on all three architectures, including flush.
+    - The vendored `virtio-drivers` gains `flush_nb`, `complete_flush` and `needs_reset`.
+    - `io.rs` applies the poison latch and the 30 s deadline from N-1 to read, write and flush.
+    - The owner approved raising the TCB unsafe baseline: `blk.rs` 5→8, total 589→590.
+    - The vendored crate's own test suite had never compiled. It now does and runs in CI (`cargo test -p virtio-drivers`).
+  - **N-4** (`4716d9ea9e`): [ADR-0036](decisions/0036-retire-spec00-laws-5-and-6-sas-clause.md) retires Spec 00 Law 5 (no `mod.rs`) and the Law 6 rule that `Vi` traits carry ownership transfer.
+  - **N-5** (`dfbbc3b6b2`): the orphan `abi::fs::Lease`, whose `Drop` was empty, is deleted, with Law 1 double confirmation.
+  - **N-6** (`b9e22d7f27`, wire break): `GetFile`/`DataPtr` is retired.
+    - Request byte 0 and response byte 1 are tombstones, so no reply can carry a raw pointer.
+    - File reads go through `ReadFileGrant`.
+  - **N-7** (`bb005d35dc`): `switch_with_root` panics in every build when a private root reaches it at EL2.
+  - **Verification:**
+    - Host tests: abi 154, wire 92, service-vfs 150, lua 9, driver-nvme 15, service-net 112, virtio-drivers 28 plus 8 doctests.
+    - `vfs-quota` lane 2/2; development-Silo AArch64 test-hooks lane (EL2) passes; RV64 boots to the shell.
+    - `cellos-sign --check --strict` passes.
 - **2026-11-21 — `B-AARCH64-SEMHOSTING` renewed again (Issue #49).** The #48 resolution was due to expire on 2026-12-20T02:15:23Z. @datgausaigon decided `DECISION: YES.` on #49 (2026-11-21T02:27:25Z) over a fresh test-hooks run at `18f62d72b7`, recorded at `39d4f1313e` (`docs/evidence/aarch64-semihosting-20261121-01-{raw,runner}.txt`, QEMU 8.2.2, vfs-test 96/0). As with #48, the renewal took two pushes: event 17 `record_correction` reopened the blocker, and event 18 `blocker_resolution` re-resolved it with a 30-day TTL ending 2026-12-21T03:53:07Z.
 - **2026-11-20 — C2C broker oracle proves NET_RX again (residual N-8).** `c2c-broker-oracle` failed with `oracle passed without proving interrupt-driven NET_RX completion` on every run of this machine's self-hosted runners and on 10 of the last 12 CI runs. The kernel producer was not at fault. The oracle boots with `-netdev user,restrict=on`, so the only inbound frames are the DHCP OFFER and ACK. Each reply arrived while the net service was still inside the turn that sent the request, so the RX poll in `pump_rx_split` drained it before the service parked. The NIC interrupt therefore only set `NET_RX_PENDING`. The resulting completion came out of a wait much later, and the next turn drained nothing. The old rule in `probe.rs` accepted only a frame drained in the turn right after the completion, and no later frame ever came. A temporary trace showed this: `drained=1 pending=false` twice, then one `completion source=1` after the net-broker restart, then no frames. The rule now lives in `cells/services/net/src/net-rx-proof.rs` (`NetRxProof`). A NET_RX completion proves the producer when a frame was drained in the turn after it, as before, or since the previous NET_RX completion. Both cases still require an interrupt-produced record and a real frame. A stale record expires after one empty turn, and frames count toward only one record. Six host unit tests cover the rule. The `NIC driver reply timeout` line, which the closure matrix had linked to N-8, appears after the proof was already lost and is not its cause.
 - **2026-11-20 — TLS and futex lanes in CI.** `scripts/qemu-tls-test.sh` and `scripts/qemu-futex-test.sh` had been `manual` lanes with "current pass/fail unknown" since 2026-11-10. Before booting, both ran a plain `cargo build -p cellos-kernel`. Without `EMBEDDED_OVERRIDE`, that build embeds the deprecated in-tree init, which exits before the shell, so neither lane could pass against a `gen-disk-ci.sh` disk. They now use the kernel that `gen-disk-ci.sh` built with the disk, as the FP lane does, and fail with a pointer to that script when it is missing. Both are tier `pr` in `lanes.toml` and run in CI's RV64 `boot-suite` job at `--harts 1` and `--harts 2`. Verified locally: TLS and futex pass at both hart counts.
