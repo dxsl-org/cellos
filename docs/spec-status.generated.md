@@ -180,9 +180,9 @@ Plans linked from `.agents/plan-portfolio.md`, `README.md`, `docs/README.md` wit
 - `docs/specs/09-vfs.md:57` — 2b. Directory capabilities (2026-07-31)
 - `docs/specs/09-vfs.md:104` — 2c. File handles (2026-08-09)
 - `docs/specs/09-vfs.md:131` — 3. Đường dữ liệu: copy và grant
-- `docs/specs/09-vfs.md:149` — 4. Page Cache
-- `docs/specs/09-vfs.md:159` — 5. Large File Support (LFS)
-- `docs/specs/09-vfs.md:165` — 6. Fault Isolation (Luật 4 & Panic Recovery)
+- `docs/specs/09-vfs.md:150` — 4. Page Cache
+- `docs/specs/09-vfs.md:160` — 5. Large File Support (LFS)
+- `docs/specs/09-vfs.md:166` — 6. Fault Isolation (Luật 4 & Panic Recovery)
 - `docs/specs/10-testing.md:7` — 1. Triết lý: Test trong "Nồi lẩu" SAS
 - `docs/specs/10-testing.md:10` — 2. Các tầng Testing
 - `docs/specs/10-testing.md:22` — 3. Fault Injection Cell (Kẻ phá hoại)
@@ -265,23 +265,23 @@ Plans linked from `.agents/plan-portfolio.md`, `README.md`, `docs/README.md` wit
 - `docs/specs/17-ipc-wire-contract.md:224` — 7. Fail loud, never silent
 - `docs/specs/17-ipc-wire-contract.md:243` — 8. Case studies (the evidence this spec is built on)
 - `docs/specs/17-ipc-wire-contract.md:267` — 9. Compliance checklist & amendments
-- `docs/specs/17-ipc-wire-contract.md:434` — 10. Readiness notifications (G4 P2.5) — Draft / reserved-but-unbuilt
-- `docs/specs/17-ipc-wire-contract.md:443` — 10.1 `NET_READY` frame
-- `docs/specs/17-ipc-wire-contract.md:458` — 10.2 Collision-safety invariants (normative)
-- `docs/specs/17-ipc-wire-contract.md:474` — 10.3 Interest registration
-- `docs/specs/17-ipc-wire-contract.md:488` — 10.4 Edge semantics + delivery
-- `docs/specs/17-ipc-wire-contract.md:500` — 10.5 `REACTOR_WAKE` + the kernel same-cell fallback
-- `docs/specs/17-ipc-wire-contract.md:519` — 10.6 One recv consumer per tid + demux
-- `docs/specs/17-ipc-wire-contract.md:539` — 10.7 Handle namespace (frozen)
-- `docs/specs/17-ipc-wire-contract.md:549` — 11. Caller attestation — Ratified 2026-07-30
-- `docs/specs/17-ipc-wire-contract.md:554` — 11.1 The problem
-- `docs/specs/17-ipc-wire-contract.md:572` — 11.2 The mechanism
-- `docs/specs/17-ipc-wire-contract.md:589` — 11.3 Normative rules
-- `docs/specs/17-ipc-wire-contract.md:615` — 11.4 Direct (non-`ecall`) service calls
-- `docs/specs/17-ipc-wire-contract.md:642` — 12. Addendum: Tier 2 Native Domain IPC & Boundary Contracts
-- `docs/specs/17-ipc-wire-contract.md:646` — 12.1 Copied IPC across Domain Boundaries
-- `docs/specs/17-ipc-wire-contract.md:656` — 12.2 Inter-Domain Zero-Copy Grants
-- `docs/specs/17-ipc-wire-contract.md:663` — 12.3 Private-root grant lifecycle — Ratified 2026-09-28
+- `docs/specs/17-ipc-wire-contract.md:443` — 10. Readiness notifications (G4 P2.5) — Draft / reserved-but-unbuilt
+- `docs/specs/17-ipc-wire-contract.md:452` — 10.1 `NET_READY` frame
+- `docs/specs/17-ipc-wire-contract.md:467` — 10.2 Collision-safety invariants (normative)
+- `docs/specs/17-ipc-wire-contract.md:483` — 10.3 Interest registration
+- `docs/specs/17-ipc-wire-contract.md:497` — 10.4 Edge semantics + delivery
+- `docs/specs/17-ipc-wire-contract.md:509` — 10.5 `REACTOR_WAKE` + the kernel same-cell fallback
+- `docs/specs/17-ipc-wire-contract.md:528` — 10.6 One recv consumer per tid + demux
+- `docs/specs/17-ipc-wire-contract.md:548` — 10.7 Handle namespace (frozen)
+- `docs/specs/17-ipc-wire-contract.md:558` — 11. Caller attestation — Ratified 2026-07-30
+- `docs/specs/17-ipc-wire-contract.md:563` — 11.1 The problem
+- `docs/specs/17-ipc-wire-contract.md:581` — 11.2 The mechanism
+- `docs/specs/17-ipc-wire-contract.md:598` — 11.3 Normative rules
+- `docs/specs/17-ipc-wire-contract.md:624` — 11.4 Direct (non-`ecall`) service calls
+- `docs/specs/17-ipc-wire-contract.md:646` — 12. Addendum: Tier 2 Native Domain IPC & Boundary Contracts
+- `docs/specs/17-ipc-wire-contract.md:650` — 12.1 Copied IPC across Domain Boundaries
+- `docs/specs/17-ipc-wire-contract.md:660` — 12.2 Inter-Domain Zero-Copy Grants
+- `docs/specs/17-ipc-wire-contract.md:667` — 12.3 Private-root grant lifecycle — Ratified 2026-09-28
 - `docs/specs/18-cell-trust-tiers.md:12` — 1. Context
 - `docs/specs/18-cell-trust-tiers.md:36` — 2. Decision
 - `docs/specs/18-cell-trust-tiers.md:98` — 2.1 Tier 1 admission — `cellos-sign`
@@ -357,8 +357,8 @@ Plans linked from `.agents/plan-portfolio.md`, `README.md`, `docs/README.md` wit
 
 - `docs/specs/00-context.md:10` — `✅` in: - ✅ **YES** Cellular architecture with bounded, kernel-copied IPC messages; zero-copy only through page-level Grants
 - `docs/specs/00-context.md:11` — `✅` in: - ✅ **YES** Rust type system for Tier 1 isolation; Tier 2 private roots and Tier 3 VMs add hardware isolation ([ADR-0015
-- `docs/specs/00-context.md:177` — `LOC` in: | `rustc` (nightly Rust compiler) | Enforce LBI — forbid unsafe, ownership/borrow rules | ~3–5M LOC |
-- `docs/specs/00-context.md:179` — `LOC` in: | `libs/abi` + `libs/types` | Stable ABI giữa kernel và Cells | ~2K LOC |
+- `docs/specs/00-context.md:176` — `LOC` in: | `rustc` (nightly Rust compiler) | Enforce LBI — forbid unsafe, ownership/borrow rules | ~3–5M LOC |
+- `docs/specs/00-context.md:178` — `LOC` in: | `libs/abi` + `libs/types` | Stable ABI giữa kernel và Cells | ~2K LOC |
 - `docs/specs/04-hardware.md:127` — `LOC` in: > Not planned: Mellanox mlx5 (100K+ LOC), Bluetooth/WiFi, USB xHCI before G2, full ACPI, audio.
 - `docs/specs/05-application.md:113` — `LOC` in: - Legacy robot firmware C/C++ (10K+ LOC) — rewrite cost quá cao
 - `docs/specs/05-application.md:151` — `✅` in: | Memory | `malloc/free/realloc/calloc` | ✅ Done (AllocHeader, 16-byte align) |
