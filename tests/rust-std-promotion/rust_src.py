@@ -12,7 +12,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-PINNED_TOOLCHAIN = "nightly-2026-05-01"
+PINNED_TOOLCHAIN = "nightly-2026-11-21"
 
 
 def resolve(pinned: str) -> Path:

@@ -30,7 +30,7 @@ issues; all are folded into the phases below.
 |-------|------|--------|------------|
 | 1 | [Select nightly and rebase the rust-std PAL patch](./phase-01-nightly-select-and-pal-rebase.md) | completed | |
 | 2 | [Move the repo to the new pin](./phase-02-repo-toolchain-migration.md) | in-progress | |
-| 3 | [PAL compiler-strategy re-decision for the new nightly](./phase-03-pal-compiler-redecision.md) | blocked: signers | |
+| 3 | [PAL compiler-strategy re-decision for the new nightly](./phase-03-pal-compiler-redecision.md) | completed (signed dmin 2026-11-22) | |
 | 4 | [Spec 23 amendment and slice-A checkpoint](./phase-04-spec23-amendment-and-checkpoint.md) | blocked: steward/reviewer | ✓ |
 | 5 | [Monty fetch, platform patch and supply-chain gate](./phase-05-monty-fetch-and-patch.md) | completed | |
 | 6 | [Tier 2 monty-smoke cell and x86_64 QEMU witness](./phase-06-monty-smoke-tier2-witness.md) | witness PASS; checkpoint pending slice A | ✓ |

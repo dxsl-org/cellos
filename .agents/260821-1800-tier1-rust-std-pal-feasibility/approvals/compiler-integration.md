@@ -2,12 +2,14 @@
 
 Artifact: `artifacts/compiler-strategy-decision.md`
 Canonical approval input: `artifacts/approval-input-manifest.json`
-Approval-input-manifest SHA-256: `baf514598589ec4680151dc0629bacb8396baaf3b2bfba0ac6dbe6d724b8761d`
+Approval-input-manifest SHA-256: `75debedee4c0f03e08f7f4c4dd6d9d12c7f37a45a86d5acf17e11fb32903c392`
 
 | Named signer role | Decision | Approval-input-manifest digest | Date | Independence |
 |---|---|---|---|---|
-| Compiler/toolchain owner (maintainer) | APPROVED_FOR_LATER_IMPLEMENTATION_CHECKPOINT | `baf514598589ec4680151dc0629bacb8396baaf3b2bfba0ac6dbe6d724b8761d` | 2026-09-16 | implementation owner permitted |
-| Independent PAL reviewer (maintainer approval recorded) | APPROVED_FOR_LATER_IMPLEMENTATION_CHECKPOINT | `baf514598589ec4680151dc0629bacb8396baaf3b2bfba0ac6dbe6d724b8761d` | 2026-09-16 | ratified under solo-first governance |
+| Compiler/toolchain owner (maintainer: dmin) | APPROVED_FOR_LATER_IMPLEMENTATION_CHECKPOINT | `75debedee4c0f03e08f7f4c4dd6d9d12c7f37a45a86d5acf17e11fb32903c392` | 2026-11-22 | implementation owner permitted |
+| Independent PAL reviewer (maintainer approval recorded: dmin) | APPROVED_FOR_LATER_IMPLEMENTATION_CHECKPOINT | `75debedee4c0f03e08f7f4c4dd6d9d12c7f37a45a86d5acf17e11fb32903c392` | 2026-11-22 | ratified under solo-first governance over the independent reviewer report `PalRedecisionReview` (the rebase author did not review) |
+
+Re-decision signed 2026-11-22 by dmin for both roles: the base moves from nightly 2026-05-01 (rustc 1.97, commit f53b654a8) to nightly 2026-11-21 (rustc 1.102, commit c7d5ba59d), per [`../artifacts/compiler-strategy-decision.md`](../artifacts/compiler-strategy-decision.md) section "Re-decision 2026-11-22". This is a new signer decision, not a condition-6 re-bind: the original 2026-09-16 signatures covered the previous base, and the rows above now bind the re-pinned approval-input manifest.
 
 This record approves nothing until both rows name a human signer, say `APPROVED_FOR_LATER_IMPLEMENTATION_CHECKPOINT`, bind this same independently verified manifest digest/date, satisfy independence, and confirm the exact kernel security-backing path set plus the no-`dev-weak-rng` production tuple are bound into the compiler/sysroot/kernel evidence tuple. It never authorizes target publication or promotion.
 

@@ -178,7 +178,7 @@
       "error_semantics": "Allocation returns null only to the Rust allocation handler; OOM terminates, never fabricates memory.",
       "evidence": [
         {
-          "anchor": "library/std/src/sys/alloc/mod.rs:3-18",
+          "anchor": "library/std/src/sys/alloc/mod.rs:49-64,113-129; library/std/src/alloc.rs:162-315,456-514",
           "kind": "pinned_std"
         },
         {
@@ -191,7 +191,7 @@
       "rationale": "A real freeing allocator exists with an explicit single-task premise.",
       "required_by": "global allocation",
       "safety_invariants": "Single-task/single-hart non-overlap and alignment are mandatory.",
-      "symbol": "System GlobalAlloc methods",
+      "symbol": "System Allocator impl (GlobalAlloc via the GlobalAllocator blanket impl) over sys::alloc::{alloc,dealloc,realloc,alloc_zeroed}",
       "upstream_path": "library/std/src/sys/alloc/mod.rs"
     },
     {
@@ -206,7 +206,7 @@
       "error_semantics": "Invalid encoding follows OsString policy; unavailable storage is not silently invented.",
       "evidence": [
         {
-          "anchor": "library/std/src/sys/args/mod.rs:16-45",
+          "anchor": "library/std/src/sys/args/mod.rs:16-53",
           "kind": "pinned_std"
         },
         {
@@ -284,7 +284,7 @@
       "error_semantics": "Bounds violations panic before any syscall.",
       "evidence": [
         {
-          "anchor": "library/std/src/sys/io/io_slice/unsupported.rs:3-28",
+          "anchor": "library/core/src/io/io_slice/repr_generic.rs:3-55",
           "kind": "pinned_std"
         },
         {
@@ -298,7 +298,7 @@
       "required_by": "I/O slice representation",
       "safety_invariants": "Mutable aliasing and advance bounds follow slice rules.",
       "symbol": "IoSlice / IoSliceMut",
-      "upstream_path": "library/std/src/sys/io/io_slice/unsupported.rs"
+      "upstream_path": "library/core/src/io/io_slice/repr_generic.rs"
     },
     {
       "capability_effect": "Every operation requires the held file capability and admitted syscall.",
@@ -368,7 +368,7 @@
       "error_semantics": "Denial, unavailable service, and network failure remain distinct; no host fallback.",
       "evidence": [
         {
-          "anchor": "library/std/src/sys/net/connection/unsupported.rs:7-15,121-126",
+          "anchor": "library/std/src/sys/net/connection/unsupported.rs:7-15,137-142",
           "kind": "pinned_std"
         },
         {
@@ -420,7 +420,7 @@
       "error_semantics": "Result APIs return Unsupported; pure split/join remains pure.",
       "evidence": [
         {
-          "anchor": "library/std/src/sys/paths/unsupported.rs:7-18",
+          "anchor": "library/std/src/sys/paths/unsupported.rs:7-24",
           "kind": "pinned_std"
         },
         {
@@ -472,7 +472,7 @@
       "error_semantics": "Effectful Command operations return Unsupported.",
       "evidence": [
         {
-          "anchor": "library/std/src/sys/process/unsupported.rs:11-35,105-107",
+          "anchor": "library/std/src/sys/process/unsupported.rs:11-35,109-111",
           "kind": "pinned_std"
         },
         {
@@ -594,7 +594,7 @@
       "error_semantics": "Impossible contention is not allowed to spin forever.",
       "evidence": [
         {
-          "anchor": "library/std/src/sys/sync/mod.rs:1-14",
+          "anchor": "library/std/src/sys/sync/mod.rs:1-18",
           "kind": "pinned_std"
         },
         {
@@ -612,17 +612,17 @@
     },
     {
       "capability_effect": "No cross-cell synchronization.",
-      "cellos_backend": "no_threads algorithms candidate",
+      "cellos_backend": "futex locks from the in-tree PAL (pal::cellos::futex via sys::sync::futex)",
       "cfg_gate": "target_os=\"cellos\" (currently reaches `_` unsupported branch unless noted)",
       "classification": "Deferred",
-      "contract": "Use pinned no_threads implementations only after semantic proof.",
+      "contract": "The pinned no_threads implementations are not selectable: the target sets target_has_threads and they compile_error! there (sync/*/no_threads.rs). Condvar/RwLock/Once use the futex implementations, pending semantic proof.",
       "dependencies": [
         "PAL-025"
       ],
       "error_semantics": "Impossible waits fail rather than silently wake; poison observable.",
       "evidence": [
         {
-          "anchor": "library/std/src/sys/sync/mod.rs:1-14",
+          "anchor": "library/std/src/sys/sync/mod.rs:1-18",
           "kind": "pinned_std"
         },
         {
@@ -694,7 +694,7 @@
     },
     {
       "capability_effect": "TLS is per cell.",
-      "cellos_backend": "pinned no_threads model candidate",
+      "cellos_backend": "native TLS (has-thread-local) with std-run destructors (hermit/xous guard arm; pal::cellos::thread runs destructors::run on thread exit)",
       "cfg_gate": "target_os=\"cellos\" (currently reaches `_` unsupported branch unless noted)",
       "classification": "Deferred",
       "contract": "One logical thread permits static TLS; normal cleanup runs reverse destructors. Network TLS is unrelated.",
@@ -717,7 +717,7 @@
       "owner": "Rust std/PAL owner",
       "rationale": "No target metadata proves language-TLS selection.",
       "required_by": "language TLS",
-      "safety_invariants": "Target metadata must select no_threads; reentrancy bounded.",
+      "safety_invariants": "Native TLS only: thread_local/no_threads.rs is compile_error! under target_has_threads; reentrancy bounded.",
       "symbol": "thread_local backend/destructors",
       "upstream_path": "library/std/src/sys/thread_local/mod.rs"
     },
@@ -916,7 +916,7 @@
       "error_semantics": "Missing or foreign personality selection is a link/codegen blocker; never import a POSIX unwinder.",
       "evidence": [
         {
-          "anchor": "library/std/src/sys/personality/mod.rs:1-49",
+          "anchor": "library/std/src/sys/personality/mod.rs:1-48",
           "kind": "pinned_std"
         },
         {
@@ -975,7 +975,7 @@
       "error_semantics": "Fallback selection or foreign OS identity blocks the private sysroot.",
       "evidence": [
         {
-          "anchor": "library/std/src/sys/env_consts.rs:3-12,414-424",
+          "anchor": "library/std/src/sys/env_consts.rs:3-12,425-435",
           "kind": "pinned_std"
         },
         {
@@ -1072,17 +1072,6 @@
         "declaration_line": 3,
         "evidence": "library/std/src/sys/mod.rs:3",
         "hook_ids": [
-          "PAL-007"
-        ],
-        "module": "alloc",
-        "source_path": "library/std/src/sys/alloc/mod.rs",
-        "source_sha256": "d7be5b7c291a7251961192c61272f0cf5c8be8bd749f0f3d320708faa45fcaa2",
-        "visibility": "private"
-      },
-      {
-        "declaration_line": 4,
-        "evidence": "library/std/src/sys/mod.rs:4",
-        "hook_ids": [
           "PAL-032"
         ],
         "module": "configure_builtins",
@@ -1091,19 +1080,19 @@
         "visibility": "private"
       },
       {
-        "declaration_line": 5,
-        "evidence": "library/std/src/sys/mod.rs:5",
+        "declaration_line": 4,
+        "evidence": "library/std/src/sys/mod.rs:4",
         "hook_ids": [
           "PAL-031"
         ],
         "module": "helpers",
         "source_path": "library/std/src/sys/helpers/mod.rs",
-        "source_sha256": "e8fbb280056a6cff488873c997e92c25ad39843ef5ff97a7e3ecee368f258dac",
+        "source_sha256": "5764a7978db73bb04f5b5efe6d482127f53976149d2aeb15553bb6f0f65e16ca",
         "visibility": "private"
       },
       {
-        "declaration_line": 6,
-        "evidence": "library/std/src/sys/mod.rs:6",
+        "declaration_line": 5,
+        "evidence": "library/std/src/sys/mod.rs:5",
         "hook_ids": [
           "PAL-001"
         ],
@@ -1113,15 +1102,26 @@
         "visibility": "private"
       },
       {
-        "declaration_line": 7,
-        "evidence": "library/std/src/sys/mod.rs:7",
+        "declaration_line": 6,
+        "evidence": "library/std/src/sys/mod.rs:6",
         "hook_ids": [
           "PAL-033"
         ],
         "module": "personality",
         "source_path": "library/std/src/sys/personality/mod.rs",
-        "source_sha256": "667ea2b4b2e161c9b4c0bbda54721c3de86c39799f478de06db8bd644c1bfbc3",
+        "source_sha256": "d725255dee4c27be1f57c3884e2f3e9e1dc367c6d5db44c2683ce78cf897f301",
         "visibility": "private"
+      },
+      {
+        "declaration_line": 8,
+        "evidence": "library/std/src/sys/mod.rs:8",
+        "hook_ids": [
+          "PAL-007"
+        ],
+        "module": "alloc",
+        "source_path": "library/std/src/sys/alloc/mod.rs",
+        "source_sha256": "605fba85756be94fdc13f40823daa82ec29b493c102564fbe36a34a3414314e1",
+        "visibility": "public"
       },
       {
         "declaration_line": 9,
@@ -1131,7 +1131,7 @@
         ],
         "module": "args",
         "source_path": "library/std/src/sys/args/mod.rs",
-        "source_sha256": "24ab9d0b2ba7dd6c08ea101cae007669a5a25bcd8c776cc335f17eb74033d0d4",
+        "source_sha256": "412b94c48bf9f1578e1e688a86bb3ec9d634e6ea714f1d36358ef22459f1959d",
         "visibility": "public"
       },
       {
@@ -1175,7 +1175,7 @@
         ],
         "module": "env_consts",
         "source_path": "library/std/src/sys/env_consts.rs",
-        "source_sha256": "5444e0a4d1277453b42bc40f6a9286bca1233885e81f9c7b12ae92855cc9236f",
+        "source_sha256": "db1585c9edb839fd3fd48fd407d733483ba05f147a755bf0ec32aeb77356e8b7",
         "visibility": "public"
       },
       {
@@ -1186,7 +1186,7 @@
         ],
         "module": "exit",
         "source_path": "library/std/src/sys/exit.rs",
-        "source_sha256": "d0dabb634031b997d0a85d602d126ff85cbeebe1e576c0de07c87d57de087f43",
+        "source_sha256": "fd9657b412771dd99ffcc9ab5b4ffaf0bc50a788464c9cffabf0975c7047a15a",
         "visibility": "public"
       },
       {
@@ -1208,7 +1208,7 @@
         ],
         "module": "fs",
         "source_path": "library/std/src/sys/fs/mod.rs",
-        "source_sha256": "f1137a6a7ec3f048c29a6709fae1d4c1d20d4496ff163e555fa66acabbfcbf60",
+        "source_sha256": "747d9cfb1753de3741bb5251e2c6eb159d39cdca43a1048f7544841e2de55908",
         "visibility": "public"
       },
       {
@@ -1221,7 +1221,7 @@
         ],
         "module": "io",
         "source_path": "library/std/src/sys/io/mod.rs",
-        "source_sha256": "a6c3fcc9355d143ec9f17f5a1b2b07179d9a1ab3738d28eb210aca9a31efc256",
+        "source_sha256": "a48fe98f5e49eeecd2c31b5a3846c025750ce93a077a00581c1602e69cbd0cec",
         "visibility": "public"
       },
       {
@@ -1244,7 +1244,7 @@
         ],
         "module": "os_str",
         "source_path": "library/std/src/sys/os_str/mod.rs",
-        "source_sha256": "7b3461545c26ca943ab6c0d424e1dd0d8416dc025c66742744d5fead1d723b4b",
+        "source_sha256": "ef37f91cb20d53e5d4c60eb424384b650c27b48e470ab956ace24913241f4039",
         "visibility": "public"
       },
       {
@@ -1267,7 +1267,7 @@
         ],
         "module": "paths",
         "source_path": "library/std/src/sys/paths/mod.rs",
-        "source_sha256": "d2b6b44f179f85a542fcd9ee1cf97029b048190165a3aced16cd9e154a58ca51",
+        "source_sha256": "6aa5ba82e18cb372725e820de93ee53f8e78b6ab10b4c38c22ee627c91a25c91",
         "visibility": "public"
       },
       {
@@ -1300,7 +1300,7 @@
         ],
         "module": "process",
         "source_path": "library/std/src/sys/process/mod.rs",
-        "source_sha256": "160c144dc4d1714837bda9d42f6d503798113763801fae551d7188e3f4e3b59e",
+        "source_sha256": "9948f2bc1bf45ef634cb53a43c66dda29f01ccede1c93c9bdb8e53aa1193d014",
         "visibility": "public"
       },
       {
@@ -1311,7 +1311,7 @@
         ],
         "module": "random",
         "source_path": "library/std/src/sys/random/mod.rs",
-        "source_sha256": "58e6c9fa2f0a5eaa796c5a6172a0b25ef59fc47c6d9ca2e78e93ba23ef7c094f",
+        "source_sha256": "9c7f5334792445eda612dc8369fc9554ab40710f7a896569554da6791a52499e",
         "visibility": "public"
       },
       {
@@ -1335,7 +1335,7 @@
         ],
         "module": "sync",
         "source_path": "library/std/src/sys/sync/mod.rs",
-        "source_sha256": "e57838920a0f8c38ef94dc6ab0724e59e4b3335a603b7e63f70c16d354da6816",
+        "source_sha256": "f89bccd1e5bcb247972cfaa8016103db5844bc5ddce59c76503ad484bf5e3c58",
         "visibility": "public"
       },
       {
@@ -1346,7 +1346,7 @@
         ],
         "module": "thread",
         "source_path": "library/std/src/sys/thread/mod.rs",
-        "source_sha256": "3590ca4dc8b112c787b14fcc5585add929a6e7c827ce01c329c2ef43e45587d6",
+        "source_sha256": "15a78d7def5c10ecc273def02a1fbecfdc2c59c95538ef1b8c992c3e77f5df05",
         "visibility": "public"
       },
       {
@@ -1357,7 +1357,7 @@
         ],
         "module": "thread_local",
         "source_path": "library/std/src/sys/thread_local/mod.rs",
-        "source_sha256": "56a94ba2ad4d2c30fc82c8f0b1c728bc05f8817340e7821019f7b05606a7456e",
+        "source_sha256": "d121ea5be0a08434d06616499a32040a115a0596c2ab75ed10a888a35c9d3a5a",
         "visibility": "public"
       },
       {
@@ -1369,7 +1369,7 @@
         ],
         "module": "time",
         "source_path": "library/std/src/sys/time/mod.rs",
-        "source_sha256": "449afdd86955252a302d889032a6cb2cbb04dd786f8cb81d9a9059ad933e7e4c",
+        "source_sha256": "93bc631fd16b7efb974890147ea360c279175222a0c71602a1c6c89d69fd1b5f",
         "visibility": "public"
       }
     ],
@@ -1480,15 +1480,15 @@
   "source_manifest": [
     {
       "path": "library/std/src/rt.rs",
-      "sha256": "f435576c645fb30eaca560e819c2a113b556452d79c0303f49ffd4487018c01f"
+      "sha256": "ff3d8dab421d35123cce1a8fc54e579ed9f5a13b55f34c39d92be9371394e426"
     },
     {
       "path": "library/std/src/sys/alloc/mod.rs",
-      "sha256": "d7be5b7c291a7251961192c61272f0cf5c8be8bd749f0f3d320708faa45fcaa2"
+      "sha256": "605fba85756be94fdc13f40823daa82ec29b493c102564fbe36a34a3414314e1"
     },
     {
       "path": "library/std/src/sys/args/mod.rs",
-      "sha256": "24ab9d0b2ba7dd6c08ea101cae007669a5a25bcd8c776cc335f17eb74033d0d4"
+      "sha256": "412b94c48bf9f1578e1e688a86bb3ec9d634e6ea714f1d36358ef22459f1959d"
     },
     {
       "path": "library/std/src/sys/args/unsupported.rs",
@@ -1516,11 +1516,11 @@
     },
     {
       "path": "library/std/src/sys/env_consts.rs",
-      "sha256": "5444e0a4d1277453b42bc40f6a9286bca1233885e81f9c7b12ae92855cc9236f"
+      "sha256": "db1585c9edb839fd3fd48fd407d733483ba05f147a755bf0ec32aeb77356e8b7"
     },
     {
       "path": "library/std/src/sys/exit.rs",
-      "sha256": "d0dabb634031b997d0a85d602d126ff85cbeebe1e576c0de07c87d57de087f43"
+      "sha256": "fd9657b412771dd99ffcc9ab5b4ffaf0bc50a788464c9cffabf0975c7047a15a"
     },
     {
       "path": "library/std/src/sys/fd/mod.rs",
@@ -1528,19 +1528,19 @@
     },
     {
       "path": "library/std/src/sys/fs/mod.rs",
-      "sha256": "f1137a6a7ec3f048c29a6709fae1d4c1d20d4496ff163e555fa66acabbfcbf60"
+      "sha256": "747d9cfb1753de3741bb5251e2c6eb159d39cdca43a1048f7544841e2de55908"
     },
     {
       "path": "library/std/src/sys/fs/unsupported.rs",
-      "sha256": "b173c5b64f6bb235254f2106a80d900e1f67706100b2f2d21de7ecce17d511c9"
+      "sha256": "fe4a8d0ce2e9b4350ef754cb613ccd01bf66aa9ff751616da3f8221046fa433d"
     },
     {
       "path": "library/std/src/sys/helpers/mod.rs",
-      "sha256": "e8fbb280056a6cff488873c997e92c25ad39843ef5ff97a7e3ecee368f258dac"
+      "sha256": "5764a7978db73bb04f5b5efe6d482127f53976149d2aeb15553bb6f0f65e16ca"
     },
     {
-      "path": "library/std/src/sys/io/io_slice/unsupported.rs",
-      "sha256": "a4e5e8ebe6f8c313ed7d41b00ad851118d8980bc3109a0e2d123ac5fa1dcd568"
+      "path": "library/core/src/io/io_slice/repr_generic.rs",
+      "sha256": "01e0651f2fc8bad03256c3e180fd557b220f5e525a64f434adbade7f5dc60f09"
     },
     {
       "path": "library/std/src/sys/io/is_terminal/unsupported.rs",
@@ -1548,15 +1548,15 @@
     },
     {
       "path": "library/std/src/sys/io/mod.rs",
-      "sha256": "a6c3fcc9355d143ec9f17f5a1b2b07179d9a1ab3738d28eb210aca9a31efc256"
+      "sha256": "a48fe98f5e49eeecd2c31b5a3846c025750ce93a077a00581c1602e69cbd0cec"
     },
     {
       "path": "library/std/src/sys/mod.rs",
-      "sha256": "d93045a69c7fd40a106e910d3ace9fc960d09719cb4847dc8c40f4506902a914"
+      "sha256": "37f939b08211a401d8dd741a0b34a303beb149c07b7309aaf72a6710f5740819"
     },
     {
       "path": "library/std/src/sys/net/connection/unsupported.rs",
-      "sha256": "25e2541ef10a54e5ea8d9b78f2e6110b532f9eb9a7d4acdfee7d8fc64cf42c70"
+      "sha256": "5163209c1d065a2c7a4fefe06ff2a8c33e4d03578daf44e78df4d07085734bfc"
     },
     {
       "path": "library/std/src/sys/net/hostname/unsupported.rs",
@@ -1568,7 +1568,7 @@
     },
     {
       "path": "library/std/src/sys/os_str/mod.rs",
-      "sha256": "7b3461545c26ca943ab6c0d424e1dd0d8416dc025c66742744d5fead1d723b4b"
+      "sha256": "ef37f91cb20d53e5d4c60eb424384b650c27b48e470ab956ace24913241f4039"
     },
     {
       "path": "library/std/src/sys/pal/mod.rs",
@@ -1576,7 +1576,7 @@
     },
     {
       "path": "library/std/src/sys/pal/unsupported/common.rs",
-      "sha256": "1e7db842b7ce44a4c7eecf2d2cf07e0e3ec37caf1d81bfb164f1acfa1458b7e1"
+      "sha256": "dfea240d62c5f4e5445dfca05d3643695685ed951eefd65ddc900214c1f6c692"
     },
     {
       "path": "library/std/src/sys/pal/unsupported/mod.rs",
@@ -1588,15 +1588,15 @@
     },
     {
       "path": "library/std/src/sys/paths/mod.rs",
-      "sha256": "d2b6b44f179f85a542fcd9ee1cf97029b048190165a3aced16cd9e154a58ca51"
+      "sha256": "6aa5ba82e18cb372725e820de93ee53f8e78b6ab10b4c38c22ee627c91a25c91"
     },
     {
       "path": "library/std/src/sys/paths/unsupported.rs",
-      "sha256": "9d8936d020e26b76da68094e41bef0dcbd78a932eaa0052e02d3299ff64cdc44"
+      "sha256": "565ff525935200f521e1e18f6fc1a455c754895c5bfb02dd01a5292893d7ac83"
     },
     {
       "path": "library/std/src/sys/personality/mod.rs",
-      "sha256": "667ea2b4b2e161c9b4c0bbda54721c3de86c39799f478de06db8bd644c1bfbc3"
+      "sha256": "d725255dee4c27be1f57c3884e2f3e9e1dc367c6d5db44c2683ce78cf897f301"
     },
     {
       "path": "library/std/src/sys/pipe/mod.rs",
@@ -1604,7 +1604,7 @@
     },
     {
       "path": "library/std/src/sys/pipe/unsupported.rs",
-      "sha256": "8d927a7dcd7fba7ebe495acfcb12eb639e0d0dac85f47a97ae44770f62dabda8"
+      "sha256": "80d8551552b9e222db6a560a19ee23133461f7574bb75582bb94167696d39e73"
     },
     {
       "path": "library/std/src/sys/platform_version/mod.rs",
@@ -1612,15 +1612,15 @@
     },
     {
       "path": "library/std/src/sys/process/mod.rs",
-      "sha256": "160c144dc4d1714837bda9d42f6d503798113763801fae551d7188e3f4e3b59e"
+      "sha256": "9948f2bc1bf45ef634cb53a43c66dda29f01ccede1c93c9bdb8e53aa1193d014"
     },
     {
       "path": "library/std/src/sys/process/unsupported.rs",
-      "sha256": "5fc64c74fdf6766b2ef3c01e6e97b1f3b07d5a2314dcc7c310b1f00485068cd8"
+      "sha256": "26313906a12d1cebdd61925039ba7e81e2d4e261ab572cee0ef682c3e000a184"
     },
     {
       "path": "library/std/src/sys/random/mod.rs",
-      "sha256": "58e6c9fa2f0a5eaa796c5a6172a0b25ef59fc47c6d9ca2e78e93ba23ef7c094f"
+      "sha256": "9c7f5334792445eda612dc8369fc9554ab40710f7a896569554da6791a52499e"
     },
     {
       "path": "library/std/src/sys/random/unsupported.rs",
@@ -1632,11 +1632,11 @@
     },
     {
       "path": "library/std/src/sys/stdio/unsupported.rs",
-      "sha256": "1fd09fcb0a7f21d2b453dcd2447f14ba3cc957cbb489d582a4964e689959d987"
+      "sha256": "068850eddd29ad9630ceeb0ce6226155f59d2a27cfffec4cedb7a310056d6be3"
     },
     {
       "path": "library/std/src/sys/sync/mod.rs",
-      "sha256": "e57838920a0f8c38ef94dc6ab0724e59e4b3335a603b7e63f70c16d354da6816"
+      "sha256": "f89bccd1e5bcb247972cfaa8016103db5844bc5ddce59c76503ad484bf5e3c58"
     },
     {
       "path": "library/std/src/sys/sync/thread_parking/unsupported.rs",
@@ -1644,7 +1644,7 @@
     },
     {
       "path": "library/std/src/sys/thread/mod.rs",
-      "sha256": "3590ca4dc8b112c787b14fcc5585add929a6e7c827ce01c329c2ef43e45587d6"
+      "sha256": "15a78d7def5c10ecc273def02a1fbecfdc2c59c95538ef1b8c992c3e77f5df05"
     },
     {
       "path": "library/std/src/sys/thread/unsupported.rs",
@@ -1652,11 +1652,11 @@
     },
     {
       "path": "library/std/src/sys/thread_local/mod.rs",
-      "sha256": "56a94ba2ad4d2c30fc82c8f0b1c728bc05f8817340e7821019f7b05606a7456e"
+      "sha256": "d121ea5be0a08434d06616499a32040a115a0596c2ab75ed10a888a35c9d3a5a"
     },
     {
       "path": "library/std/src/sys/time/mod.rs",
-      "sha256": "449afdd86955252a302d889032a6cb2cbb04dd786f8cb81d9a9059ad933e7e4c"
+      "sha256": "93bc631fd16b7efb974890147ea360c279175222a0c71602a1c6c89d69fd1b5f"
     },
     {
       "path": "library/std/src/sys/time/unsupported.rs",
@@ -1688,11 +1688,11 @@
     "unsupported": 10
   },
   "toolchain": {
-    "channel": "nightly-2026-05-01",
-    "commit_hash": "f53b654a8",
+    "channel": "nightly-2026-11-21",
+    "commit_hash": "c7d5ba59d",
     "digest_algorithm": "sha256(canonical-json(source_manifest))",
-    "rust_src_root": "/home/dmin/.rustup/toolchains/nightly-2026-05-01-x86_64-unknown-linux-gnu/lib/rustlib/src/rust",
-    "rustc_version": "1.97.0-nightly",
-    "source_digest": "b984d50da89e342974ada8822321edd6b1d091d1da3dcf8ec1819a8986a4b105"
+    "rust_src_root": "/home/dmin/.rustup/toolchains/nightly-2026-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust",
+    "rustc_version": "1.102.0-nightly",
+    "source_digest": "1aad1e229f8e64e3225fbe7bc0c2ff8181284850d86c4eeb829bb4bd23d5c68a"
   }
 }

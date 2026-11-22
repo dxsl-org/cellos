@@ -1450,17 +1450,18 @@ index dfbfc2b..fbc855b 100644
          mod wasm;
          pub use wasm::sleep;
 diff --git a/library/std/src/sys/thread_local/mod.rs b/library/std/src/sys/thread_local/mod.rs
-index 1c137e5..ea39cda 100644
+index 1c137e5..ec091e4 100644
 --- a/library/std/src/sys/thread_local/mod.rs
 +++ b/library/std/src/sys/thread_local/mod.rs
-@@ -118,6 +118,7 @@ pub(crate) mod guard {
-             target_os = "uefi",
-             target_os = "zkvm",
-             target_os = "trusty",
-+            target_os = "cellos",
-             target_os = "vexos",
-         ) => {
-             pub(crate) fn enable() {
+@@ -134,7 +134,7 @@ pub(crate) mod guard {
+                 use crate::rt::thread_cleanup;
+             }
+         }
+-        any(target_os = "hermit", target_os = "xous") => {
++        any(target_os = "hermit", target_os = "xous", target_os = "cellos") => {
+             // `std` is the only runtime, so it just calls the destructor functions
+             // itself when the time comes.
+             pub(crate) fn enable() {}
 diff --git a/library/std/src/sys/time/mod.rs b/library/std/src/sys/time/mod.rs
 index 179c968..ce6484d 100644
 --- a/library/std/src/sys/time/mod.rs

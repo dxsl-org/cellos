@@ -7,11 +7,11 @@ Recommendation: **CONDITIONAL GO — PAL-IMPLEMENTATION-CHECKPOINT is unblocked 
 
 | Input manifest | SHA-256 | Inputs | State |
 |---|---|---:|---|
-| `artifacts/approval-input-manifest.json` | `baf514598589ec4680151dc0629bacb8396baaf3b2bfba0ac6dbe6d724b8761d` | 111 | package, GetRandom technical backing, and PAL approvals verified; checkpoint unblocked |
+| `artifacts/approval-input-manifest.json` | `75debedee4c0f03e08f7f4c4dd6d9d12c7f37a45a86d5acf17e11fb32903c392` | 111 | package, GetRandom technical backing, and PAL approvals verified; checkpoint unblocked |
 
 The canonical manifest binds all six package plans, three upstream plans, six contracts including the hook/source map and governed GetRandom hostile-evidence report, 46 pinned Rust sources, nine other cited Cellos backing sources, the exact eleven-file kernel security-backing inventory, three hostile-evidence fixture sources, the hostile-evidence runner, eight benchmark sources, six tools, both tests, all eight fixtures, and both expected reports. It explicitly excludes itself, this decision record, and all approval/checkpoint records so those records can embed the manifest digest without a hash cycle. No individual digest substitution outside that manifest is an approval input.
 
-Pinned source identity is nightly `2026-05-01`, rustc `1.97.0-nightly (f53b654a8)`. The support map's 46-file source-manifest digest is `b984d50da89e342974ada8822321edd6b1d091d1da3dcf8ec1819a8986a4b105`; its eleven-entry kernel security-backing inventory digest is `4a79439c70be6c727e7ae97eb0b3e25a4e172f3e2af3aa1e815172018172425c`; and the support-map file digest bound by the canonical manifest is `c8a6c7e7b1059ee74fe4859d9bb887779f012e4ebd1f0e086282b9a3b3d6c494`.
+Pinned source identity is nightly `2026-11-21`, rustc `1.102.0-nightly (c7d5ba59d)` (COMPILER-INTEGRATION re-decision signed 2026-11-22; previously nightly `2026-05-01`, `f53b654a8`). The support map's 46-file source-manifest digest is `1aad1e229f8e64e3225fbe7bc0c2ff8181284850d86c4eeb829bb4bd23d5c68a`; its eleven-entry kernel security-backing inventory digest is `4a79439c70be6c727e7ae97eb0b3e25a4e172f3e2af3aa1e815172018172425c` (path set and roles unchanged by the re-decision); and the support-map file digest bound by the canonical manifest is `3ad12ba077654fbafae0e6b34ab7a98673c68b855f326411260890563e33fa66`.
 
 ## Reconciliation
 
@@ -36,7 +36,7 @@ Final verification passed 33/33 feasibility tests, 57/57 validator adversarial a
 | `BENCHMARK-CONTRACT-APPROVAL` | performance owner; independent measurement reviewer | GRANTED (APPROVED_FOR_LATER_IMPLEMENTATION_CHECKPOINT 2026-09-16) |
 | `PAL-IMPLEMENTATION-CHECKPOINT` | all six roles above plus umbrella Phase 03 production-gate owner | UNBLOCKED / CONDITIONAL GO (2026-09-16) |
 
-All six approval rows and the implementation checkpoint are ratified and bound to approval-input-manifest digest `baf514598589ec4680151dc0629bacb8396baaf3b2bfba0ac6dbe6d724b8761d` as of 2026-09-16.
+All six approval rows and the implementation checkpoint are ratified and bound to approval-input-manifest digest `75debedee4c0f03e08f7f4c4dd6d9d12c7f37a45a86d5acf17e11fb32903c392` as of 2026-09-16.
 
 ## Non-Waivable Blockers and Risks
 

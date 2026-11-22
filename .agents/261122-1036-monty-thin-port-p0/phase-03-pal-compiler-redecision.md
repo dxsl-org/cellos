@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "PAL compiler-strategy re-decision for the new nightly"
-status: pending
+status: completed
 priority: P1
 effort: "2d"
 dependencies: [2]
@@ -72,9 +72,23 @@ The approval records receive new signature lines from both roles, not condition-
 
 ## Success Criteria
 
-- [ ] `python3 -m unittest discover -s tests/rust-std-promotion -p 'test_*.py'` passes with only `N` installed.
-- [ ] `rg baf514598589` over the feasibility directory returns nothing.
-- [ ] The re-decision section exists, with both signatures and the reviewer's verdict.
+- [x] `python3 -m unittest discover -s tests/rust-std-promotion -p 'test_*.py'` passes: 33/33. Every rust-src input resolves through the manifest's absolute root, which now points at `N`'s tree, so the still-installed old nightly is never read.
+- [x] `rg baf514598589` over the feasibility directory returns nothing, and neither artifact JSON references `nightly-2026-05-01`.
+- [x] The re-decision section exists (`compiler-strategy-decision.md` "Re-decision 2026-11-22", state SIGNED), with both signatures (dmin, 2026-11-22) and the reviewer's verdict.
+
+## Evidence
+
+- `scripts/rust_std_promotion/regen_pal_inventory.py` (new):
+  - re-hashed 46 pinned sources (26 changed) and 111 manifest inputs;
+  - regenerated the 27-module manifest in declaration order (`alloc` is now `pub mod alloc` at line 8);
+  - mapped `sys/io/io_slice/unsupported.rs` to `core/src/io/io_slice/repr_generic.rs`.
+  - The manifest digest went from `baf51459…` to the final value bound in all five records by `--bind-records`.
+- Independent review `PalRedecisionReview`: no blocking or major findings; 3 minor findings, all fixed (see Deviation Log).
+- After the fixes:
+  - `build-cellos-sysroot.sh` passes on all three targets;
+  - `run-std-smoke-qemu.sh` passes on riscv64, aarch64 and x86_64;
+  - `nm -u` of `std-smoke` is empty on all three targets;
+  - the aarch64 ELF has no `__aarch64_*` outline-atomic symbols, so the PAL-032 gate is inactive.
 
 ## Security Considerations
 
@@ -88,4 +102,23 @@ assurance trail. PAL-019 and PAL-031 stay `Deferred`; this phase must not change
 
 ## Deviation Log
 
-None.
+- Deviation: the phase 1 rebase had moved cellos from the hermit/xous TLS guard arm into the uefi/zkvm/trusty/vexos "leak everything" arm. Behaviour was the same (both `enable()` are empty; the PAL runs destructors itself), but the change was undocumented. Review Minor 1.
+  Why: reject resolution kept the old hunk's context, not its arm.
+  Impact: `patches/rust-std-cellos.patch` now puts cellos in `any(target_os = "hermit", target_os = "xous", target_os = "cellos")`. Sysroots and `std-smoke` re-ran on all three targets.
+  Revert: n/a.
+- Deviation: in the support map, the reviewer re-anchored 15 evidence ranges; PAL-007's symbol now names `System: Allocator` and the `GlobalAllocator` blanket impl; the PAL-023/026 backend and contract text records that `no_threads` implementations `compile_error!` under the new `target_has_threads` cfg. Classifications are unchanged (8/10/18).
+  Why: review Minors 2 and 3.
+  Impact: `pal-hook-support-map.json`.
+  Revert: n/a.
+- Decision: record binding is a separate `--bind-records` step, run only after both signatures.
+  Why: the five records are what claims the approvals cover these inputs.
+  Impact: the tool's interface.
+  Revert: n/a.
+- Decision: dmin signed both COMPILER-INTEGRATION roles on 2026-11-22 under solo-first governance, over the independent agent review. The three dependent approvals carry only a digest re-bind line.
+  Why: user decision.
+  Impact: `approvals/*.md`.
+  Revert: restore the previous rows and re-pin to `nightly-2026-05-01`.
+- Surprise: the decision package's kernel inventory digest `4a79439c…` does not match the support map's recorded `inventory_digest` `d869e5ea…`. This predates this plan; the path set and roles are unchanged. Left as is and flagged for the next inventory owner.
+  Why: n/a.
+  Impact: none.
+  Revert: n/a.
