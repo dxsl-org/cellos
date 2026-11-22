@@ -94,3 +94,7 @@ A compiler bump can change codegen under kernel hardening flags (`-Z cf-protecti
   Why: `stable_features` warning under `-D warnings`.
   Impact: `libs/posix-shim/src/lib.rs`.
   Revert: restore both lines.
+- Decision: the lint fixes in `libs/abi/src/dir_attestation.rs` and `libs/abi/src/telemetry.rs` touch the Law 1 interface crate. They are function-body-only (`as_chunks`, iteration over `handles[..count]`) with no signature, layout or wire change. The owner (dmin) gave the Law 1 confirmation on 2026-11-22 and the changes stay.
+  Why: Law 1 ("Interface is Sacred") requires owner confirmation for `libs/abi` edits.
+  Impact: none beyond the pushed commit `f14ad50f7d`.
+  Revert: n/a.
