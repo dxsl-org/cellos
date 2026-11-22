@@ -158,7 +158,7 @@ The entropy export is the only new unsafe code and must fail closed.
   Why: the jiter patch changes code that runs only on cellos.
   Impact: none.
   Revert: n/a.
-- Deviation: added allowlist entries (`[[file]]` entropy.rs `c-ffi`, `[[crate]]` monty-smoke) with `approver = "dmin"`, citing this approved plan. **Owner to confirm.**
+- Deviation: added allowlist entries (`[[file]]` entropy.rs `c-ffi`, `[[crate]]` monty-smoke) with `approver = "dmin"`, citing this approved plan. **Confirmed by the owner (dmin) on 2026-11-22.**
   Why: the signer requires them.
   Impact: `scripts/unsafe-allowlist.toml`.
   Revert: remove both entries.
