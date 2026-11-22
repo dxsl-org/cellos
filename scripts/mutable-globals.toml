@@ -2593,10 +2593,21 @@ rationale = "One AtomicU64 ownership bitmap: alloc sets a clear bit with one ato
 review = "kernel/src/loader/va_alloc.rs:STACK_ARENA; kernel/src/task/stack.rs:release_stack_slot"
 
 [[global]]
+key = "kernel::loader::va_alloc::LARGE_STACK_ARENA @cfg(cellos_wide)"
+lifetime = "global"
+mutation = "atomic"
+owner = "kernel::loader::va_alloc large-stack arena slot bitmap allocator (4 MiB slots for task::LARGE_STACK_PAGES user stacks)"
+contexts = ["boot", "normal", "irq"]
+seal = "none: allocated by user-stack allocation for stacks larger than a regular slot, freed by the stack run's VaHold release"
+retirement = "never: lives for the whole run"
+rationale = "Same discipline as STACK_ARENA over a disjoint 64-slot region: one AtomicU64 ownership bitmap, alloc sets a clear bit with one atomic RMW, free clears it; free_stack_va offers every base to both arenas and each ignores a base outside its region"
+review = "kernel/src/loader/va_alloc.rs:LARGE_STACK_ARENA; kernel/src/loader/va_alloc.rs:alloc_stack_va; kernel/src/task/stack.rs:release_stack_slot"
+
+[[global]]
 key = "kernel::loader::va_alloc::SLOT_ORDER"
 lifetime = "boot"
 mutation = "atomic"
-owner = "kernel::loader::va_alloc slot start order shared by SLOTS and STACK_ARENA"
+owner = "kernel::loader::va_alloc slot start order shared by SLOTS, STACK_ARENA and LARGE_STACK_ARENA"
 contexts = ["boot", "normal"]
 seal = "the randomised flag is stored once by seed_slot_order in kmain on the boot hart, before any cell image or user stack takes a slot; the source fn pointer is const"
 retirement = "never: lives for the whole run"
