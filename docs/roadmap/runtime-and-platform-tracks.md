@@ -105,7 +105,7 @@ support nor real production entropy; the implementation checkpoint and
 umbrella Phase 03 production gates remain blocked.
 
 The in-tree implementation exists and is exercised. `patches/rust-std-cellos.patch`
-applies to the pinned `rust-src` (`nightly-2026-05-01`, `f53b654a8`) and carries
+applies to the pinned `rust-src` (`nightly-2026-11-21`, `c7d5ba59d`; re-decided and signed 2026-11-22, previously `nightly-2026-05-01`) and carries
 the Cellos PAL; `targets/{riscv64gc,aarch64,x86_64}-unknown-cellos.json` are the
 private target specs; `scripts/build-cellos-sysroot.sh` builds the private
 sysroot overlay for all three, and `scripts/run-std-smoke-qemu.sh` boots the std
