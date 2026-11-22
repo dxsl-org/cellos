@@ -1259,6 +1259,68 @@ mod tests {
         *super::super::SCHEDULER.lock() = saved;
     }
 
+    /// 03 S-6, the contract a refused caller relies on: a mask naming NET_RX
+    /// from a non-provider fails with PermissionDenied before anything is
+    /// reserved, armed or reported, so an IPC terminal already published for the
+    /// caller is still reported, exactly once, by its next allowed wait.
+    #[cfg(not(cellos_posture = "release"))]
+    #[test]
+    fn a_refused_net_rx_wait_keeps_the_pending_ipc_terminal() {
+        const CALLER: usize = 72_403;
+        const PEER: usize = 72_404;
+        const TIMER: u32 = abi::completion::source::TIMER;
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        let saved = super::super::SCHEDULER.lock().take();
+        let mut sched = Scheduler::new();
+        for (tid, cell) in [(CALLER, 76), (PEER, 77)] {
+            let mut task = Box::new(Task::new(
+                tid,
+                CellId(cell),
+                "net-rx-refused",
+                alloc::vec::Vec::new(),
+            ));
+            task.cell_generation = 5;
+            sched.tasks.insert(tid, task);
+        }
+        let token = super::super::async_ipc::selftest_accept_dispatched(&mut sched, CALLER, PEER)
+            .expect("operation recorded");
+        super::super::async_ipc::peer_died(&mut sched, PEER, 77, 5);
+        *super::super::SCHEDULER.lock() = Some(sched);
+
+        assert!(!net_rx_authorised(CALLER));
+        for mask in [NET_RX, NET_RX | IPC, NET_RX | IPC | TIMER] {
+            assert_eq!(
+                wait_completion(CALLER, mask, Some(1), 0x1000),
+                Err(SyscallError::PermissionDenied),
+                "mask {mask:#x}"
+            );
+        }
+        let mut guard = super::super::SCHEDULER.lock();
+        let task = guard
+            .as_mut()
+            .and_then(|sched| sched.tasks.get_mut(&CALLER))
+            .unwrap();
+        assert!(
+            task.completion.is_none(),
+            "a refused wait created or reserved the caller's queue"
+        );
+        assert!(
+            task.completion_wait.is_none(),
+            "a refused wait registered a waiter"
+        );
+        assert!(
+            super::super::async_ipc::has_pending_notification(task),
+            "a refused wait consumed the pending IPC terminal"
+        );
+        assert_eq!(
+            super::super::async_ipc::take_notification(task).map(|n| n.token),
+            Some(token)
+        );
+        assert!(!super::super::async_ipc::has_pending_notification(task));
+        drop(guard);
+        *super::super::SCHEDULER.lock() = saved;
+    }
+
     #[cfg(target_arch = "x86_64")]
     #[test]
     fn an_irq_wait_without_lines_is_refused_before_reserving() {

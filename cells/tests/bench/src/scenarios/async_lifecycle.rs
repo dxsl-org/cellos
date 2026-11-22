@@ -415,7 +415,7 @@ pub fn run() -> ! {
     sys_exit(0)
 }
 
-// ── Phase 03d: multi-source `WaitCompletion` (IPC + TIMER + NET_RX) ──────────
+// ── Phase 03d: multi-source `WaitCompletion` (IPC + TIMER; NET_RX gate) ──────
 //
 // The caller runs in `bench-probe`, whose allowlist holds `WaitCompletion`
 // (bit 42); `bench` itself does not, so legs 1-3 above exercise the SDK's
@@ -697,18 +697,19 @@ fn msw_m5_leg(provider: usize) {
     }
 }
 
-/// Mixed NET_RX + IPC + TIMER. x86 has no NET_RX producer (D-8): the NET_RX
-/// bit can only show its raw-mailbox interruption rule here, never a record.
+/// Mixed IPC + TIMER, and the NET_RX gate. NET_RX belongs to the live `NET`
+/// provider alone (03 S-6); this caller is not it, so every mask naming NET_RX
+/// must be refused before the wait reserves, arms or reports anything.
 fn msw_mixed_leg(provider: usize, raw_source: usize) {
-    let all = NET_RX | IPC | TIMER;
+    let mixed = IPC | TIMER;
     let mut reply_buf = [0u8; IPC_BUF_SIZE];
     let mut raw = [0u8; IPC_BUF_SIZE];
     let raw_from_source = |raw: &mut [u8]| {
         matches!(sys_recv(raw_source, raw), SyscallResult::Ok(s) if s == raw_source)
             && raw[0] == RAW_TAG
     };
-    // Every wait goes through this counter, so `netrx_records` is measured: on
-    // x86 (no NET_RX producer) it must stay zero.
+    // Every wait goes through this counter, so `netrx_records` is measured: a
+    // caller refused NET_RX must never be handed a NET_RX record.
     let mut netrx_records = 0usize;
     let mut wait = |sources: u32, ticks: u64| {
         let wake = wait_any(sources, ticks);
@@ -717,41 +718,51 @@ fn msw_mixed_leg(provider: usize, raw_source: usize) {
         }
         wake
     };
-    let timer = matches!(wait(all, 5), Ok(Wake::Timer));
+    let timer = matches!(wait(mixed, 5), Ok(Wake::Timer));
 
-    // A raw message interrupts a wait whose mask names NET_RX.
+    // A raw message does not end a wait whose mask omits NET_RX, and a pending
+    // IPC terminal is still reported past the queued message.
     let _ = sys_send(raw_source, &[CTRL_TAG]);
-    let interrupted = matches!(wait(all, 500), Ok(Wake::Interrupted));
-    let raw_ok = raw_from_source(&mut raw);
+    let raw_ignored = matches!(wait(mixed, 30), Ok(Wake::Timer));
     let call = submit_or_fail(provider, &[REQ_TAG, 1]);
-    let ipc_after_raw = matches!(wait(all, 500), Ok(Wake::Ipc(op)) if op == call.operation());
-    take_or_fail(&call, &mut reply_buf);
+    let ipc_after_raw = matches!(wait(mixed, 500), Ok(Wake::Ipc(op)) if op == call.operation());
+    if ipc_after_raw {
+        take_or_fail(&call, &mut reply_buf);
+    }
+    let raw_ok = raw_from_source(&mut raw);
 
-    // Without NET_RX in the mask the same raw message does not end the wait,
-    // and a pending IPC terminal is still reported past the queued message.
-    let _ = sys_send(raw_source, &[CTRL_TAG]);
-    let raw_ignored = matches!(wait(IPC | TIMER, 30), Ok(Wake::Timer));
+    // The gate: with the call's terminal (most likely) already published, each
+    // NET_RX-naming wait returns PermissionDenied at once and reports nothing,
+    // so the next allowed wait still reports that terminal, exactly once.
     let call = submit_or_fail(provider, &[REQ_TAG, 2]);
-    let ipc_second = matches!(wait(IPC | TIMER, 500), Ok(Wake::Ipc(op)) if op == call.operation());
-    take_or_fail(&call, &mut reply_buf);
-    let raw2_ok = raw_from_source(&mut raw);
+    for _ in 0..SETTLE_YIELDS {
+        yield_now();
+    }
+    let netrx_refused = [NET_RX, NET_RX | IPC, NET_RX | IPC | TIMER]
+        .into_iter()
+        .all(|sources| matches!(wait(sources, 500), Err(ostd::ipc::IpcError::Recv)));
+    let ipc_after_refusal = matches!(wait(mixed, 500), Ok(Wake::Ipc(op)) if op == call.operation());
+    if ipc_after_refusal {
+        take_or_fail(&call, &mut reply_buf);
+    }
+    let quiet_after = matches!(wait(mixed, 5), Ok(Wake::Timer));
     #[cfg(target_arch = "x86_64")]
     let unallocated_irq_refused = matches!(wait_any(IRQ, 5), Err(ostd::ipc::IpcError::Recv));
     #[cfg(not(target_arch = "x86_64"))]
     let unallocated_irq_refused = true;
     println(&format!(
-        "[async-lifecycle] MSW-MIXED timer={timer} interrupted_by_raw={interrupted} \
-         ipc_after_raw={ipc_after_raw} raw_ignored_without_netrx={raw_ignored} \
-         ipc_second={ipc_second} netrx_records={netrx_records} netrx_producer=absent-x86 \
-         unallocated_irq_refused={unallocated_irq_refused}"
+        "[async-lifecycle] MSW-MIXED timer={timer} raw_ignored_without_netrx={raw_ignored} \
+         ipc_after_raw={ipc_after_raw} raw_kept={raw_ok} netrx_refused={netrx_refused} \
+         ipc_after_refusal={ipc_after_refusal} quiet_after={quiet_after} \
+         netrx_records={netrx_records} unallocated_irq_refused={unallocated_irq_refused}"
     ));
     if !(timer
-        && interrupted
-        && raw_ok
-        && ipc_after_raw
         && raw_ignored
-        && raw2_ok
-        && ipc_second
+        && ipc_after_raw
+        && raw_ok
+        && netrx_refused
+        && ipc_after_refusal
+        && quiet_after
         && netrx_records == 0
         && unallocated_irq_refused)
     {
