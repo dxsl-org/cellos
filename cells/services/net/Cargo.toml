@@ -69,7 +69,7 @@ webpki-roots = { version = "=1.0.11", default-features = false, optional = true 
 p256 = { version = "0.13", default-features = false, features = ["ecdsa"], optional = true }
 p384 = { version = "0.13", default-features = false, features = ["ecdsa"], optional = true }
 rsa = { version = "0.9", default-features = false, features = ["sha2"], optional = true }
-ed25519-dalek = { version = "2.2", default-features = false, optional = true }
+ed25519-dalek = { version = "3.0", default-features = false, optional = true }
 smoltcp = { version = "0.11", default-features = false, features = [
     "alloc",
     "socket-tcp",
