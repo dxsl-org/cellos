@@ -63,35 +63,23 @@ under the rules below; this list admits nothing by itself.
    - L-3: duplicate `PAGE_SIZE` definitions.
    - L-8: 32-bit targets stay quarantined and do not build.
    - M-D1: `.agents/` size; retention is report-only by owner decision.
-4. **Carried from Phases 16–18** (closure matrix § Residuals carried).
-   - A refused `RegionTable::insert` leaves private-root PTEs.
-   - `await_flush` is reset per run, not per release.
-   - The RV64 shootdown self-test does not cover 3+ harts.
-   - AArch64 `map_guest_memory` can overwrite live Stage-2 leaves without a TLBI.
-   - `request_mmio` takes `SCHEDULER` under `RESOURCE_REGISTRY`.
-   - On RV64 and AArch64, boot stops when kernel memory sits at or above 64 GiB.
-   - RV64 issues no `fence.i` after loader writes.
-   - The dormant x86 demand-paging path maps a "zeroed" frame without clearing it.
-   - UMIP: foreign binaries are not audited.
-   - A restarted virtio-blk skips its predecessor's slot (`DRIVER_OK` is never reset).
-   - A renamed Tier-1 ELF gets only a NOTE from the signer.
-   - Device-capability revoke has no end-to-end test.
-   - The `nic2-x86` CI cost is unmeasured.
-   - No lane checks the aarch64 `IOMMU-TEARDOWN: SKIP`.
-   - The x86 SVM `TAG-POOL-OWNER-LIMIT` path and x86 boots with RAM at or above 64 GiB have not
-     been exercised.
+4. **Carried from Phases 16–18** (closure matrix § Residuals carried). Fixed 2026-11-21 except:
+   the RV64 3+ hart shootdown oracle (latent while RV64 caps at 2 harts), OVMF 64-bit BAR
+   aperture (not run), and an x86 boot with `-m 72G` refusing init (`ELF: load VA 0x1000000000
+   already mapped`; not in CI). RV64 `fence.i` and the VirtIO slot reset are unproven on hardware.
 5. **Phase 19 findings.** N-1 to N-9 are all closed as of 2026-11-21 (closure matrix
    § New findings): N-1 in Phase 19; N-2 to N-8 by fixes or ADR-0036 on 2026-11-20/21; N-9 by
    the 2026-11-19 CI repair. The open items once recorded in `scripts/unsafe-allowlist.toml`
    are closed too (`e267c381ba`).
    - The next allowlist review wave is due before the entries dated 2027-05-14…28. The three
      signed tier exceptions are due 2027-05-14 and 2027-05-21.
-6. **2026-11-05 security audit.** Its
-   [remediation status](../../.agents/reports/security-261105-1635-cellos-full-audit.md)
-   (§ 9) lists as open: guest FPU state (05 S-8), NMI exiting (05 S-15), Stage-2 TLB
-   invalidation on ARM remap, and every Medium/Low finding not marked fixed. Some of those were
-   closed by the remediation plan, such as per-cell slot randomisation (Phase 17) and release
-   owner admission (Phase 04), so the list needs a re-triage before it is scheduled.
+6. **2026-11-05 security audit.** Re-triaged 2026-11-21
+   ([report](../../.agents/reports/security-261121-audit-retriage.md)): 141 of 188 rows were
+   open. The owner's batches A–E landed 2026-11-22: AArch64 FP/SIMD context (a new finding),
+   cell-reachable kernel panics and quota gaps, VFS bounds, net/httpd confinement, CI
+   supply-chain pins. Still open: H-12 snapshot integrity (latent), x86 NMI/#MC exiting
+   (05 S-15), IR-off DMA (05 S-17), AArch64 guest FP banks and GICv2 EOI (06 S-9, S-14), the
+   Low/Info sweep, dev-only tooling (09 S-*), model-dependent AI items, and 08 S-18b.
 7. **Physical qualification.** No result above has run on physical hardware. The
    [HCL](../hardware-compatibility-list.md) has no physical x86 row, and every promotion stays
    gated on exact-device evidence (see § Evidence and security).
