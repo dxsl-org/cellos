@@ -43,7 +43,10 @@ event: it may change `source_binding` and nothing else, the matrix digest must s
 equal, the new revision must be archived under `docs/evidence/`, and
 `ratified_revision` must be a commit holding exactly those bytes. Event 14 re-bases
 the binding onto the contract as of `6a2f6d32` (four prose edits since `fd3d12ae`:
-witness paths and the bounded-request wording; matrix digest unchanged).
+witness paths and the bounded-request wording; matrix digest unchanged). Event 19
+re-bases it onto `fbd3bfb8`, where §3.1 pins the three native tuples to
+`nightly-2026-11-21` after the signed rust-std PAL compiler-strategy re-decision
+(steward lungmat8, reviewer datgausaigon; matrix digest unchanged).
 
 All current source availability and exact cell text remain in the JSON ledger.
 No `PASS` capability is seeded: physical RPi3 qualification, Tier-2 admission,

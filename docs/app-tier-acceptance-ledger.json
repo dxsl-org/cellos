@@ -1683,16 +1683,44 @@
       },
       "state_digest": "1a092c697fd2bda298844a2534bcbeb06a3862eaf4f14b6aea2fb75d3797a6d9",
       "hash": "8c870368508dc811b86b004908404eff706dd68dff980d8b443b49fe37d5b328"
+    },
+    {
+      "sequence": 19,
+      "event_id": "spec23-source-amendment-20261122",
+      "previous_hash": "8c870368508dc811b86b004908404eff706dd68dff980d8b443b49fe37d5b328",
+      "steward": "lungmat8",
+      "reviewer": "datgausaigon",
+      "recorded_at": "2026-11-22T06:10:53Z",
+      "action": {
+        "kind": "source_amendment",
+        "changes": [
+          {
+            "section": "source_binding",
+            "before_sha256": "a7924bdc6a6ef8f26bcffca31df4aef54ac3756a8df3a47707d7b4910bc6f5ef",
+            "after_sha256": "035e99cd51044d566e37a9630bea4dbf9a9746634d4c2aaed8baa1c0146f00f4"
+          }
+        ],
+        "evidence": [
+          {
+            "path": "docs/evidence/spec23-native-sdk-contract-4106d2612594.md",
+            "sha256": "4106d2612594e891432ae85abc80c947c6f8537b1a0e91e62d43d43fb3d611d3",
+            "size_bytes": 33580,
+            "kind": "artifact"
+          }
+        ]
+      },
+      "state_digest": "72797ce0f48848f27e9a19676fa7c722438d77f078dfacad3cb5ffe435e529ff",
+      "hash": "6930ed740e691a8d1a57fd73a9e36b4c7db227412cb5bd8aa8b905bda6406b3f"
     }
   ],
   "baseline_prefix": {
-    "event_count": 18,
-    "tip_hash": "8c870368508dc811b86b004908404eff706dd68dff980d8b443b49fe37d5b328"
+    "event_count": 19,
+    "tip_hash": "6930ed740e691a8d1a57fd73a9e36b4c7db227412cb5bd8aa8b905bda6406b3f"
   },
   "source_binding": {
     "path": "docs/specs/23-native-sdk-contract.md",
-    "sha256": "9a8d7031af3d1d4a27c9f6772ca2dce71211bde556a81a510e78ff4a303f87e4",
+    "sha256": "4106d2612594e891432ae85abc80c947c6f8537b1a0e91e62d43d43fb3d611d3",
     "matrix_sha256": "f742a6ec1f5a0110bbe4882028ac32fbdd9c884307d207171519919704ca7ece",
-    "ratified_revision": "6a2f6d3271c4c0fca485af3e943958c125361623"
+    "ratified_revision": "fbd3bfb832a267f31b04c439c7e92f982dbdbabc"
   }
 }
