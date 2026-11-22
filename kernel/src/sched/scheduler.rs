@@ -341,6 +341,58 @@ pub(crate) struct VfsLeaseRelease {
     pub request_generation: u64,
 }
 
+/// The sweep's deadline outcome for `task` (tid `id`), applied while the task
+/// still holds the `Blocked` state of the wait that ran out.
+///
+/// The wait returns 0 (ostd `sys_recv_timeout` reads that as a timeout; the
+/// completion waits as "no record") and counts as a deadline miss. Only a
+/// receive ends the request the task is serving. A completion or event wait
+/// is not a receive: a driver parks on its IRQ with a deadline while it serves
+/// a request, and dropping its caller context there turned its reply into a
+/// mailbox post that never completed the caller's bounded operation.
+fn expire_wait(task: &mut Task, id: usize, vfs_context_drops: &mut Vec<VfsLeaseRelease>) {
+    task.trap_frame.regs[10] = 0;
+    if matches!(
+        task.state,
+        TaskState::Blocked {
+            wait: WaitKind::Recv { .. },
+            ..
+        }
+    ) {
+        // A timed-out public VFS receive drops the old request at this syscall
+        // boundary. Queue only its exact lease for release outside SCHEDULER;
+        // a masked backend wait retains the outer request context.
+        if let Some((grant_owner, request_generation)) = task.begin_receive_context(0) {
+            let release = VfsLeaseRelease {
+                holder_tid: id,
+                grant_owner,
+                request_generation,
+            };
+            if crate::memory::pin::find_vfs_lease(
+                release.holder_tid,
+                release.grant_owner,
+                release.request_generation,
+            )
+            .is_some()
+            {
+                vfs_context_drops.push(release);
+            }
+        } else {
+            task.clear_current_caller_context();
+        }
+    }
+    task.sched_stats.deadline_misses = task.sched_stats.deadline_misses.saturating_add(1);
+    // Observability: an RT cell whose awaited message missed its deadline is a
+    // missed control-loop cycle — record it (no enforcement). Gated to RT
+    // priority so the safety-timeout use on Normal cells stays quiet.
+    if task.priority >= abi::TaskPriority::RealTime as u8 {
+        crate::audit::log_event(
+            crate::audit::AuditEvent::RtDeadlineMiss,
+            &crate::audit::encode_u32x2(task.cell_id.0 as u32, task.sched_stats.deadline_misses),
+        );
+    }
+}
+
 const MAX_RETURNABLE_OWNER_WATCH_TOKEN: u64 = isize::MAX as u64;
 
 /// Who may subscribe to the root death of the principal it is serving: the
@@ -2473,48 +2525,8 @@ impl Scheduler {
                     _ => {}
                 }
                 if should_wake {
-                    // ostd `sys_recv_timeout` returns Ok(0) on timeout; the syscall
-                    // return register is regs[10], restored by sret when the task runs.
                     if timed_out {
-                        task.trap_frame.regs[10] = 0;
-                        // A timed-out public VFS receive drops the old request
-                        // at this syscall boundary. Queue only its exact lease
-                        // for release outside SCHEDULER; a masked backend wait
-                        // retains the outer request context.
-                        if let Some((grant_owner, request_generation)) =
-                            task.begin_receive_context(0)
-                        {
-                            let release = VfsLeaseRelease {
-                                holder_tid: *id,
-                                grant_owner,
-                                request_generation,
-                            };
-                            if crate::memory::pin::find_vfs_lease(
-                                release.holder_tid,
-                                release.grant_owner,
-                                release.request_generation,
-                            )
-                            .is_some()
-                            {
-                                vfs_context_drops.push(release);
-                            }
-                        } else {
-                            task.clear_current_caller_context();
-                        }
-                        task.sched_stats.deadline_misses =
-                            task.sched_stats.deadline_misses.saturating_add(1);
-                        // Observability: an RT cell whose awaited message missed its deadline
-                        // is a missed control-loop cycle — record it (no enforcement). Gated to
-                        // RT priority so the safety-timeout use on Normal cells stays quiet.
-                        if task.priority >= abi::TaskPriority::RealTime as u8 {
-                            crate::audit::log_event(
-                                crate::audit::AuditEvent::RtDeadlineMiss,
-                                &crate::audit::encode_u32x2(
-                                    task.cell_id.0 as u32,
-                                    task.sched_stats.deadline_misses,
-                                ),
-                            );
-                        }
+                        expire_wait(task, *id, &mut vfs_context_drops);
                     }
                     task.state = TaskState::Ready;
                     waking_tasks.push_back(*id);
@@ -3260,6 +3272,63 @@ mod retirement_tests {
         );
         assert_eq!(scheduler.take_cell_owner_watch_token(), None);
         assert!(scheduler.cell_owner_watches.is_empty());
+    }
+
+    /// A driver parks on its IRQ (WaitCompletion with a deadline) while it
+    /// serves a bounded request. That deadline must leave the request in
+    /// place so the driver's reply still completes the caller's operation;
+    /// only a receive that times out ends it.
+    #[test]
+    fn only_a_receive_deadline_ends_the_request_being_served() {
+        use crate::task::tcb::Delivery;
+        const TID: usize = 60_041;
+        const CALLER: usize = 60_042;
+        const TOKEN: usize = 4;
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        let serving = |state: TaskState| {
+            let mut task = Box::new(Task::new(TID, CellId(73), "deadline", alloc::vec![]));
+            assert_eq!(
+                task.set_received_request_context(CALLER, 74, 1, TOKEN),
+                Some(TOKEN)
+            );
+            task.state = state;
+            task
+        };
+        let mut drops = Vec::new();
+
+        for delivery in [Delivery::Queue, Delivery::EventMask(1)] {
+            let mut task = serving(TaskState::Blocked {
+                wait: WaitKind::Completion {
+                    source: 1,
+                    delivery,
+                },
+                deadline: Some(10),
+            });
+            expire_wait(&mut task, TID, &mut drops);
+            assert_eq!(
+                task.current_async_op, TOKEN,
+                "{delivery:?} deadline dropped the operation being served"
+            );
+            assert_eq!(task.caller.current, Some(CALLER));
+            assert_eq!(task.trap_frame.regs[10], 0);
+            assert_eq!(task.sched_stats.deadline_misses, 1);
+        }
+
+        let mut task = serving(TaskState::Blocked {
+            wait: WaitKind::Recv {
+                mask: 0,
+                buf_ptr: 0x0200_0000,
+                buf_len: 64,
+            },
+            deadline: Some(10),
+        });
+        expire_wait(&mut task, TID, &mut drops);
+        assert_eq!(
+            task.current_async_op, 0,
+            "a receive timeout ends the request"
+        );
+        assert_eq!(task.caller.current, None);
+        assert!(drops.is_empty(), "no VFS lease was held");
     }
 }
 

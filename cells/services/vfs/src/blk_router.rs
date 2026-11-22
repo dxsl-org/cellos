@@ -52,7 +52,9 @@ pub enum Call {
 
 /// How long one block request may take, in scheduler ticks: the drivers' own
 /// 30 s device budget plus 5 s, so only a driver that overran its deadline (a
-/// frozen one) is cut off. 35 s also stays below the VFS heartbeat.
+/// frozen one) is cut off. 35 s also stays below the VFS heartbeat. Init's
+/// bootstrap window (`VFS_BOOTSTRAP_READY_TICKS`) covers one such bound, so the
+/// two change together.
 pub const BLOCK_REPLY_TICKS: u64 = 3_500;
 
 /// How long a stalled device stays refused before one request may probe it

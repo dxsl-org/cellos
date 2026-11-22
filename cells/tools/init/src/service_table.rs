@@ -26,6 +26,14 @@ pub(crate) struct Service {
     pub(crate) window_start: u64,
 }
 
+/// Ticks the bootstrap VFS has to answer its first request. VFS mounts the
+/// disks before it serves, and one block request may legally take
+/// `BLOCK_REPLY_TICKS` (3,500, `cells/services/vfs/src/blk_router.rs`) before
+/// the router cuts the device off and refuses it from then on. The window is
+/// one such bound plus the 500 ticks an ordinary bootstrap gets, so a slow
+/// but in-budget disk delays boot instead of stopping it.
+const VFS_BOOTSTRAP_READY_TICKS: u64 = 3_500 + 500;
+
 impl Service {
     pub(crate) fn new(spec: CellSpec) -> Self {
         Self {
@@ -51,7 +59,7 @@ impl Service {
             service_id: Some(service::VFS),
             registration: Registration::Init,
             after: Vec::new(),
-            ready_timeout_ticks: 500,
+            ready_timeout_ticks: VFS_BOOTSTRAP_READY_TICKS,
         })
     }
 
