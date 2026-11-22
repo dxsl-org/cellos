@@ -94,7 +94,7 @@ def denominator_tuple(target: str, feature_selection: str) -> tuple[str, ...]:
     """Return every field in the canonical ratified Rust build denominator."""
     cpu = "riscv64" if target.startswith("riscv64") else "aarch64" if target.startswith("aarch64") else "x86_64"
     flags = "-C relocation-model=pic -C target-feature=+bti,+paca,+pacg" if cpu == "aarch64" else "-C relocation-model=pic"
-    return ("nightly-2026-05-01", target, "rust", f'target_arch="{cpu}"', flags, feature_selection, feature_selection, "release", "rust-no-std", "T1")
+    return ("nightly-2026-11-21", target, "rust", f'target_arch="{cpu}"', flags, feature_selection, feature_selection, "release", "rust-no-std", "T1")
 
 
 def denominator(target: str, feature_selection: str) -> str:

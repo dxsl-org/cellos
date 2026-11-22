@@ -1,0 +1,123 @@
+diff --git a/src/number_decoder.rs b/src/number_decoder.rs
+index bc01702..7126cba 100644
+--- a/src/number_decoder.rs
++++ b/src/number_decoder.rs
+@@ -566,7 +566,7 @@ impl AbstractNumberDecoder for NumberRange {
+ /// latency loses to a short byte loop: without a prefix, short numbers are 10 to 90% slower on
+ /// an M-series core, while 4 to 16 digits are within noise of each other. Eight keeps the
+ /// common shapes on the byte loop there.
+-#[cfg(not(target_arch = "x86_64"))]
++#[cfg(not(all(target_arch = "x86_64", target_feature = "sse2")))]
+ const SCALAR_DIGITS: usize = 8;
+ 
+ /// The end of the run of ASCII digits starting at `index`: the first `SCALAR_DIGITS` one byte
+@@ -575,7 +575,7 @@ const SCALAR_DIGITS: usize = 8;
+ /// or at the end of `data`.
+ #[inline(always)]
+ fn digit_run_end(data: &[u8], index: usize, limit: usize) -> Option<usize> {
+-    #[cfg(not(target_arch = "x86_64"))]
++    #[cfg(not(all(target_arch = "x86_64", target_feature = "sse2")))]
+     let index = {
+         let mut index = index;
+         for _ in 0..SCALAR_DIGITS {
+diff --git a/src/simd/fallback_int.rs b/src/simd/fallback_int.rs
+index 1deb74d..6c2ac01 100644
+--- a/src/simd/fallback_int.rs
++++ b/src/simd/fallback_int.rs
+@@ -17,7 +17,7 @@ pub(crate) fn find_digit_run_end(data: &[u8], mut index: usize, limit: usize) ->
+     }
+ }
+ 
+-#[cfg(not(any(target_arch = "x86_64", all(target_arch = "aarch64", target_endian = "little"))))]
++#[cfg(not(any(all(target_arch = "x86_64", target_feature = "sse2"), all(target_arch = "aarch64", target_endian = "little"))))]
+ #[inline(always)]
+ pub(super) fn classify_digit_chunk(data: &[u8; 16]) -> ([u64; 2], u32) {
+     let count = data.iter().position(|digit| !digit.is_ascii_digit()).unwrap_or(16);
+diff --git a/src/simd/mod.rs b/src/simd/mod.rs
+index ef1fbeb..c67be1d 100644
+--- a/src/simd/mod.rs
++++ b/src/simd/mod.rs
+@@ -4,7 +4,7 @@ mod fallback_int;
+ mod fallback_string;
+ mod number;
+ mod swar_int;
+-#[cfg(target_arch = "x86_64")]
++#[cfg(all(target_arch = "x86_64", target_feature = "sse2"))]
+ mod x86_64;
+ 
+ pub(crate) use fallback_int::decode_int_chunk as decode_int_chunk_small;
+@@ -17,12 +17,12 @@ use crate::string_decoder::StringChunk;
+ /// the number of digits consumed per `IntChunk::Ongoing` chunk from `decode_int_chunk_big`
+ #[cfg(all(
+     feature = "num-bigint",
+-    any(target_arch = "x86_64", all(target_arch = "aarch64", target_endian = "little"))
++    any(all(target_arch = "x86_64", target_feature = "sse2"), all(target_arch = "aarch64", target_endian = "little"))
+ ))]
+ pub(crate) const ONGOING_CHUNK_MULTIPLIER: u64 = 10u64.pow(16);
+ #[cfg(all(
+     feature = "num-bigint",
+-    not(any(target_arch = "x86_64", all(target_arch = "aarch64", target_endian = "little")))
++    not(any(all(target_arch = "x86_64", target_feature = "sse2"), all(target_arch = "aarch64", target_endian = "little")))
+ ))]
+ pub(crate) const ONGOING_CHUNK_MULTIPLIER: u64 = 10u64.pow(18);
+ 
+@@ -37,12 +37,12 @@ pub(crate) fn decode_string_chunk(
+     {
+         aarch64::decode_string_chunk(data, index, ascii_only, allow_partial)
+     }
+-    #[cfg(target_arch = "x86_64")]
++    #[cfg(all(target_arch = "x86_64", target_feature = "sse2"))]
+     {
+         // SAFETY: SSE2 is part of the x86_64 baseline.
+         unsafe { x86_64::decode_string_chunk(data, index, ascii_only, allow_partial) }
+     }
+-    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
++    #[cfg(not(any(target_arch = "aarch64", all(target_arch = "x86_64", target_feature = "sse2"))))]
+     {
+         fallback_string::decode_string_chunk(data, index, ascii_only, allow_partial)
+     }
+@@ -57,12 +57,12 @@ fn classify_digit_chunk(data: &[u8; 16]) -> ([u64; 2], u32) {
+         // SAFETY: all supported aarch64 targets support neon intrinsics.
+         unsafe { aarch64::classify_digit_chunk(data) }
+     }
+-    #[cfg(target_arch = "x86_64")]
++    #[cfg(all(target_arch = "x86_64", target_feature = "sse2"))]
+     {
+         // SAFETY: SSE2 is part of the x86_64 baseline.
+         unsafe { x86_64::classify_digit_chunk(data) }
+     }
+-    #[cfg(not(any(target_arch = "x86_64", all(target_arch = "aarch64", target_endian = "little"))))]
++    #[cfg(not(any(all(target_arch = "x86_64", target_feature = "sse2"), all(target_arch = "aarch64", target_endian = "little"))))]
+     {
+         fallback_int::classify_digit_chunk(data)
+     }
+@@ -75,12 +75,12 @@ pub(crate) fn find_digit_run_end(data: &[u8], index: usize, limit: usize) -> Opt
+         // SAFETY: all supported aarch64 targets support neon intrinsics.
+         unsafe { aarch64::find_digit_run_end(data, index, limit) }
+     }
+-    #[cfg(target_arch = "x86_64")]
++    #[cfg(all(target_arch = "x86_64", target_feature = "sse2"))]
+     {
+         // SAFETY: SSE2 is part of the x86_64 baseline.
+         unsafe { x86_64::find_digit_run_end(data, index, limit) }
+     }
+-    #[cfg(not(any(target_arch = "x86_64", all(target_arch = "aarch64", target_endian = "little"))))]
++    #[cfg(not(any(all(target_arch = "x86_64", target_feature = "sse2"), all(target_arch = "aarch64", target_endian = "little"))))]
+     {
+         fallback_int::find_digit_run_end(data, index, limit)
+     }
+@@ -96,12 +96,12 @@ pub(crate) fn decode_int_chunk_big(data: &[u8], index: usize) -> (IntChunk, usiz
+         // SAFETY: all supported aarch64 targets support neon intrinsics
+         unsafe { aarch64::decode_int_chunk_big(data, index) }
+     }
+-    #[cfg(target_arch = "x86_64")]
++    #[cfg(all(target_arch = "x86_64", target_feature = "sse2"))]
+     {
+         // SAFETY: SSE2 is part of the x86_64 baseline.
+         unsafe { x86_64::decode_int_chunk_big(data, index) }
+     }
+-    #[cfg(not(any(target_arch = "x86_64", all(target_arch = "aarch64", target_endian = "little"))))]
++    #[cfg(not(any(all(target_arch = "x86_64", target_feature = "sse2"), all(target_arch = "aarch64", target_endian = "little"))))]
+     {
+         fallback_int::decode_int_chunk(data, index, 0)
+     }

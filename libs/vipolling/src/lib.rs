@@ -354,7 +354,7 @@ impl Poller {
                 ..
             } => {
                 let lock = self.interests.lock();
-                for chunk in ready_slice.chunks_exact(NET_READY_RECORD_BYTES) {
+                for chunk in ready_slice.as_chunks::<NET_READY_RECORD_BYTES>().0 {
                     if let Some(ev) = TcpReadyEvent::decode(chunk) {
                         if let Some(&(key, _)) = lock.get(&ev.cap_id) {
                             let readable = ev.ready & (net_ready::READ | net_ready::ACCEPT) != 0;

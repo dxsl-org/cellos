@@ -150,8 +150,10 @@ pub fn q8_0_row_from_f32(x: &[f32], out: &mut [u8]) -> Result<(), MathError> {
         return Err(MathError::ShapeMismatch);
     }
     for (block, slot) in x
-        .chunks_exact(Q8_0_BLOCK_WEIGHTS)
-        .zip(out.chunks_exact_mut(Q8_0_BLOCK_BYTES))
+        .as_chunks::<Q8_0_BLOCK_WEIGHTS>()
+        .0
+        .iter()
+        .zip(out.as_chunks_mut::<Q8_0_BLOCK_BYTES>().0)
     {
         let mut peak = 0.0f32;
         for value in block {

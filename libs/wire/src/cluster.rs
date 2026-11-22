@@ -159,10 +159,10 @@ impl PeerTicket {
         p += 2;
         out[p] = self.addrs_len;
         p += 1;
-        for i in 0..self.addrs_len as usize {
-            out[p..p + 4].copy_from_slice(&self.addrs[i].0);
+        for addr in &self.addrs[..self.addrs_len as usize] {
+            out[p..p + 4].copy_from_slice(&addr.0);
             p += 4;
-            out[p..p + 2].copy_from_slice(&self.addrs[i].1.to_le_bytes());
+            out[p..p + 2].copy_from_slice(&addr.1.to_le_bytes());
             p += 2;
         }
         p

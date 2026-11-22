@@ -440,7 +440,7 @@ fn wake(sched: &mut Scheduler, owner: usize) {
 
 fn new_token() -> Result<usize, Failure> {
     NEXT_OPERATION
-        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |next| {
+        .try_update(Ordering::Relaxed, Ordering::Relaxed, |next| {
             (next <= isize::MAX as usize).then_some(next + 1)
         })
         .map_err(|_| Failure::Busy)

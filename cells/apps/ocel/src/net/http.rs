@@ -551,7 +551,7 @@ impl Transport for KernelTransport {
         }
         let endpoint = provider_tid(abi::syscall::service::NET)?;
         if ACTIVE_JOBS
-            .fetch_update(
+            .try_update(
                 core::sync::atomic::Ordering::Relaxed,
                 core::sync::atomic::Ordering::Relaxed,
                 |count| (count < MAX_CONCURRENT_NET_JOBS).then_some(count + 1),

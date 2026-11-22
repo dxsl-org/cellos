@@ -91,6 +91,26 @@ name = "webpki-roots"
 allow = ["MIT"]
 name = "redoxfs"
 
+# Monty (Python sandbox) dependencies, linked only into the Tier-2 witness
+# cells/demos/monty-smoke (scripts/fetch-monty.sh). Both licenses are permissive.
+[[licenses.exceptions]]
+# Blue Oak Model License 1.0.0: Monty's snapshot (dump) CBOR codec.
+allow = ["BlueOak-1.0.0"]
+name = "minicbor"
+
+[[licenses.exceptions]]
+allow = ["BlueOak-1.0.0"]
+name = "minicbor-serde"
+
+[[licenses.exceptions]]
+# Unicode character-name tables (data) for Python's `unicodedata` / `\N{...}`.
+allow = ["Unicode-DFS-2016"]
+name = "unicode_names2"
+
+[[licenses.exceptions]]
+allow = ["Unicode-DFS-2016"]
+name = "ruff_unicode_names2"
+
 [bans]
 multiple-versions = "warn"
 wildcards = "deny"

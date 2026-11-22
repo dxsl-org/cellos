@@ -157,7 +157,7 @@ impl Context {
     /// stdio grant records of slots 0..=3, never the completion or later slots.
     pub(crate) fn stdio_projection(&self) -> Result<[u8; STDIO_PROJECTION_LEN], Status> {
         let mut stdio = [0u8; STDIO_PROJECTION_LEN];
-        for (slot, bytes) in stdio.chunks_exact_mut(40).enumerate() {
+        for (slot, bytes) in stdio.as_chunks_mut::<40>().0.iter_mut().enumerate() {
             bytes.copy_from_slice(&self.grants[slot].ok_or(Status::Denied)?.wire);
         }
         Ok(stdio)

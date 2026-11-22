@@ -417,16 +417,16 @@ impl Stack {
     ) -> Result<Self, ViError> {
         use crate::loader::va_alloc;
 
-        if total_pages > va_alloc::STACK_VA_STRIDE / PAGE_SIZE {
+        if total_pages > va_alloc::LARGE_STACK_VA_STRIDE / PAGE_SIZE {
             error!(
-                "Stack alloc refused: {} pages exceed a {}-byte stack slot",
+                "Stack alloc refused: {} pages exceed the largest ({}-byte) stack slot",
                 total_pages,
-                va_alloc::STACK_VA_STRIDE
+                va_alloc::LARGE_STACK_VA_STRIDE
             );
             return Err(ViError::OutOfMemory);
         }
-        let base = va_alloc::alloc_stack_va().ok_or_else(|| {
-            error!("Stack alloc failed: every stack arena slot is held");
+        let base = va_alloc::alloc_stack_va(total_pages).ok_or_else(|| {
+            error!("Stack alloc failed: every stack slot of this size is held");
             ViError::OutOfMemory
         })?;
         let top = base + total_pages * PAGE_SIZE;

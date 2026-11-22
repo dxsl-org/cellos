@@ -36,9 +36,8 @@ pub fn render(surf: &mut ViSurface, game: &Game) {
     );
 
     // Locked cells
-    for r in 0..ROWS {
-        for c in 0..COLS {
-            let ci = game.board[r][c];
+    for (r, row) in game.board.iter().enumerate() {
+        for (c, &ci) in row.iter().enumerate() {
             if ci != 0 {
                 draw_cell(
                     surf,

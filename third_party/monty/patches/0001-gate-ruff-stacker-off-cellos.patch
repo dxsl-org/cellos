@@ -1,0 +1,31 @@
+diff --git a/Cargo.toml b/Cargo.toml
+index d981d93c..bff26e49 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -81,7 +81,9 @@ monty-typeshed = { path = "crates/monty-typeshed", version = "=1.7.0-beta.1" }
+ # TODO: we might wish to remove stacker and have custom protections against
+ # stack overflow which don't rely on stack manipulation. (e.g. by limiting
+ # parse recursion.)
+-ruff_python_parser = { version = "0.0.21", features = ["stacker"] }
++# `stacker` is enabled per target in crates/monty/Cargo.toml: cellos has no
++# mmap/mprotect for stacker's segments and bounds parser depth instead.
++ruff_python_parser = "0.0.21"
+ ruff_python_stdlib = "0.0.21"
+ ruff_python_ast = "0.0.21"
+ ruff_python_codegen = "0.0.21"
+diff --git a/crates/monty/Cargo.toml b/crates/monty/Cargo.toml
+index 6f823dac..c2f08ba7 100644
+--- a/crates/monty/Cargo.toml
++++ b/crates/monty/Cargo.toml
+@@ -57,6 +57,11 @@ jiff = { workspace = true }
+ speedate = "0.18.0"
+ jiter = { version = "0.19.0", features = ["num-bigint"] }
+ 
++# Grow ruff's parser stack on demand everywhere except cellos, whose hosts set
++# `source_scan_threshold = 0` so the nesting pre-scan bounds parser recursion.
++[target.'cfg(not(target_os = "cellos"))'.dependencies]
++ruff_python_parser = { workspace = true, features = ["stacker"] }
++
+ [features]
+ # ref-count-return changes behavior to return information on reference counts to check they're correct
+ # should be used for testing only

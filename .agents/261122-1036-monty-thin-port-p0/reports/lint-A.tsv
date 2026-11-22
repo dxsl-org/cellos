@@ -1,0 +1,43 @@
+kernel/src/admission/owner_key.rs:55	clippy::needless_bool	this `if` guard returns a bool literal and is followed by another
+kernel/src/arch/aarch64/vm.rs:1138	clippy::chunks_exact_to_as_chunks	using `chunks_exact_mut` with a constant chunk size
+kernel/src/boot/fdt_nops.rs:129	clippy::chunks_exact_to_as_chunks	using `chunks_exact_mut` with a constant chunk size
+kernel/src/dev/pcie_ecam.rs:1350	clippy::needless_bool	this `if` guard returns a bool literal and is followed by another
+kernel/src/ed25519.rs:46	clippy::needless_bool	this `if` guard returns a bool literal and is followed by another
+kernel/src/hypervisor/vmm_wire.rs:103	clippy::chunks_exact_to_as_chunks	using `chunks_exact` with a constant chunk size
+kernel/src/hypervisor/vmm_wire.rs:114	clippy::chunks_exact_to_as_chunks	using `chunks_exact_mut` with a constant chunk size
+kernel/src/memory/cell_quota.rs:326	deprecated	use of deprecated method `core::sync::atomic::Atomic::<usize>::fetch_update`: renamed to `try_update` for consistency
+kernel/src/memory/cell_quota.rs:428	deprecated	use of deprecated method `core::sync::atomic::Atomic::<usize>::fetch_update`: renamed to `try_update` for consistency
+kernel/src/memory/cell_quota.rs:451	deprecated	use of deprecated method `core::sync::atomic::Atomic::<usize>::fetch_update`: renamed to `try_update` for consistency
+kernel/src/memory/cell_quota.rs:550	deprecated	use of deprecated method `core::sync::atomic::Atomic::<usize>::fetch_update`: renamed to `try_update` for consistency
+kernel/src/memory/tag_pool.rs:189	deprecated	use of deprecated method `core::sync::atomic::Atomic::<u64>::fetch_update`: renamed to `try_update` for consistency
+kernel/src/memory/tag_pool.rs:210	deprecated	use of deprecated method `core::sync::atomic::Atomic::<u64>::fetch_update`: renamed to `try_update` for consistency
+kernel/src/memory/tag_pool.rs:220	deprecated	use of deprecated method `core::sync::atomic::Atomic::<u32>::fetch_update`: renamed to `try_update` for consistency
+kernel/src/policy.rs:692	clippy::needless_bool	this `if` guard returns a bool literal and is followed by another
+kernel/src/resource_registry.rs:510	clippy::needless_bool	this `if` guard returns a bool literal and is followed by another
+kernel/src/sha256.rs:91	clippy::chunks_exact_to_as_chunks	using `chunks_exact` with a constant chunk size
+kernel/src/signing.rs:293	clippy::needless_bool	this `if` guard returns a bool literal and is followed by another
+kernel/src/task/async_ipc.rs:443	deprecated	use of deprecated method `core::sync::atomic::Atomic::<usize>::fetch_update`: renamed to `try_update` for consistency
+kernel/src/task/child_context.rs:160	clippy::chunks_exact_to_as_chunks	using `chunks_exact_mut` with a constant chunk size
+libs/abi/src/dir_attestation.rs:118	clippy::needless_range_loop	the loop variable `i` is used to index `carrier.handles`
+libs/abi/src/telemetry.rs:443	clippy::chunks_exact_to_as_chunks	using `chunks_exact` with a constant chunk size
+libs/abi/src/telemetry.rs:450	clippy::chunks_exact_to_as_chunks	using `chunks_exact` with a constant chunk size
+libs/cellos-fs/src/engine/inodes.rs:92	clippy::chunks_exact_to_as_chunks	using `chunks_exact` with a constant chunk size
+libs/cellos-fs/src/format.rs:130	clippy::chunks_exact_to_as_chunks	using `chunks_exact` with a constant chunk size
+libs/intel-gpu-core/src/uapi.rs:242	clippy::chunks_exact_to_as_chunks	using `chunks_exact` with a constant chunk size
+libs/ostd/src/child_context.rs:291	clippy::chunks_exact_to_as_chunks	using `chunks_exact` with a constant chunk size
+libs/ostd/src/clients/kms.rs:178	deprecated	use of deprecated method `core::sync::atomic::Atomic::<u32>::fetch_update`: renamed to `try_update` for consistency
+libs/ostd/src/clients/kms.rs:212	deprecated	use of deprecated method `core::sync::atomic::Atomic::<u64>::fetch_update`: renamed to `try_update` for consistency
+libs/ostd/src/clients/kms.rs:230	deprecated	use of deprecated method `core::sync::atomic::Atomic::<u32>::fetch_update`: renamed to `try_update` for consistency
+libs/ostd/src/display/linear/canvas.rs:133	clippy::chunks_exact_to_as_chunks	using `chunks_exact_mut` with a constant chunk size
+libs/ostd/src/display/linear/canvas.rs:139	clippy::chunks_exact_to_as_chunks	using `chunks_exact_mut` with a constant chunk size
+libs/ostd/src/session.rs:737	clippy::chunks_exact_to_as_chunks	using `chunks_exact` with a constant chunk size
+libs/ostd/src/session.rs:773	clippy::chunks_exact_to_as_chunks	using `chunks_exact` with a constant chunk size
+libs/ostd/src/session.rs:784	clippy::chunks_exact_to_as_chunks	using `chunks_exact` with a constant chunk size
+libs/ostd/src/session.rs:788	clippy::chunks_exact_to_as_chunks	using `chunks_exact_mut` with a constant chunk size
+libs/scsi-block/src/parse.rs:70	clippy::chunks_exact_to_as_chunks	using `chunks_exact` with a constant chunk size
+libs/text-engine/src/pipeline.rs:1442	clippy::chunks_exact_to_as_chunks	using `chunks_exact` with a constant chunk size
+libs/vimio/src/lib.rs:387	clippy::chunks_exact_to_as_chunks	using `chunks_exact` with a constant chunk size
+libs/vipolling/src/lib.rs:357	clippy::chunks_exact_to_as_chunks	using `chunks_exact` with a constant chunk size
+libs/wire/src/cluster.rs:162	clippy::needless_range_loop	the loop variable `i` is only used to index `self.addrs`
+libs/wire/src/ipc.rs:772	clippy::chunks_exact_to_as_chunks	using `chunks_exact_mut` with a constant chunk size
+libs/wire/src/ssh_completion.rs:170	clippy::chunks_exact_to_as_chunks	using `chunks_exact` with a constant chunk size

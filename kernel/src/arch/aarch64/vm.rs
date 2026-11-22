@@ -1135,7 +1135,7 @@ pub(crate) fn two_vm_stage2_selftest() {
             0x17ff_fffe,
         ];
         let mut bytes = [0u8; 12];
-        for (chunk, word) in bytes.chunks_exact_mut(4).zip(words) {
+        for (chunk, word) in bytes.as_chunks_mut::<4>().0.iter_mut().zip(words) {
             chunk.copy_from_slice(&word.to_le_bytes());
         }
         bytes

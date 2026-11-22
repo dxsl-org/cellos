@@ -1,0 +1,10 @@
+# getrandom 0.3 (via ahash) and 0.4 (Monty) have no cellos backend; both resolve
+# the `custom` backend's `__getrandom_v03_custom`, defined in src/entropy.rs.
+# sha1/sha2 default to SSE/SHA-NI backends on x86_64, which the cellos x86_64
+# spec disables (soft-float, -sse); select their portable backends.
+[target.'cfg(target_os = "cellos")']
+rustflags = [
+    "--cfg", 'getrandom_backend="custom"',
+    "--cfg", 'sha1_backend="soft"',
+    "--cfg", 'sha2_backend="soft"',
+]

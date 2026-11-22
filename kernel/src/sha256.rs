@@ -88,12 +88,10 @@ pub fn sha256(data: &[u8]) -> [u8; 32] {
     let mut h = H0;
     let bitlen = (data.len() as u64).wrapping_mul(8);
 
-    let mut chunks = data.chunks_exact(64);
-    for block in chunks.by_ref() {
-        // SAFETY of unwrap: chunks_exact yields exactly-64-byte slices.
-        process(&mut h, block.try_into().unwrap());
+    let (blocks, rem) = data.as_chunks::<64>();
+    for block in blocks {
+        process(&mut h, block);
     }
-    let rem = chunks.remainder();
 
     // Padding: 0x80, zeros, then 64-bit big-endian bit length. Needs one extra
     // block when the remainder leaves < 8 bytes for the length field.

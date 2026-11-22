@@ -11,20 +11,21 @@ if [ ! -f "$TARGET_SPEC" ]; then
     exit 1
 fi
 
-EXPECTED_COMMIT="f53b654a8"
-RUSTC_COMMIT="$(rustc +nightly-2026-05-01 --version --verbose | grep 'commit-hash:' | awk '{print substr($2, 1, 9)}')"
+TOOLCHAIN="nightly-2026-11-21"
+EXPECTED_COMMIT="c7d5ba59d"
+RUSTC_COMMIT="$(rustc +"$TOOLCHAIN" --version --verbose | grep 'commit-hash:' | awk '{print substr($2, 1, 9)}')"
 
 if [ "$RUSTC_COMMIT" != "$EXPECTED_COMMIT" ]; then
     echo "ERROR: Unexpected rustc commit $RUSTC_COMMIT (expected $EXPECTED_COMMIT)" >&2
     exit 1
 fi
 
-SYSROOT_BASE="$(rustc +nightly-2026-05-01 --print sysroot)"
+SYSROOT_BASE="$(rustc +"$TOOLCHAIN" --print sysroot)"
 RUST_SRC="$SYSROOT_BASE/lib/rustlib/src/rust/library"
 
 if [ ! -d "$RUST_SRC" ]; then
     echo "ERROR: rust-src component not found at $RUST_SRC" >&2
-    echo "Run: rustup component add rust-src --toolchain nightly-2026-05-01" >&2
+    echo "Run: rustup component add rust-src --toolchain $TOOLCHAIN" >&2
     exit 1
 fi
 
@@ -36,7 +37,9 @@ if [ ! -f "$PATCH_FILE" ]; then
     exit 1
 fi
 
-PATCH_DIGEST="$(sha256sum "$PATCH_FILE" | awk '{print $1}')"
+# The staged tree depends on both the patch and the rust-src it was applied to;
+# keying on the rustc commit too makes a toolchain move (or rollback) restage.
+PATCH_DIGEST="$(sha256sum "$PATCH_FILE" | awk '{print $1}')-$RUSTC_COMMIT"
 STAMP_FILE="target/cellos-rust-src/.patch.sha256"
 
 mkdir -p "target/cellos-rust-src"
@@ -56,7 +59,7 @@ export __CARGO_TESTS_ONLY_SRC_ROOT="$STAGING_DIR"
 export RUST_BACKTRACE=1
 
 # Compile std library check
-cargo +nightly-2026-05-01 check \
+cargo +"$TOOLCHAIN" check \
     -Z build-std=core,alloc,std \
     -Z json-target-spec \
     --target "$TARGET_SPEC" \

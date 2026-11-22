@@ -99,7 +99,7 @@ fn idle(deadline: &mut Deadline, irq: &mut CompletionIrq) -> Option<Spent> {
 fn note_slow(deadline: &Deadline, what: &str, opc: u8) {
     if let Some(ms) = deadline.slow(now_ms()) {
         if SLOW_LOG
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |left| {
+            .try_update(Ordering::Relaxed, Ordering::Relaxed, |left| {
                 left.checked_sub(1)
             })
             .is_ok()

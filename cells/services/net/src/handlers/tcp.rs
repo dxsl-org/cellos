@@ -346,7 +346,10 @@ pub(crate) fn readiness(
         return Err(());
     }
     let count = interests.len() / wire::ipc::NET_READY_RECORD_BYTES;
-    for raw in interests.chunks_exact(wire::ipc::NET_READY_RECORD_BYTES) {
+    for raw in interests
+        .as_chunks::<{ wire::ipc::NET_READY_RECORD_BYTES }>()
+        .0
+    {
         let interest = TcpInterest::decode(raw).ok_or(())?;
         if interest.mask == 0
             || interest.mask
@@ -422,10 +425,11 @@ pub(crate) fn pack_events<'a>(
     out: &'a mut [u8; READY_PAGE * wire::ipc::NET_READY_RECORD_BYTES],
 ) -> &'a [u8] {
     let len = events.len() * wire::ipc::NET_READY_RECORD_BYTES;
-    for (event, chunk) in events
-        .iter()
-        .zip(out[..len].chunks_exact_mut(wire::ipc::NET_READY_RECORD_BYTES))
-    {
+    for (event, chunk) in events.iter().zip(
+        out[..len]
+            .as_chunks_mut::<{ wire::ipc::NET_READY_RECORD_BYTES }>()
+            .0,
+    ) {
         chunk[..4].copy_from_slice(&event.cap_id.to_le_bytes());
         chunk[4] = event.ready;
     }

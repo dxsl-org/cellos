@@ -11,6 +11,7 @@ exclude = [
     "tools/mutable-globals",     # offline std host tool: writable-global inventory (Phase 02)
     "third_party/redoxfs",   # vendored fork — own resolver; unused since the CellosFS Native switch
     "third_party/mlibc",     # mlibc vendored copy — built with Meson, not Cargo
+    "third_party/monty-src", # pydantic/monty checkout (scripts/fetch-monty.sh) — its own workspace
     # cell-build is a build-script helper (uses std) — it compiles only for the host
     # as a [build-dependency]; excluding it keeps `cargo check` from trying to
     # compile it for the bare-metal target (riscv64gc-unknown-none-elf).
@@ -20,6 +21,8 @@ exclude = [
     "cells/apps/vove",
     # std-smoke is a Tier 1 std cell built with custom sysroot and json-target-spec
     "cells/demos/std-smoke",
+    # monty-smoke is a Tier 2 std cell (Monty witness), same build shape as std-smoke
+    "cells/demos/monty-smoke",
     # Spec 26 design skeletons (owner decision D1, 2026-11-10): not wired, fail-open,
     # no consumer. Source is kept for P08; never package them as an enforcing TCB.
     "cells/services/budget-authority",

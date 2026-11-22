@@ -130,13 +130,13 @@ impl<'a> Canvas<'a> {
         let start = y as usize * self.stride + x0 as usize * 4;
         let row = &mut self.pixels[start..start + (x1 - x0) as usize * 4];
         if color[3] == 255 {
-            for px in row.chunks_exact_mut(4) {
+            for px in row.as_chunks_mut::<4>().0 {
                 px.copy_from_slice(&color);
             }
             return;
         }
         let a = u32::from(color[3]);
-        for px in row.chunks_exact_mut(4) {
+        for px in row.as_chunks_mut::<4>().0 {
             for ch in 0..3 {
                 px[ch] =
                     ((u32::from(color[ch]) * a + u32::from(px[ch]) * (255 - a) + 127) / 255) as u8;

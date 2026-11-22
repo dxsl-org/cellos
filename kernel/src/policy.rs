@@ -689,10 +689,7 @@ fn v3_parse_cases() -> bool {
         return false;
     }
     let c = p.entries[0].caps;
-    if !c.usb_driver || c.pcie_driver || c.platform || c.supervisor {
-        return false;
-    }
-    true
+    c.usb_driver && !c.pcie_driver && !c.platform && !c.supervisor
 }
 
 /// magic | version=5 | flags=0 | count=1 | len=9 "/bin/curl" | 15 cap bytes:

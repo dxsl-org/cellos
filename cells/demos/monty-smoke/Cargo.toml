@@ -1,0 +1,38 @@
+[package]
+name = "monty-smoke"
+version = "0.1.0"
+edition = "2021"
+license = "MPL-2.0"
+
+# Built only with the CellOS std sysroot overlay and a json target spec
+# (scripts/build-x86_64-monty-smoke-ci.sh), so it stays out of the root workspace.
+[workspace]
+
+[dependencies]
+ostd = { path = "../../../libs/ostd", version = "0.2.0" }
+abi = { path = "../../../libs/abi", version = "0.1.0" }
+# Populated by scripts/fetch-monty.sh (pin + Cellos platform patches).
+monty = { path = "../../../third_party/monty-src/crates/monty", version = "=1.7.0-beta.1" }
+monty-types = { path = "../../../third_party/monty-src/crates/monty-types", version = "=1.7.0-beta.1" }
+# Only for the `Error` type of the `custom` entropy backend both getrandom 0.3 and 0.4 call.
+getrandom = { version = "0.3", default-features = false }
+
+[build-dependencies]
+cell-build = { path = "../../../libs/cell-build", version = "0.2.0" }
+
+# Host test builds do not know the private `cellos` target OS.
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("cellos"))'] }
+
+# Size-first: the kernel copies a signed ELF into its heap to verify it
+# (kernel/src/signing.rs), and a default -O3 build of Monty (12.9 MB) did not fit.
+[profile.release]
+panic = "abort"
+opt-level = "s"
+lto = "fat"
+codegen-units = 1
+
+# jiter 0.19.0 with its x86_64 SIMD gated on SSE2 (the cellos x86_64 spec has no
+# SSE); fetched, checksum-verified and patched by scripts/fetch-monty.sh.
+[patch.crates-io]
+jiter = { path = "../../../third_party/monty-deps/jiter-0.19.0" }

@@ -52,10 +52,7 @@ pub fn self_test() -> bool {
         }
         let mut bad_sig = TEST_SIG;
         bad_sig[0] ^= 1;
-        if verify_owner_signature(TEST_PAYLOAD, &bad_sig) {
-            return false;
-        }
-        true
+        !verify_owner_signature(TEST_PAYLOAD, &bad_sig)
     }
     #[cfg(not(feature = "dev-signing-key"))]
     {

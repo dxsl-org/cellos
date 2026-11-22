@@ -239,8 +239,10 @@ impl DrmFile {
             }
         };
         let ops = ops_bytes
-            .chunks_exact(VM_BIND_OP_SIZE)
-            .map(decode_bind_op)
+            .as_chunks::<VM_BIND_OP_SIZE>()
+            .0
+            .iter()
+            .map(|op| decode_bind_op(op))
             .collect::<Result<Vec<_>, _>>()?;
         // Bind queues of class VM_BIND are not created by this driver: a named queue is
         // either unknown or not a bind queue (`xe_vm_bind_ioctl`).

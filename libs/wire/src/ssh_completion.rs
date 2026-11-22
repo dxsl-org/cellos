@@ -167,7 +167,9 @@ remote_signal={} error_code={} stdout_complete={} stderr_complete={}",
 /// The newest whole, valid frame in `bytes` (a partial trailing frame is ignored).
 pub fn last_frame(bytes: &[u8]) -> Option<CompletionV1> {
     bytes
-        .chunks_exact(FRAME_LEN)
+        .as_chunks::<FRAME_LEN>()
+        .0
+        .iter()
         .rev()
         .find_map(|f| CompletionV1::decode(f).ok())
 }

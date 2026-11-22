@@ -127,8 +127,8 @@ impl Superblock {
         }
 
         let mut inode_blocks = [0u64; 32];
-        for (i, chunk) in buf[88..344].chunks_exact(8).enumerate() {
-            inode_blocks[i] = u64::from_le_bytes(chunk.try_into().ok()?);
+        for (i, chunk) in buf[88..344].as_chunks::<8>().0.iter().enumerate() {
+            inode_blocks[i] = u64::from_le_bytes(*chunk);
         }
         let mut reserved = [0u8; 3748];
         reserved.copy_from_slice(&buf[344..4092]);

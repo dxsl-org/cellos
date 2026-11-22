@@ -116,8 +116,8 @@ pub fn matvec_q8_0(
     }
     for (row, slot) in w.chunks_exact(row_bytes).zip(out.iter_mut()) {
         let mut acc = [0.0f32; 4];
-        let blocks = row.chunks_exact(quant::Q8_0_BLOCK_BYTES);
-        let vectors = x.chunks_exact(quant::Q8_0_BLOCK_WEIGHTS);
+        let blocks = row.as_chunks::<{ quant::Q8_0_BLOCK_BYTES }>().0.iter();
+        let vectors = x.as_chunks::<{ quant::Q8_0_BLOCK_WEIGHTS }>().0.iter();
         for (block, vector) in blocks.zip(vectors) {
             let mut decoded = [0.0f32; quant::Q8_0_BLOCK_WEIGHTS];
             quant::q8_0_block_to_f32(block, &mut decoded)?;
@@ -178,8 +178,10 @@ pub fn matvec_q8_0_int8(
     for (row, slot) in w.chunks_exact(row_bytes).zip(out.iter_mut()) {
         let mut acc = [0.0f32; 4];
         for (index, (block, vector)) in row
-            .chunks_exact(quant::Q8_0_BLOCK_BYTES)
-            .zip(x_q8.chunks_exact(quant::Q8_0_BLOCK_BYTES))
+            .as_chunks::<{ quant::Q8_0_BLOCK_BYTES }>()
+            .0
+            .iter()
+            .zip(x_q8.as_chunks::<{ quant::Q8_0_BLOCK_BYTES }>().0)
             .enumerate()
         {
             let (Some(&w_lo), Some(&w_hi)) = (block.first(), block.get(1)) else {
@@ -535,18 +537,13 @@ fn fill_uniform(x: &mut [f32]) {
 #[inline]
 fn accumulate_products(acc: &mut [f32; 4], a: &[f32], b: &[f32]) {
     debug_assert_eq!(a.len(), b.len());
-    for (left, right) in a.chunks_exact(4).zip(b.chunks_exact(4)) {
+    for (left, right) in a.as_chunks::<4>().0.iter().zip(b.as_chunks::<4>().0) {
         acc[0] += left[0] * right[0];
         acc[1] += left[1] * right[1];
         acc[2] += left[2] * right[2];
         acc[3] += left[3] * right[3];
     }
-    for (left, right) in a
-        .chunks_exact(4)
-        .remainder()
-        .iter()
-        .zip(b.chunks_exact(4).remainder())
-    {
+    for (left, right) in a.as_chunks::<4>().1.iter().zip(b.as_chunks::<4>().1) {
         acc[0] += left * right;
     }
 }

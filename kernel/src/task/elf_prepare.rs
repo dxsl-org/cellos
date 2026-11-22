@@ -120,11 +120,30 @@ impl Drop for PreparationMappings<'_> {
 }
 
 /// Parse, map, relocate, protect, and stack an ELF without touching scheduler state.
+/// The root user stack has the kernel stack's size, [`super::stack_pages_for`].
 pub fn prepare_elf_task(
     data: &[u8],
     name: &str,
     requested_cell_id: CellId,
     allowed_drivers: Vec<usize>,
+) -> Result<PreparedElfTask, ViError> {
+    prepare_elf_task_with_user_stack(
+        data,
+        name,
+        requested_cell_id,
+        allowed_drivers,
+        super::stack_pages_for(name),
+    )
+}
+
+/// [`prepare_elf_task`] with a root user stack of `user_stack_pages` usable
+/// pages (the caller's [`super::user_stack_pages_for`] decision).
+pub fn prepare_elf_task_with_user_stack(
+    data: &[u8],
+    name: &str,
+    requested_cell_id: CellId,
+    allowed_drivers: Vec<usize>,
+    user_stack_pages: usize,
 ) -> Result<PreparedElfTask, ViError> {
     use crate::loader::{ElfLoader, ElfParser};
 
@@ -257,7 +276,8 @@ pub fn prepare_elf_task(
     #[cfg(feature = "test-hooks")]
     kstack.test_hook_prime_watermark();
     crate::loader::atomic_checkpoint("AP-04")?;
-    let ustack = super::stack::Stack::new_user(pages).map_err(|_| ViError::OutOfMemory)?;
+    let ustack =
+        super::stack::Stack::new_user(user_stack_pages).map_err(|_| ViError::OutOfMemory)?;
     // Frames come back from the allocator holding their last owner's bytes, and
     // the initial-stack writer fills only the top of the range: zero all of it so
     // a new cell can never read another cell's data off its own stack. Through

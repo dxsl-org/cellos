@@ -8,8 +8,10 @@
 //! one of the lowest [`FIXED_VA_SLOTS`] slots: randomised order hands those to
 //! a PIE only once every other slot is held.
 //!
-//! Every user stack takes one `STACK_VA_STRIDE` slot of the stack arena right
-//! above the cell region (`alloc_stack_va`), so it is never mapped at its
+//! Every user stack takes one slot of the stack arena right above the cell
+//! region (`alloc_stack_va`): a `STACK_VA_STRIDE` slot, or for the few paths
+//! that need more than `task::STACK_PAGES` a `LARGE_STACK_VA_STRIDE` slot of
+//! the small large-stack arena above it. Neither is ever mapped at its
 //! physical address; the slot returns (`free_stack_va`) only once its frames'
 //! translations are gone on every hart.
 //!
@@ -385,7 +387,7 @@ impl<const WORDS: usize> SlotAllocator<WORDS> {
 pub(crate) const STACK_VA_START: usize = CELL_VA_START + MAX_SLOTS * CELL_VA_STRIDE;
 
 /// One user stack per slot: its bottom guards, then its usable pages, then
-/// unmapped VA up to the next slot. The largest stack the kernel allocates
+/// unmapped VA up to the next slot. The largest regular stack
 /// (`task::STACK_PAGES` plus `task::stack::STACK_GUARD_PAGES`) rounded up to a
 /// power of two: 512 KiB.
 pub(crate) const STACK_VA_STRIDE: usize =
@@ -411,24 +413,67 @@ const STACKS: Region = Region {
 #[cfg(cellos_wide)]
 static STACK_ARENA: SlotAllocator<{ STACK_SLOTS / 64 }> = SlotAllocator::over(STACKS);
 
-/// Take one stack slot (`STACK_VA_STRIDE` bytes of VA, nothing mapped) in
-/// this boot's [`SlotOrder`], or `None` when every slot is held.
+/// Slot of the large-stack arena: `task::LARGE_STACK_PAGES` plus the guards,
+/// rounded up to a power of two (4 MiB). Only the launches
+/// `task::user_stack_pages_for` sizes above `task::STACK_PAGES` take one, so
+/// the arena stays small instead of widening every regular slot.
+pub(crate) const LARGE_STACK_VA_STRIDE: usize =
+    (crate::task::LARGE_STACK_PAGES + crate::task::stack::STACK_GUARD_PAGES).next_power_of_two()
+        * crate::memory::paging::PAGE_SIZE;
+
+/// First byte of the large-stack arena: right above the regular one.
 #[cfg(cellos_wide)]
-pub(crate) fn alloc_stack_va() -> Option<usize> {
-    STACK_ARENA.alloc(&SLOT_ORDER)
+const LARGE_STACK_VA_START: usize = STACK_VA_START + STACK_SLOTS * STACK_VA_STRIDE;
+
+/// Live large stacks at once (256 MiB of VA at the 4 MiB stride).
+#[cfg(cellos_wide)]
+const LARGE_STACK_SLOTS: usize = 64;
+
+#[cfg(cellos_wide)]
+const _: () = assert!(
+    LARGE_STACK_VA_START + LARGE_STACK_SLOTS * LARGE_STACK_VA_STRIDE
+        <= crate::hal::paging::USER_LIMIT
+);
+
+#[cfg(cellos_wide)]
+static LARGE_STACK_ARENA: SlotAllocator<{ LARGE_STACK_SLOTS / 64 }> = SlotAllocator::over(Region {
+    start: LARGE_STACK_VA_START,
+    stride: LARGE_STACK_VA_STRIDE,
+    slots: LARGE_STACK_SLOTS,
+    fixed: 0,
+});
+
+/// Take one stack slot that holds `total_pages` pages (usable plus guards),
+/// nothing mapped, in this boot's [`SlotOrder`]: a regular slot when it fits
+/// one, else a large-stack slot. `None` when the stack fits no slot size or
+/// every slot of its size is held.
+#[cfg(cellos_wide)]
+pub(crate) fn alloc_stack_va(total_pages: usize) -> Option<usize> {
+    let bytes = total_pages.checked_mul(crate::memory::paging::PAGE_SIZE)?;
+    if bytes <= STACK_VA_STRIDE {
+        STACK_ARENA.alloc(&SLOT_ORDER)
+    } else if bytes <= LARGE_STACK_VA_STRIDE {
+        LARGE_STACK_ARENA.alloc(&SLOT_ORDER)
+    } else {
+        None
+    }
 }
 
 /// Paging targets only: the bare-physical ones never map a stack.
 #[cfg(not(cellos_wide))]
-pub(crate) fn alloc_stack_va() -> Option<usize> {
+pub(crate) fn alloc_stack_va(_total_pages: usize) -> Option<usize> {
     None
 }
 
 /// Return a stack slot. Only once nothing translates any page of it on any
 /// hart: the stack's `VaHold` calls this after its run's flush is confirmed.
+/// Each arena ignores a base that is not one of its slots.
 pub(crate) fn free_stack_va(base: usize) {
     #[cfg(cellos_wide)]
-    STACK_ARENA.free(base);
+    {
+        STACK_ARENA.free(base);
+        LARGE_STACK_ARENA.free(base);
+    }
     #[cfg(not(cellos_wide))]
     let _ = base;
 }
@@ -449,9 +494,10 @@ pub(crate) fn assert_identity_ram_below_cells(ram_end: usize) {
 }
 
 /// End of the VA the kernel hands out from its allocators: the cell slots
-/// `[CELL_VA_START, STACK_VA_START)`, then the stack arena right above them.
+/// `[CELL_VA_START, STACK_VA_START)`, then the stack arena and the
+/// large-stack arena right above them.
 #[cfg(cellos_wide)]
-const ALLOCATED_VA_END: usize = STACK_VA_START + STACK_SLOTS * STACK_VA_STRIDE;
+const ALLOCATED_VA_END: usize = LARGE_STACK_VA_START + LARGE_STACK_SLOTS * LARGE_STACK_VA_STRIDE;
 
 /// Does `[start, start + len)` reach the VA the kernel hands out from its
 /// allocators, `[CELL_VA_START, ALLOCATED_VA_END)` (cell slots and stack
@@ -472,16 +518,16 @@ pub(crate) fn overlaps_allocated_va(_start: usize, _len: usize) -> bool {
     false
 }
 
-/// Does `va` lie in the stack arena?
+/// Does `va` lie in the stack arena or the large-stack arena?
 #[cfg(all(cellos_wide, feature = "test-hooks"))]
 pub(crate) fn in_stack_arena(va: usize) -> bool {
-    (STACK_VA_START..STACK_VA_START + STACK_SLOTS * STACK_VA_STRIDE).contains(&va)
+    (STACK_VA_START..ALLOCATED_VA_END).contains(&va)
 }
 
-/// Does the stack slot at `base` have a holder right now?
+/// Does the stack slot at `base` (regular or large) have a holder right now?
 #[cfg(all(cellos_wide, feature = "test-hooks"))]
 pub(crate) fn stack_slot_held(base: usize) -> bool {
-    STACK_ARENA.held(base)
+    STACK_ARENA.held(base) || LARGE_STACK_ARENA.held(base)
 }
 
 /// Allocate one profile-sized VA slot for a new PIE cell, in this boot's

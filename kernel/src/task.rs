@@ -62,7 +62,7 @@ pub mod thread_quota_selftest;
 pub mod thread_user_entry_selftest;
 /// Per-task user thread pointer (TLS base) — ADR-0018 §2.1 primitive.
 pub(crate) mod tls;
-pub use elf_prepare::{prepare_elf_task, PreparedElfTask};
+pub use elf_prepare::{prepare_elf_task, prepare_elf_task_with_user_stack, PreparedElfTask};
 pub mod launch;
 pub use launch::{
     publish_prepared, CallerLaunchAuthority, LaunchRoutes, StagedMeasurement, TaskLaunchState,
@@ -119,6 +119,13 @@ use log::info;
 pub const STACK_PAGES: usize = 64;
 /// Post-reactor floor: twice the largest measured peak, rounded up to 64 KiB.
 const MEASURED_STACK_PAGES: usize = 16;
+/// Stack for paths that run Monty (Python): ruff's recursive-descent parser
+/// needs about 2 MiB to reach Monty's nesting limit of 200 (measured at
+/// `opt-level = "s"` without `stacker`, which cellos builds drop: list/dict
+/// literals 317, `if` blocks 385, `+`/method chains 334 levels in 2 MiB; 256 KiB
+/// held about 31). Such a stack takes a slot of the separate large-stack arena
+/// (`loader::va_alloc::LARGE_STACK_VA_STRIDE`).
+pub const LARGE_STACK_PAGES: usize = 512;
 pub(crate) const TRAP_FRAME_SIZE: usize = core::mem::size_of::<crate::hal::arch::ViTrapFrame>();
 extern "C" {
     fn __trap_exit();
@@ -701,6 +708,22 @@ pub(crate) fn stack_pages_for(name: &str) -> usize {
     }
 }
 
+/// Usable pages of a root user stack. A kernel-resolved launch of a path whose
+/// user code needs a deep native stack gets [`LARGE_STACK_PAGES`]; everything
+/// else, including the same basename at any other or caller-supplied path,
+/// gets [`stack_pages_for`]`(name)`. The kernel stack always keeps the
+/// [`stack_pages_for`] size.
+///
+/// Keyed on the resolved path, never the basename: the basename is chosen by
+/// the spawner, and these stacks are a scarce, physically contiguous resource
+/// (`loader::va_alloc` large-stack arena).
+pub(crate) fn user_stack_pages_for(path: &str, kernel_resolved: bool, name: &str) -> usize {
+    match path {
+        "/bin/monty-smoke" if kernel_resolved => LARGE_STACK_PAGES,
+        _ => stack_pages_for(name),
+    }
+}
+
 #[cfg(feature = "test-hooks")]
 pub(crate) fn stack_sizing_policy_self_test() -> bool {
     ["init", "cellbox", "vfs-test", "net", "virtio-net", "thread"]
@@ -708,6 +731,11 @@ pub(crate) fn stack_sizing_policy_self_test() -> bool {
         .all(|name| stack_pages_for(name) == MEASURED_STACK_PAGES)
         && stack_pages_for("vfs") == STACK_PAGES
         && stack_pages_for("unmeasured-path") == STACK_PAGES
+        && stack_pages_for("monty-smoke") == STACK_PAGES
+        && user_stack_pages_for("/bin/monty-smoke", true, "monty-smoke") == LARGE_STACK_PAGES
+        && user_stack_pages_for("/bin/monty-smoke", false, "monty-smoke") == STACK_PAGES
+        && user_stack_pages_for("/apps/x/monty-smoke", true, "monty-smoke") == STACK_PAGES
+        && user_stack_pages_for("/bin/cellbox", true, "cellbox") == MEASURED_STACK_PAGES
 }
 
 #[cfg(feature = "test-hooks")]

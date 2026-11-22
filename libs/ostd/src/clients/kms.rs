@@ -175,7 +175,7 @@ impl KmsClient {
     ) -> Result<KmsResponseV1, KmsClientError> {
         let request_id = self
             .next_request_id
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
+            .try_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
                 current.checked_add(1).filter(|next| *next != 0)
             })
             .map_err(|_| KmsClientError::InvalidPayload)?;
@@ -209,7 +209,7 @@ impl KmsClient {
     /// Next payload `request_id` (opcodes 15, 20, 21, 22): nonzero, strictly increasing.
     fn next_payload_id(&self) -> Result<u64, KmsClientError> {
         self.next_payload_id
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
+            .try_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
                 current.checked_add(1)
             })
             .map_err(|_| KmsClientError::InvalidPayload)
@@ -227,7 +227,7 @@ impl KmsClient {
         }
         let request_id = self
             .next_request_id
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
+            .try_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
                 current.checked_add(1).filter(|next| *next != 0)
             })
             .map_err(|_| KmsClientError::InvalidPayload)?;

@@ -440,15 +440,17 @@ impl<'a> TelemetrySnapshot<'a> {
 
     pub fn cells(&self) -> impl Iterator<Item = TelemetryCellV1> + 'a {
         self.cells
-            .chunks_exact(CELL_LEN)
-            .filter_map(|row| row.try_into().ok())
+            .as_chunks::<CELL_LEN>()
+            .0
+            .iter()
             .map(TelemetryCellV1::read)
     }
 
     pub fn tasks(&self) -> impl Iterator<Item = TelemetryTaskV1> + 'a {
         self.tasks
-            .chunks_exact(TASK_LEN)
-            .filter_map(|row| row.try_into().ok())
+            .as_chunks::<TASK_LEN>()
+            .0
+            .iter()
             .map(TelemetryTaskV1::read)
     }
 }

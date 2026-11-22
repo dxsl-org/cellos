@@ -1265,8 +1265,8 @@ class ToolchainTests(unittest.TestCase):
     def test_reads_the_pin_from_disk(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            write(root, "rust-toolchain.toml", '[toolchain]\nchannel = "nightly-2026-05-01"\n')
-            self.assertEqual(toolchain.pinned_channel(root), "nightly-2026-05-01")
+            write(root, "rust-toolchain.toml", '[toolchain]\nchannel = "nightly-2026-11-21"\n')
+            self.assertEqual(toolchain.pinned_channel(root), "nightly-2026-11-21")
 
     def test_absent_pin_reads_as_none_and_fails_the_check(self):
         with tempfile.TemporaryDirectory() as tmp:

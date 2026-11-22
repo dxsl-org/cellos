@@ -25,7 +25,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
-          toolchain: nightly-2026-05-01
+          toolchain: nightly-2026-11-21
           components: rust-src
           targets: riscv64gc-unknown-none-elf
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
@@ -103,7 +103,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
-          toolchain: nightly-2026-05-01
+          toolchain: nightly-2026-11-21
       - name: Install git-cliff
         run: cargo install --locked git-cliff --version 2.14.2
       - name: Generate CHANGELOG for this tag

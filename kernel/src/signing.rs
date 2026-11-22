@@ -290,8 +290,5 @@ pub fn self_test() -> bool {
     let mut bad_payload = alloc::vec![0u8; TEST_PAYLOAD.len()];
     bad_payload.copy_from_slice(TEST_PAYLOAD);
     bad_payload[0] ^= 0x01;
-    if crate::ed25519::verify(&TEST_PUBKEY, &bad_payload, &TEST_SIG) {
-        return false;
-    }
-    true
+    !crate::ed25519::verify(&TEST_PUBKEY, &bad_payload, &TEST_SIG)
 }

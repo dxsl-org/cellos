@@ -1,8 +1,8 @@
 diff --git a/library/std/build.rs b/library/std/build.rs
-index 5f2e441..b19ec03 100644
+index 98856b5..47b1a62 100644
 --- a/library/std/build.rs
 +++ b/library/std/build.rs
-@@ -57,6 +57,7 @@ fn main() {
+@@ -58,6 +58,7 @@ fn main() {
          || target_os == "nuttx"
          || target_os == "cygwin"
          || target_os == "vexos"
@@ -10,40 +10,61 @@ index 5f2e441..b19ec03 100644
  
          // See src/bootstrap/src/core/build_steps/synthetic_targets.rs
          || env::var("RUSTC_BOOTSTRAP_SYNTHETIC_TARGET").is_ok()
-diff --git b/library/std/src/sys/alloc/cellos.rs b/library/std/src/sys/alloc/cellos.rs
+diff --git a/library/std/src/sys/alloc/cellos.rs b/library/std/src/sys/alloc/cellos.rs
 new file mode 100644
-index 0000000..8824f29
+index 0000000..b56b6d5
 --- /dev/null
 +++ b/library/std/src/sys/alloc/cellos.rs
-@@ -0,0 +1,15 @@
-+use crate::alloc::{GlobalAlloc, Layout, System};
+@@ -0,0 +1,20 @@
++use crate::alloc::Layout;
 +use crate::sys::pal::alloc as pal_alloc;
 +
-+#[stable(feature = "alloc_system_type", since = "1.28.0")]
-+unsafe impl GlobalAlloc for System {
-+    #[inline]
-+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-+        unsafe { pal_alloc::alloc(layout) }
-+    }
++#[inline]
++pub unsafe fn alloc(layout: Layout) -> *mut u8 {
++    unsafe { pal_alloc::alloc(layout) }
++}
 +
-+    #[inline]
-+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-+        unsafe { pal_alloc::dealloc(ptr, layout) }
-+    }
++#[inline]
++pub unsafe fn dealloc(ptr: *mut u8, layout: Layout) {
++    unsafe { pal_alloc::dealloc(ptr, layout) }
++}
++
++// The PAL heap has no in-place grow; this is the same alloc + copy + dealloc
++// sequence `GlobalAlloc::realloc`'s default performed before the free-function
++// allocator interface.
++#[inline]
++pub unsafe fn realloc(ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
++    unsafe { super::realloc_fallback(ptr, layout, new_size) }
 +}
 diff --git a/library/std/src/sys/alloc/mod.rs b/library/std/src/sys/alloc/mod.rs
-index f2f1d1c..29d6921 100644
+index 66a2c3b..31598cb 100644
 --- a/library/std/src/sys/alloc/mod.rs
 +++ b/library/std/src/sys/alloc/mod.rs
-@@ -107,4 +107,7 @@ cfg_select! {
-     target_os = "zkvm" => {
+@@ -108,12 +108,22 @@ cfg_select! {
          mod zkvm;
+         use zkvm as imp;
      }
 +    target_os = "cellos" => {
 +        mod cellos;
++        use cellos as imp;
 +    }
  }
-diff --git b/library/std/src/sys/args/cellos.rs b/library/std/src/sys/args/cellos.rs
+ 
+ pub use imp::{alloc, dealloc, realloc};
+ 
+ cfg_select! {
+-    any(target_os = "hermit", target_os = "solid_asp3", target_os = "uefi", target_os = "zkvm") => {
++    any(
++        target_os = "hermit",
++        target_os = "solid_asp3",
++        target_os = "uefi",
++        target_os = "zkvm",
++        target_os = "cellos",
++    ) => {
+         #[inline]
+         pub unsafe fn alloc_zeroed(layout: Layout) -> *mut u8 {
+             let ptr = unsafe { alloc(layout) };
+diff --git a/library/std/src/sys/args/cellos.rs b/library/std/src/sys/args/cellos.rs
 new file mode 100644
 index 0000000..2c9e37e
 --- /dev/null
@@ -115,7 +136,7 @@ index 0000000..2c9e37e
 +    Args::new(args)
 +}
 diff --git a/library/std/src/sys/args/mod.rs b/library/std/src/sys/args/mod.rs
-index fd5562a..e5f5ad6 100644
+index c8011a6..69c189f 100644
 --- a/library/std/src/sys/args/mod.rs
 +++ b/library/std/src/sys/args/mod.rs
 @@ -10,6 +10,7 @@
@@ -126,7 +147,7 @@ index fd5562a..e5f5ad6 100644
  ))]
  mod common;
  
-@@ -53,6 +54,10 @@ cfg_select! {
+@@ -64,6 +65,10 @@ cfg_select! {
          mod zkvm;
          pub use zkvm::*;
      }
@@ -138,7 +159,7 @@ index fd5562a..e5f5ad6 100644
          mod unsupported;
          pub use unsupported::*;
 diff --git a/library/std/src/sys/env_consts.rs b/library/std/src/sys/env_consts.rs
-index 573f540..b966ea9 100644
+index b14160c..474fc37 100644
 --- a/library/std/src/sys/env_consts.rs
 +++ b/library/std/src/sys/env_consts.rs
 @@ -37,6 +37,17 @@ pub mod os {
@@ -160,20 +181,21 @@ index 573f540..b966ea9 100644
  pub mod os {
      pub const FAMILY: &str = "unix";
 diff --git a/library/std/src/sys/io/error/mod.rs b/library/std/src/sys/io/error/mod.rs
-index 4fca658..2b27fbe 100644
+index a56030f..d722bfa 100644
 --- a/library/std/src/sys/io/error/mod.rs
 +++ b/library/std/src/sys/io/error/mod.rs
-@@ -43,6 +43,7 @@ cfg_select! {
-         target_os = "vexos",
-         target_family = "wasm",
-         target_os = "zkvm",
-+        target_os = "cellos",
-     ) => {
+@@ -31,7 +31,7 @@ cfg_select! {
+         mod xous;
+         pub use xous::*;
+     }
+-    any(target_os = "vexos", target_family = "wasm", target_os = "zkvm", target_os = "trusty") => {
++    any(target_os = "vexos", target_family = "wasm", target_os = "zkvm", target_os = "trusty", target_os = "cellos") => {
          mod generic;
          pub use generic::*;
-diff --git b/library/std/src/sys/pal/cellos/alloc.rs b/library/std/src/sys/pal/cellos/alloc.rs
+     }
+diff --git a/library/std/src/sys/pal/cellos/alloc.rs b/library/std/src/sys/pal/cellos/alloc.rs
 new file mode 100644
-index 0000000..d9aa04e
+index 0000000..2235c4e
 --- /dev/null
 +++ b/library/std/src/sys/pal/cellos/alloc.rs
 @@ -0,0 +1,164 @@
@@ -341,9 +363,9 @@ index 0000000..d9aa04e
 +        curr += (*cur_hdr).size;
 +    }
 +}
-diff --git b/library/std/src/sys/pal/cellos/common.rs b/library/std/src/sys/pal/cellos/common.rs
+diff --git a/library/std/src/sys/pal/cellos/common.rs b/library/std/src/sys/pal/cellos/common.rs
 new file mode 100644
-index 0000000..eb94fd7
+index 0000000..d42be24
 --- /dev/null
 +++ b/library/std/src/sys/pal/cellos/common.rs
 @@ -0,0 +1,19 @@
@@ -364,9 +386,9 @@ index 0000000..eb94fd7
 +}
 +
 +pub fn abort_internal() -> ! {
-+    core::intrinsics::abort();
++    core::intrinsics::abort_immediate();
 +}
-diff --git b/library/std/src/sys/pal/cellos/env.rs b/library/std/src/sys/pal/cellos/env.rs
+diff --git a/library/std/src/sys/pal/cellos/env.rs b/library/std/src/sys/pal/cellos/env.rs
 new file mode 100644
 index 0000000..13df19e
 --- /dev/null
@@ -375,9 +397,9 @@ index 0000000..13df19e
 +pub mod os {
 +    pub use crate::sys::env_consts::os::*;
 +}
-diff --git b/library/std/src/sys/pal/cellos/futex.rs b/library/std/src/sys/pal/cellos/futex.rs
+diff --git a/library/std/src/sys/pal/cellos/futex.rs b/library/std/src/sys/pal/cellos/futex.rs
 new file mode 100644
-index 0000000..f012345
+index 0000000..9a47389
 --- /dev/null
 +++ b/library/std/src/sys/pal/cellos/futex.rs
 @@ -0,0 +1,166 @@
@@ -547,9 +569,9 @@ index 0000000..f012345
 +    #[cfg(not(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64")))]
 +    {}
 +}
-diff --git b/library/std/src/sys/pal/cellos/mod.rs b/library/std/src/sys/pal/cellos/mod.rs
+diff --git a/library/std/src/sys/pal/cellos/mod.rs b/library/std/src/sys/pal/cellos/mod.rs
 new file mode 100644
-index 0000000..18c8ccb
+index 0000000..2694700
 --- /dev/null
 +++ b/library/std/src/sys/pal/cellos/mod.rs
 @@ -0,0 +1,10 @@
@@ -563,7 +585,7 @@ index 0000000..18c8ccb
 +
 +pub use common::*;
 +pub use random::fill_bytes;
-diff --git b/library/std/src/sys/pal/cellos/random.rs b/library/std/src/sys/pal/cellos/random.rs
+diff --git a/library/std/src/sys/pal/cellos/random.rs b/library/std/src/sys/pal/cellos/random.rs
 new file mode 100644
 index 0000000..5c24707
 --- /dev/null
@@ -639,9 +661,9 @@ index 0000000..5c24707
 +        offset += ret as usize;
 +    }
 +}
-diff --git b/library/std/src/sys/pal/cellos/thread.rs b/library/std/src/sys/pal/cellos/thread.rs
+diff --git a/library/std/src/sys/pal/cellos/thread.rs b/library/std/src/sys/pal/cellos/thread.rs
 new file mode 100644
-index 0000000..ac2abcb
+index 0000000..153ff96
 --- /dev/null
 +++ b/library/std/src/sys/pal/cellos/thread.rs
 @@ -0,0 +1,439 @@
@@ -1084,7 +1106,7 @@ index 0000000..ac2abcb
 +        );
 +    }
 +}
-diff --git b/library/std/src/sys/pal/cellos/time.rs b/library/std/src/sys/pal/cellos/time.rs
+diff --git a/library/std/src/sys/pal/cellos/time.rs b/library/std/src/sys/pal/cellos/time.rs
 new file mode 100644
 index 0000000..60193cf
 --- /dev/null
@@ -1172,19 +1194,19 @@ index 88d9d42..ac80e3e 100644
          mod unsupported;
          pub use self::unsupported::*;
 diff --git a/library/std/src/sys/personality/mod.rs b/library/std/src/sys/personality/mod.rs
-index eabef92..400cbe5 100644
+index be79643..cf34f7d 100644
 --- a/library/std/src/sys/personality/mod.rs
 +++ b/library/std/src/sys/personality/mod.rs
-@@ -17,7 +17,7 @@ cfg_select! {
-     target_os = "emscripten" => {
-         mod emcc;
-     }
--    any(target_env = "msvc", target_family = "wasm", target_os = "motor") => {
-+    any(target_env = "msvc", target_family = "wasm", target_os = "motor", target_os = "cellos") => {
+@@ -14,7 +14,7 @@ mod dwarf;
+ 
+ #[cfg(not(any(test, doctest)))]
+ cfg_select! {
+-    any(target_env = "msvc", target_family = "wasm") => {
++    any(target_env = "msvc", target_family = "wasm", target_os = "cellos") => {
          // This is required by the compiler to exist (e.g., it's a lang item),
          // but it's never actually called by the compiler because
          // __CxxFrameHandler3 (msvc) / __gxx_wasm_personality_v0 (wasm) is the
-diff --git b/library/std/src/sys/random/cellos.rs b/library/std/src/sys/random/cellos.rs
+diff --git a/library/std/src/sys/random/cellos.rs b/library/std/src/sys/random/cellos.rs
 new file mode 100644
 index 0000000..2aec620
 --- /dev/null
@@ -1196,10 +1218,10 @@ index 0000000..2aec620
 +    random::fill_bytes(bytes);
 +}
 diff --git a/library/std/src/sys/random/mod.rs b/library/std/src/sys/random/mod.rs
-index 12346ef..7ed0f00 100644
+index 23f6ce8..79f46c0 100644
 --- a/library/std/src/sys/random/mod.rs
 +++ b/library/std/src/sys/random/mod.rs
-@@ -102,6 +102,10 @@ cfg_select! {
+@@ -93,6 +93,10 @@ cfg_select! {
          mod zkvm;
          pub use zkvm::fill_bytes;
      }
@@ -1210,9 +1232,9 @@ index 12346ef..7ed0f00 100644
      any(
          all(target_family = "wasm", target_os = "unknown"),
          target_os = "xous",
-diff --git b/library/std/src/sys/stdio/cellos.rs b/library/std/src/sys/stdio/cellos.rs
+diff --git a/library/std/src/sys/stdio/cellos.rs b/library/std/src/sys/stdio/cellos.rs
 new file mode 100644
-index 0000000..7bfd20c
+index 0000000..50fba48
 --- /dev/null
 +++ b/library/std/src/sys/stdio/cellos.rs
 @@ -0,0 +1,104 @@
@@ -1335,13 +1357,86 @@ index 86d0f3f..e2624b1 100644
      _ => {
          mod unsupported;
          pub use unsupported::*;
+diff --git a/library/std/src/sys/sync/condvar/mod.rs b/library/std/src/sys/sync/condvar/mod.rs
+index 615781e..82c5fdd 100644
+--- a/library/std/src/sys/sync/condvar/mod.rs
++++ b/library/std/src/sys/sync/condvar/mod.rs
+@@ -10,6 +10,7 @@ cfg_select! {
+         target_os = "fuchsia",
+         all(target_family = "wasm", target_feature = "atomics"),
+         target_os = "hermit",
++        target_os = "cellos",
+         all(target_os = "wasi", target_env = "p3"),
+     ) => {
+         mod futex;
+diff --git a/library/std/src/sys/sync/futex/mod.rs b/library/std/src/sys/sync/futex/mod.rs
+index 0edb46c..feff69a 100644
+--- a/library/std/src/sys/sync/futex/mod.rs
++++ b/library/std/src/sys/sync/futex/mod.rs
+@@ -35,5 +35,8 @@ cfg_select! {
+     target_os = "motor" => {
+         pub use moto_rt::futex::*;
+     }
++    target_os = "cellos" => {
++        pub use crate::sys::pal::futex::*;
++    }
+     _ => {}
+ }
+diff --git a/library/std/src/sys/sync/mutex/mod.rs b/library/std/src/sys/sync/mutex/mod.rs
+index 895ab9c..128f871 100644
+--- a/library/std/src/sys/sync/mutex/mod.rs
++++ b/library/std/src/sys/sync/mutex/mod.rs
+@@ -9,6 +9,7 @@ cfg_select! {
+         target_os = "dragonfly",
+         all(target_family = "wasm", target_feature = "atomics"),
+         target_os = "hermit",
++        target_os = "cellos",
+         all(target_os = "wasi", target_env = "p3"),
+     ) => {
+         mod futex;
+diff --git a/library/std/src/sys/sync/once/mod.rs b/library/std/src/sys/sync/once/mod.rs
+index eee7edf..8d4734b 100644
+--- a/library/std/src/sys/sync/once/mod.rs
++++ b/library/std/src/sys/sync/once/mod.rs
+@@ -19,6 +19,7 @@ cfg_select! {
+         target_os = "dragonfly",
+         target_os = "fuchsia",
+         target_os = "hermit",
++        target_os = "cellos",
+         all(target_os = "wasi", target_env = "p3"),
+     ) => {
+         mod futex;
+diff --git a/library/std/src/sys/sync/rwlock/mod.rs b/library/std/src/sys/sync/rwlock/mod.rs
+index 9991f29..c8e7f9b 100644
+--- a/library/std/src/sys/sync/rwlock/mod.rs
++++ b/library/std/src/sys/sync/rwlock/mod.rs
+@@ -10,6 +10,7 @@ cfg_select! {
+         all(target_family = "wasm", target_feature = "atomics"),
+         target_os = "hermit",
+         target_os = "motor",
++        target_os = "cellos",
+         all(target_os = "wasi", target_env = "p3"),
+     ) => {
+         mod futex;
+diff --git a/library/std/src/sys/sync/thread_parking/mod.rs b/library/std/src/sys/sync/thread_parking/mod.rs
+index dffa0ad..9711d7e 100644
+--- a/library/std/src/sys/sync/thread_parking/mod.rs
++++ b/library/std/src/sys/sync/thread_parking/mod.rs
+@@ -10,6 +10,7 @@ cfg_select! {
+         target_os = "fuchsia",
+         target_os = "motor",
+         target_os = "hermit",
++        target_os = "cellos",
+         all(target_os = "wasi", target_env = "p3"),
+     ) => {
+         mod futex;
 diff --git a/library/std/src/sys/thread/mod.rs b/library/std/src/sys/thread/mod.rs
-index 9816981..9cdc12d 100644
+index dfbfc2b..fbc855b 100644
 --- a/library/std/src/sys/thread/mod.rs
 +++ b/library/std/src/sys/thread/mod.rs
-@@ -95,6 +95,14 @@ cfg_select! {
-         mod unsupported;
-         pub use unsupported::{Thread, available_parallelism, current_os_id, set_name, DEFAULT_MIN_STACK_SIZE};
+@@ -100,6 +100,14 @@ cfg_select! {
+             DEFAULT_MIN_STACK_SIZE, Thread, available_parallelism, current_os_id, set_name,
+         };
      }
 +    target_os = "cellos" => {
 +        pub use crate::sys::pal::thread::{
@@ -1355,25 +1450,23 @@ index 9816981..9cdc12d 100644
          mod wasm;
          pub use wasm::sleep;
 diff --git a/library/std/src/sys/thread_local/mod.rs b/library/std/src/sys/thread_local/mod.rs
-index e88011a..782de96 100644
+index 1c137e5..ea39cda 100644
 --- a/library/std/src/sys/thread_local/mod.rs
 +++ b/library/std/src/sys/thread_local/mod.rs
 @@ -118,6 +118,7 @@ pub(crate) mod guard {
-         any(
-             target_os = "hermit",
-             target_os = "xous",
+             target_os = "uefi",
+             target_os = "zkvm",
+             target_os = "trusty",
 +            target_os = "cellos",
+             target_os = "vexos",
          ) => {
-             // `std` is the only runtime, so it just calls the destructor functions
-             // itself when the time comes.
-             pub(crate) fn enable() {}
-         }
+             pub(crate) fn enable() {
 diff --git a/library/std/src/sys/time/mod.rs b/library/std/src/sys/time/mod.rs
-index 6cd1850..522952f 100644
+index 179c968..ce6484d 100644
 --- a/library/std/src/sys/time/mod.rs
 +++ b/library/std/src/sys/time/mod.rs
-@@ -36,6 +36,15 @@ cfg_select! {
-             pub use super::unsupported::{SystemTime, UNIX_EPOCH};
+@@ -28,6 +28,15 @@ cfg_select! {
+             pub use super::vexos::Instant;
          }
      }
 +    target_os = "cellos" => {
@@ -1388,68 +1481,3 @@ index 6cd1850..522952f 100644
      target_os = "windows" => {
          mod windows;
          use windows as imp;
-diff --git a/library/std/src/sys/sync/condvar/mod.rs b/library/std/src/sys/sync/condvar/mod.rs
-index 0000001..0000002 100644
---- a/library/std/src/sys/sync/condvar/mod.rs
-+++ b/library/std/src/sys/sync/condvar/mod.rs
-@@ -10,7 +10,8 @@ cfg_select! {
-         target_os = "fuchsia",
-         all(target_family = "wasm", target_feature = "atomics"),
-         target_os = "hermit",
-+        target_os = "cellos",
-     ) => {
-         mod futex;
-         pub use futex::Condvar;
-     }
-diff --git a/library/std/src/sys/sync/mutex/mod.rs b/library/std/src/sys/sync/mutex/mod.rs
-index 0000001..0000002 100644
---- a/library/std/src/sys/sync/mutex/mod.rs
-+++ b/library/std/src/sys/sync/mutex/mod.rs
-@@ -9,7 +9,8 @@ cfg_select! {
-         target_os = "dragonfly",
-         all(target_family = "wasm", target_feature = "atomics"),
-         target_os = "hermit",
-+        target_os = "cellos",
-     ) => {
-         mod futex;
-         pub use futex::Mutex;
-     }
-diff --git a/library/std/src/sys/sync/once/mod.rs b/library/std/src/sys/sync/once/mod.rs
-index 0000001..0000002 100644
---- a/library/std/src/sys/sync/once/mod.rs
-+++ b/library/std/src/sys/sync/once/mod.rs
-@@ -19,7 +19,8 @@ cfg_select! {
-         target_os = "dragonfly",
-         target_os = "fuchsia",
-         target_os = "hermit",
-+        target_os = "cellos",
-     ) => {
-         mod futex;
-         pub use futex::{Once, OnceState};
-     }
-diff --git a/library/std/src/sys/sync/rwlock/mod.rs b/library/std/src/sys/sync/rwlock/mod.rs
-index 0000001..0000002 100644
---- a/library/std/src/sys/sync/rwlock/mod.rs
-+++ b/library/std/src/sys/sync/rwlock/mod.rs
-@@ -10,7 +10,8 @@ cfg_select! {
-         all(target_family = "wasm", target_feature = "atomics"),
-         target_os = "hermit",
-        target_os = "motor",
-+        target_os = "cellos",
-     ) => {
-         mod futex;
-         pub use futex::RwLock;
-     }
-diff --git a/library/std/src/sys/sync/thread_parking/mod.rs b/library/std/src/sys/sync/thread_parking/mod.rs
-index 0000001..0000002 100644
---- a/library/std/src/sys/sync/thread_parking/mod.rs
-+++ b/library/std/src/sys/sync/thread_parking/mod.rs
-@@ -10,7 +10,8 @@ cfg_select! {
-         target_os = "fuchsia",
-         target_os = "motor",
-         target_os = "hermit",
-+        target_os = "cellos",
-     ) => {
-         mod futex;
-         pub use futex::Parker;
-     }

@@ -507,10 +507,7 @@ fn grant_window(tid: usize, base: usize, len: usize, end: usize, class: MmioClas
     let mut reg = REGISTRY.lock();
     reg.retain(|&eb, region| {
         let ee = eb + region.len;
-        if !(end <= eb || base >= ee) && region.owner_tid == tid {
-            return false;
-        }
-        true
+        end <= eb || base >= ee || region.owner_tid != tid
     });
     for (&eb, region) in reg.iter() {
         if claim_collides(eb, region, base, end) {

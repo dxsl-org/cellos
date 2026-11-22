@@ -221,12 +221,13 @@ pub fn blk_write_sectors(dev: DeviceRef, abs_lba: u64, count: u32, data: &[u8]) 
     if data.len() < (count as usize) * SECTOR_SIZE {
         return BlockOutcome::NotIssued;
     }
-    for (i, chunk) in data
-        .chunks_exact(SECTOR_SIZE)
+    for (i, sector) in data
+        .as_chunks::<SECTOR_SIZE>()
+        .0
+        .iter()
         .take(count as usize)
         .enumerate()
     {
-        let sector: &[u8; SECTOR_SIZE] = chunk.try_into().expect("whole sector chunk");
         let outcome = blk_write(dev, abs_lba + i as u64, sector);
         if !outcome.is_completed() {
             return outcome;

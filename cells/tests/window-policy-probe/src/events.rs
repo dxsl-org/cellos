@@ -59,7 +59,7 @@ impl EventHandler {
                         }
                         match surface.apply_configure(configure) {
                             Ok(()) => {
-                                for pixel in surface.pixels_mut().chunks_exact_mut(4) {
+                                for pixel in surface.pixels_mut().as_chunks_mut::<4>().0 {
                                     pixel.copy_from_slice(&role.color);
                                 }
                                 surface.damage_all();

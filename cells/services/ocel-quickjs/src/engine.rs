@@ -421,7 +421,9 @@ impl QuickJsContext {
                             body: fields[4].clone(),
                             credentials: fields[5].clone(),
                             headers: fields[6..]
-                                .chunks_exact(2)
+                                .as_chunks::<2>()
+                                .0
+                                .iter()
                                 .map(|p| (p[0].clone(), p[1].clone()))
                                 .collect(),
                         })

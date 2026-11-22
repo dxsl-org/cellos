@@ -89,12 +89,11 @@ impl<D: BlockDevice> CellosFs<D> {
             }
             let mut buf = [0u8; BLOCK_SIZE];
             self.disk.read_block(block, &mut buf)?;
-            for (idx, bytes) in buf.chunks_exact(INODE_SIZE).enumerate() {
+            for (idx, bytes) in buf.as_chunks::<INODE_SIZE>().0.iter().enumerate() {
                 let num = first + idx;
                 if num >= limit {
                     break;
                 }
-                let bytes: &[u8; INODE_SIZE] = bytes.try_into().map_err(|_| FsError::Corrupted)?;
                 table[num] = InodeRecord::from_bytes(bytes).filter(|r| r.inode_num == num as u64);
             }
         }

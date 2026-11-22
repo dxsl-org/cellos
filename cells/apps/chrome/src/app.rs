@@ -20,7 +20,7 @@ fn paint_status(surface: &mut ViSurface, fonts: &mut TextFonts, text: &str) {
     let (width, height, stride) = (surface.width(), surface.height(), surface.stride());
     let bg = palette.bg();
     let fill = [bg.b(), bg.g(), bg.r(), bg.a()];
-    for pixel in surface.pixels_mut().chunks_exact_mut(4) {
+    for pixel in surface.pixels_mut().as_chunks_mut::<4>().0 {
         pixel.copy_from_slice(&fill);
     }
     let fg = palette.text_secondary();

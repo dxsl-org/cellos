@@ -1,0 +1,51 @@
+cells/apps/chrome/src/app.rs:23	clippy::chunks_exact_to_as_chunks	using `chunks_exact_mut` with a constant chunk size
+cells/apps/fb-console/src/main.rs:231	clippy::chunks_exact_to_as_chunks	using `chunks_exact_mut` with a constant chunk size
+cells/apps/fb-console/src/main.rs:260	clippy::chunks_exact_to_as_chunks	using `chunks_exact_mut` with a constant chunk size
+cells/apps/fb-console/src/main.rs:79	clippy::chunks_exact_to_as_chunks	using `chunks_exact_mut` with a constant chunk size
+cells/apps/ocel/src/net/http.rs:554	deprecated	use of deprecated method `core::sync::atomic::Atomic::<usize>::fetch_update`: renamed to `try_update` for consistency
+cells/apps/ocel/src/pdf.rs:197	clippy::chunks_exact_to_as_chunks	using `chunks_exact` with a constant chunk size
+cells/demos/tetris/src/draw.rs:39	clippy::needless_range_loop	the loop variable `r` is used to index `game.board`
+cells/demos/tetris/src/draw.rs:40	clippy::needless_range_loop	the loop variable `c` is used to index `game.board[r]`
+cells/drivers/intel-gpu/src/guc.rs:233	clippy::chunks_exact_to_as_chunks	using `chunks_exact` with a constant chunk size
+cells/drivers/nvme/src/controller.rs:102	deprecated	use of deprecated method `core::sync::atomic::Atomic::<usize>::fetch_update`: renamed to `try_update` for consistency
+cells/services/httpd/src/reactor.rs:622	clippy::chunks_exact_to_as_chunks	using `chunks_exact` with a constant chunk size
+cells/services/input/src/session.rs:296	clippy::new_instead_of_clear	assigning a new empty collection
+cells/services/input/src/session.rs:3328	clippy::needless_late_init	unneeded late initialization
+cells/services/net-broker/src/peer_config/ascii.rs:80	clippy::chunks_exact_to_as_chunks	using `chunks_exact` with a constant chunk size
+cells/services/net/src/handlers/tcp.rs:349	clippy::chunks_exact_to_as_chunks	using `chunks_exact` with a constant chunk size
+cells/services/net/src/handlers/tcp.rs:427	clippy::chunks_exact_to_as_chunks	using `chunks_exact_mut` with a constant chunk size
+cells/services/ocel-quickjs/src/engine.rs:424	clippy::chunks_exact_to_as_chunks	using `chunks_exact` with a constant chunk size
+cells/services/sshd/src/base64.rs:31	clippy::chunks_exact_to_as_chunks	using `chunks_exact` with a constant chunk size
+cells/services/vfs/src/blk_router.rs:225	clippy::chunks_exact_to_as_chunks	using `chunks_exact` with a constant chunk size
+cells/services/vfs/src/blk_router/requests.rs:94	clippy::chunks_exact_to_as_chunks	using `chunks_exact_mut` with a constant chunk size
+cells/tests/window-policy-probe/src/events.rs:62	clippy::chunks_exact_to_as_chunks	using `chunks_exact_mut` with a constant chunk size
+cells/tests/window-policy-probe/src/main.rs:46	clippy::chunks_exact_to_as_chunks	using `chunks_exact_mut` with a constant chunk size
+libs/ai-engine/src/lib.rs:1058	clippy::needless_range_loop	the loop variable `key_position` is used to index `scratch.scores`
+libs/ai-engine/src/lib.rs:1067	clippy::needless_range_loop	the loop variable `key_position` is used to index `scratch.scores`
+libs/ai-engine/src/lib.rs:321	clippy::chunks_exact_to_as_chunks	using `chunks_exact` with a constant chunk size
+libs/ai-engine/src/lib.rs:322	clippy::chunks_exact_to_as_chunks	using `chunks_exact_mut` with a constant chunk size
+libs/ai-proto/src/lib.rs:413	clippy::chunks_exact_to_as_chunks	using `chunks_exact_mut` with a constant chunk size
+libs/ai-proto/src/lib.rs:424	clippy::chunks_exact_to_as_chunks	using `chunks_exact` with a constant chunk size
+libs/ai-proto/src/lib.rs:437	clippy::chunks_exact_to_as_chunks	using `chunks_exact_mut` with a constant chunk size
+libs/ai-proto/src/lib.rs:445	clippy::chunks_exact_to_as_chunks	using `chunks_exact` with a constant chunk size
+libs/gguf-rs/src/lib.rs:535	clippy::chunks_exact_to_as_chunks	using `chunks_exact` with a constant chunk size
+libs/gguf-rs/src/lib.rs:542	clippy::chunks_exact_to_as_chunks	using `chunks_exact` with a constant chunk size
+libs/gguf-rs/src/lib.rs:596	clippy::chunks_exact_to_as_chunks	using `chunks_exact` with a constant chunk size
+libs/gguf-rs/src/lib.rs:605	clippy::chunks_exact_to_as_chunks	using `chunks_exact` with a constant chunk size
+libs/gguf-rs/src/lib.rs:614	clippy::chunks_exact_to_as_chunks	using `chunks_exact` with a constant chunk size
+libs/gguf-rs/src/lib.rs:623	clippy::chunks_exact_to_as_chunks	using `chunks_exact` with a constant chunk size
+libs/gguf-rs/src/lib.rs:632	clippy::chunks_exact_to_as_chunks	using `chunks_exact` with a constant chunk size
+libs/gguf-rs/src/lib.rs:641	clippy::chunks_exact_to_as_chunks	using `chunks_exact` with a constant chunk size
+libs/gguf-rs/src/lib.rs:706	clippy::chunks_exact_to_as_chunks	using `chunks_exact` with a constant chunk size
+libs/gguf-rs/src/lib.rs:715	clippy::chunks_exact_to_as_chunks	using `chunks_exact` with a constant chunk size
+libs/gguf-rs/src/lib.rs:731	clippy::chunks_exact_to_as_chunks	using `chunks_exact` with a constant chunk size
+libs/gguf-rs/src/lib.rs:732	clippy::chunks_exact_to_as_chunks	using `chunks_exact_mut` with a constant chunk size
+libs/tensor-math/src/lib.rs:119	clippy::chunks_exact_to_as_chunks	using `chunks_exact` with a constant chunk size
+libs/tensor-math/src/lib.rs:120	clippy::chunks_exact_to_as_chunks	using `chunks_exact` with a constant chunk size
+libs/tensor-math/src/lib.rs:181	clippy::chunks_exact_to_as_chunks	using `chunks_exact` with a constant chunk size
+libs/tensor-math/src/lib.rs:182	clippy::chunks_exact_to_as_chunks	using `chunks_exact` with a constant chunk size
+libs/tensor-math/src/lib.rs:538	clippy::chunks_exact_to_as_chunks	using `chunks_exact` with a constant chunk size
+libs/tensor-math/src/lib.rs:545	clippy::chunks_exact_to_as_chunks	using `chunks_exact` with a constant chunk size
+libs/tensor-math/src/lib.rs:548	clippy::chunks_exact_to_as_chunks	using `chunks_exact` with a constant chunk size
+libs/tensor-math/src/quant.rs:153	clippy::chunks_exact_to_as_chunks	using `chunks_exact` with a constant chunk size
+libs/tensor-math/src/quant.rs:154	clippy::chunks_exact_to_as_chunks	using `chunks_exact_mut` with a constant chunk size

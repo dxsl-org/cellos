@@ -89,16 +89,12 @@ impl Router {
             match self.target(sys, dev) {
                 Target::Refused => false,
                 Target::Provider(i, tid) => self.read_run(sys, i, tid, first, chunk),
-                Target::Kernel => {
-                    chunk
-                        .chunks_exact_mut(SECTOR_SIZE)
-                        .enumerate()
-                        .all(|(n, sector)| {
-                            let sector: &mut [u8; SECTOR_SIZE] =
-                                sector.try_into().expect("whole sector");
-                            sys.kernel_read(first + n as u64, sector)
-                        })
-                }
+                Target::Kernel => chunk
+                    .as_chunks_mut::<SECTOR_SIZE>()
+                    .0
+                    .iter_mut()
+                    .enumerate()
+                    .all(|(n, sector)| sys.kernel_read(first + n as u64, sector)),
             }
         })
     }

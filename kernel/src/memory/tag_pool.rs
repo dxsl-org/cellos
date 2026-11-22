@@ -186,7 +186,7 @@ impl TagPool {
         }
         let row = self.row(owner).ok_or(TagRefusal::OwnerLimit)?;
         let generation = generation_bits(owner);
-        row.fetch_update(Ordering::AcqRel, Ordering::Acquire, |word| {
+        row.try_update(Ordering::AcqRel, Ordering::Acquire, |word| {
             let held = if word >> 32 == generation {
                 word as u32
             } else {
@@ -207,7 +207,7 @@ impl TagPool {
         };
         let generation = generation_bits(owner);
         // A row now naming another incarnation is not this owner's to change.
-        let _ = row.fetch_update(Ordering::AcqRel, Ordering::Acquire, |word| {
+        let _ = row.try_update(Ordering::AcqRel, Ordering::Acquire, |word| {
             (word >> 32 == generation && word as u32 > 0).then(|| word - 1)
         });
     }
@@ -217,7 +217,7 @@ impl TagPool {
         match self.reuse {
             Reuse::Never => self
                 .issued
-                .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |issued| {
+                .try_update(Ordering::Relaxed, Ordering::Relaxed, |issued| {
                     (issued < count && issued.checked_add(self.first).is_some()).then(|| issued + 1)
                 })
                 .ok()

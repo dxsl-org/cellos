@@ -22,7 +22,7 @@ echo "==> Step 2: Compiling std-smoke cell..."
 STAGING_DIR="$(pwd)/target/cellos-rust-src/library"
 export __CARGO_TESTS_ONLY_SRC_ROOT="$STAGING_DIR"
 
-cargo +nightly-2026-05-01 build \
+cargo +nightly-2026-11-21 build \
     --manifest-path cells/demos/std-smoke/Cargo.toml \
     -Z build-std=core,alloc,std,panic_abort \
     -Z build-std-features=compiler-builtins-mem \

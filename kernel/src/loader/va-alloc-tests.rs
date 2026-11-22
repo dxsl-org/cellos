@@ -258,9 +258,35 @@ fn in_arena(base: usize) -> bool {
 }
 
 #[test]
+fn a_stack_too_big_for_a_regular_slot_takes_a_large_slot_above_the_arena() {
+    const PAGE: usize = crate::memory::paging::PAGE_SIZE;
+    let regular_end = STACK_VA_START + STACK_SLOTS * STACK_VA_STRIDE;
+    let large_pages = crate::task::LARGE_STACK_PAGES + crate::task::stack::STACK_GUARD_PAGES;
+    assert_eq!(LARGE_STACK_VA_START, regular_end);
+    assert!(LARGE_STACK_VA_STRIDE.is_power_of_two());
+    assert!(large_pages * PAGE <= LARGE_STACK_VA_STRIDE);
+
+    // One page past a regular slot goes to the large arena; a regular stack
+    // never does; past a large slot, nothing.
+    let regular = alloc_stack_va(STACK_VA_STRIDE / PAGE).expect("regular slot");
+    let large = alloc_stack_va(STACK_VA_STRIDE / PAGE + 1).expect("large slot");
+    assert!(STACKS.index_of_base(regular).is_some());
+    assert!((LARGE_STACK_VA_START..ALLOCATED_VA_END).contains(&large));
+    assert_eq!((large - LARGE_STACK_VA_START) % LARGE_STACK_VA_STRIDE, 0);
+    assert_eq!(alloc_stack_va(LARGE_STACK_VA_STRIDE / PAGE + 1), None);
+    assert!(overlaps_allocated_va(large, PAGE));
+
+    // Each arena frees only its own slots.
+    free_stack_va(large);
+    free_stack_va(regular);
+    assert_eq!(LARGE_STACK_ARENA.stale_frees(), 0);
+    assert_eq!(STACK_ARENA.stale_frees(), 0);
+}
+
+#[test]
 fn an_identity_range_overlaps_the_allocated_va_exactly_at_its_edges() {
     const PAGE: usize = crate::memory::paging::PAGE_SIZE;
-    let end = STACK_VA_START + STACK_SLOTS * STACK_VA_STRIDE;
+    let end = ALLOCATED_VA_END;
     // Below the cell slots, and from the arena's end up: free to identity-map.
     assert!(!overlaps_allocated_va(0, CELL_VA_START));
     assert!(!overlaps_allocated_va(CELL_VA_START - PAGE, PAGE));

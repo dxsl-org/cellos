@@ -7,6 +7,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 ### Added
+- **Python via Monty in a Tier 2 Cell (witness)** (2026-11-22, plan `.agents/261122-1036-monty-thin-port-p0`).
+  - pydantic/monty is pinned and patched by `scripts/fetch-monty.sh`.
+  - `cells/demos/monty-smoke` runs Python in an `UNTRUSTED` rust-std Cell on the x86_64 test-hooks image (`scripts/x86/qemu-monty-smoke.sh`) and links on riscv64 and aarch64.
+  - The kernel gives the kernel-resolved `/bin/monty-smoke` a 2 MiB user stack from a new large-stack VA arena.
+  - The toolchain moves to `nightly-2026-11-21`, with the rust-std PAL patch rebased. Release is gated on the PAL compiler-strategy re-decision and the Spec 23 amendment.
 - **e1000 82545EM and e1000e 82574L, vmxnet3 and PVSCSI** (x86 platform breadth slice S3, phases 08 and 09). Owner-closed 2026-11-06 ([record](.agents/261103-2218-x86-platform-breadth/s3-close-approval.md)).
   - New cells `/bin/e1000` (`8086:100f`, 82545EM), `/bin/e1000e` (`8086:10d3`, 82574L), `/bin/vmxnet3` (`15ad:07b0`) and `/bin/pvscsi` (`15ad:07c0`). Every Platform-registered function goes into `PCI_DEVICES`; syscall 236 returns 0, 1 (recorded, no driver) or FileNotFound.
   - The kernel refuses PVSCSI under active VT-d (QEMU's PVSCSI model bypasses the IOMMU); VMware is unaffected.

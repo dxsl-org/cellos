@@ -28,7 +28,7 @@ pub fn decode(text: &[u8]) -> Option<Vec<u8>> {
     }
     let mut out = Vec::with_capacity(text.len() / 4 * 3);
     let quads = text.len() / 4;
-    for (i, quad) in text.chunks_exact(4).enumerate() {
+    for (i, quad) in text.as_chunks::<4>().0.iter().enumerate() {
         let pad = quad.iter().rev().take_while(|&&c| c == b'=').count();
         if pad > 2 || (pad > 0 && i + 1 != quads) {
             return None;

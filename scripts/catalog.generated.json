@@ -405,6 +405,14 @@
       "trusted_core": false
     },
     {
+      "path": "/bin/monty-smoke",
+      "request": {"block_io": false, "network": false, "spawn": false, "hypervisor": false, "pcie_driver": false, "platform": false, "supervisor": false, "usb_driver": false, "serial_port": false, "net_resolve": false, "net_connect": false, "net_listen": false, "net_l2": false, "observe_tasks": true, "observe_memory": true, "vfs_mutate": true, "config_write": false, "kms_ssh_sign": false, "kms_ssh_admin": false, "mmio_devices": 0, "block_regions": 0},
+      "ptrust": false,
+      "boot": {"block_io": false, "network": false, "spawn": false, "hypervisor": false, "pcie_driver": false, "platform": false, "supervisor": false, "usb_driver": false, "serial_port": false, "net_resolve": false, "net_connect": false, "net_listen": false, "net_l2": false, "observe_tasks": true, "observe_memory": true, "vfs_mutate": true, "config_write": false, "kms_ssh_sign": false, "kms_ssh_admin": false, "mmio_devices": 0, "block_regions": 0},
+      "user_target": {"block_io": false, "network": false, "spawn": false, "hypervisor": false, "pcie_driver": false, "platform": false, "supervisor": false, "usb_driver": false, "serial_port": false, "net_resolve": false, "net_connect": false, "net_listen": false, "net_l2": false, "observe_tasks": true, "observe_memory": true, "vfs_mutate": true, "config_write": false, "kms_ssh_sign": false, "kms_ssh_admin": false, "mmio_devices": 0, "block_regions": 0},
+      "trusted_core": false
+    },
+    {
       "path": "/bin/config",
       "request": {"block_io": false, "network": false, "spawn": false, "hypervisor": false, "pcie_driver": false, "platform": false, "supervisor": false, "usb_driver": false, "serial_port": false, "net_resolve": false, "net_connect": false, "net_listen": false, "net_l2": false, "observe_tasks": true, "observe_memory": true, "vfs_mutate": true, "config_write": false, "kms_ssh_sign": false, "kms_ssh_admin": false, "mmio_devices": 0, "block_regions": 0},
       "ptrust": false,

@@ -291,6 +291,8 @@ struct Fence {
 fn secret_bearing(selector: u16) -> bool {
     matches!(selector, 13 | 15 | 20)
 }
+// zeroize_vec already clears; the reassignment exists to release the allocation, which clear() would keep.
+#[allow(clippy::new_instead_of_clear)]
 fn wipe(bytes: &mut Vec<u8>) {
     zeroize_vec(bytes);
     *bytes = Vec::new();
@@ -3325,8 +3327,7 @@ impl Sessions {
             _ => 0,
         };
         let mut event = Scrub::<40>::new();
-        let len;
-        if key.keysym == K::Printable && mods & 6 == 0 {
+        let len = if key.keysym == K::Printable && mods & 6 == 0 {
             if key.state == KeyState::Released {
                 return true;
             }
@@ -3339,15 +3340,15 @@ impl Sessions {
             event[16..18].copy_from_slice(&2u16.to_le_bytes());
             event[18..20].copy_from_slice(&(text.len() as u16).to_le_bytes());
             event[24..24 + text.len()].copy_from_slice(text.as_bytes());
-            len = 24 + text.len();
+            24 + text.len()
         } else {
             event[16..18].copy_from_slice(&1u16.to_le_bytes());
             event[18..20].copy_from_slice(&16u16.to_le_bytes());
             event[24..28].copy_from_slice(&code.to_le_bytes());
             event[28..32].copy_from_slice(&mods.to_le_bytes());
             event[32] = key.state as u8;
-            len = 40;
-        }
+            40
+        };
         if let Err(status) = self.admit_events(i, &event[..len], 1) {
             self.physical_loss(
                 i,

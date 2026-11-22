@@ -318,8 +318,10 @@ fn row_f32(buffer: &[u8], matrix: &Matrix, row: usize, out: &mut [f32]) -> Resul
                 .ok_or(MathError::ShapeMismatch)?;
             let slice = tensor_bytes(buffer, start, row_bytes)?;
             for (block, out_block) in slice
-                .chunks_exact(quant::Q8_0_BLOCK_BYTES)
-                .zip(out.chunks_exact_mut(quant::Q8_0_BLOCK_WEIGHTS))
+                .as_chunks::<{ quant::Q8_0_BLOCK_BYTES }>()
+                .0
+                .iter()
+                .zip(out.as_chunks_mut::<{ quant::Q8_0_BLOCK_WEIGHTS }>().0)
             {
                 let mut decoded = [0f32; quant::Q8_0_BLOCK_WEIGHTS];
                 quant::q8_0_block_to_f32(block, &mut decoded)?;
@@ -1055,19 +1057,19 @@ fn attention(
     for head in 0..cfg.n_head {
         let kv_head = head / group;
         let q = &scratch.q[head * head_dim..(head + 1) * head_dim];
-        for key_position in 0..=position {
+        for (key_position, score) in scratch.scores[..=position].iter_mut().enumerate() {
             let slot = kv.slot(cfg, layer, key_position);
             let k = &kv.k[slot.start + kv_head * head_dim..slot.start + (kv_head + 1) * head_dim];
-            scratch.scores[key_position] = tensor_math::dot(q, k)? * scale;
+            *score = tensor_math::dot(q, k)? * scale;
         }
         tensor_math::softmax_in_place(&mut scratch.scores[..=position]);
 
         let out = &mut scratch.attn[head * head_dim..(head + 1) * head_dim];
         out.iter_mut().for_each(|value| *value = 0.0);
-        for key_position in 0..=position {
+        for (key_position, &score) in scratch.scores[..=position].iter().enumerate() {
             let slot = kv.slot(cfg, layer, key_position);
             let v = &kv.v[slot.start + kv_head * head_dim..slot.start + (kv_head + 1) * head_dim];
-            tensor_math::scaled_add_in_place(out, v, scratch.scores[key_position])?;
+            tensor_math::scaled_add_in_place(out, v, score)?;
         }
     }
     Ok(())

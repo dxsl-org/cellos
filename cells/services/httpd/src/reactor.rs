@@ -619,7 +619,7 @@ impl Reactor<'_> {
                     {
                         self.cursor = next_cursor;
                         if events.len() % 5 == 0 {
-                            for event in events.chunks_exact(5) {
+                            for event in events.as_chunks::<5>().0 {
                                 let cap =
                                     u32::from_le_bytes([event[0], event[1], event[2], event[3]]);
                                 let flags = event[4];

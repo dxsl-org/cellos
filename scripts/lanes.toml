@@ -73,6 +73,11 @@ tier = "manual"
 reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
 
 [[lane]]
+path = "scripts/build-x86_64-monty-smoke-ci.sh"
+arch = "x86_64"
+tier = "pr"
+
+[[lane]]
 path = "scripts/build-x86_64-domain-test-ci.sh"
 arch = "x86_64"
 tier = "pr"
@@ -394,6 +399,11 @@ path = "scripts/x86/qemu-cpp-hosted-smoke.sh"
 arch = "x86_64"
 tier = "manual"
 reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[lane]]
+path = "scripts/x86/qemu-monty-smoke.sh"
+arch = "x86_64"
+tier = "pr"
 
 [[lane]]
 path = "scripts/x86/qemu-release-posture-test.sh"

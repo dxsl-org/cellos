@@ -288,7 +288,9 @@ impl ChildContext {
     pub fn grants(&self) -> impl Iterator<Item = Grant> + '_ {
         let (a, c, e, _) = self.lengths();
         self.bytes[48 + a + c + e..]
-            .chunks_exact(40)
+            .as_chunks::<40>()
+            .0
+            .iter()
             .map(|raw| Grant::decode(raw).expect("validated grant"))
     }
     pub fn cwd_grant(&self) -> Option<ObjectRefV1> {

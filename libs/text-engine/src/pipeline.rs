@@ -1439,7 +1439,7 @@ fn hex_payload(p: Value) -> Result<Vec<u8>, PipelineError> {
         _ => None,
     };
     let mut out = Vec::with_capacity(b.len() / 2);
-    for pair in b.chunks_exact(2) {
+    for pair in b.as_chunks::<2>().0 {
         match (nib(pair[0]), nib(pair[1])) {
             (Some(h), Some(l)) => out.push(h << 4 | l),
             _ => return typed_bad("hex payload must be lowercase hexadecimal"),

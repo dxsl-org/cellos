@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // vsnprintf implementation — used internally by stdio.rs public API.
 //
-// VaList API (nightly-2026-05-01): one lifetime, method is `.next_arg::<T>()`.
+// VaList API (nightly-2026-05-01 and later): one lifetime, method is `.next_arg::<T>()`.
 
 #![allow(unsafe_code)]
 

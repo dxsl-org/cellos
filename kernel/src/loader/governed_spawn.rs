@@ -209,7 +209,15 @@ fn prepare_gated(
     if let Some(argv) = request.argv.as_ref() {
         crate::memory::heap::p01_owner::adopt_vec(argv);
     }
-    let prepared = crate::task::prepare_elf_task(elf, name, CellId(0), alloc::vec::Vec::new())?;
+    let user_stack_pages =
+        crate::task::user_stack_pages_for(path, request.kernel_resolved_path, name);
+    let prepared = crate::task::prepare_elf_task_with_user_stack(
+        elf,
+        name,
+        CellId(0),
+        alloc::vec::Vec::new(),
+        user_stack_pages,
+    )?;
     let state = crate::task::TaskLaunchState::complete(
         request.caller.take(),
         granted,

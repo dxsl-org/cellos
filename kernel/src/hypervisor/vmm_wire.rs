@@ -100,10 +100,8 @@ pub(crate) fn encode_exit(exit: &ViVmExit) -> [u8; EXIT_LEN] {
 /// Decode a `VcpuRegs` buffer into its 32 words.
 pub(crate) fn regs_from_bytes(bytes: &[u8; REGS_LEN]) -> [u64; 32] {
     let mut regs = [0u64; 32];
-    for (word, chunk) in regs.iter_mut().zip(bytes.chunks_exact(8)) {
-        let mut raw = [0u8; 8];
-        raw.copy_from_slice(chunk);
-        *word = u64::from_ne_bytes(raw);
+    for (word, chunk) in regs.iter_mut().zip(bytes.as_chunks::<8>().0) {
+        *word = u64::from_ne_bytes(*chunk);
     }
     regs
 }
@@ -111,7 +109,7 @@ pub(crate) fn regs_from_bytes(bytes: &[u8; REGS_LEN]) -> [u64; 32] {
 /// Encode 32 register words as the `VcpuRegs` buffer.
 pub(crate) fn regs_to_bytes(regs: &[u64; 32]) -> [u8; REGS_LEN] {
     let mut bytes = [0u8; REGS_LEN];
-    for (chunk, word) in bytes.chunks_exact_mut(8).zip(regs) {
+    for (chunk, word) in bytes.as_chunks_mut::<8>().0.iter_mut().zip(regs) {
         chunk.copy_from_slice(&word.to_ne_bytes());
     }
     bytes

@@ -230,8 +230,8 @@ pub fn transfer_rsa(
     if rsa.len() < SCRATCH_BYTES {
         return Err(GucError::RsaTooShort);
     }
-    for (i, word) in rsa.chunks_exact(4).enumerate() {
-        let word = u32::from_le_bytes([word[0], word[1], word[2], word[3]]);
+    for (i, word) in rsa.as_chunks::<4>().0.iter().enumerate() {
+        let word = u32::from_le_bytes(*word);
         mmio(regs.write32(UOS_RSA_SCRATCH_0 + i * 4, word))?;
     }
     Ok(())

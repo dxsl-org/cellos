@@ -43,8 +43,5 @@ pub fn self_test() -> bool {
     // Negative: a single flipped signature byte must be rejected.
     let mut bad = SIG;
     bad[0] ^= 0x01;
-    if verify(&PUBKEY, &[], &bad) {
-        return false;
-    }
-    true
+    !verify(&PUBKEY, &[], &bad)
 }

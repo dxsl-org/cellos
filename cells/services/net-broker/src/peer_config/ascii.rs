@@ -77,7 +77,7 @@ pub fn parse_hex32(s: &[u8]) -> Option<[u8; 32]> {
         return None;
     }
     let mut out = [0u8; 32];
-    for (i, chunk) in s.chunks_exact(2).enumerate() {
+    for (i, chunk) in s.as_chunks::<2>().0.iter().enumerate() {
         let hi = hex_nibble(chunk[0])?;
         let lo = hex_nibble(chunk[1])?;
         out[i] = (hi << 4) | lo;

@@ -87,7 +87,7 @@ def cohort(
         else [dict(artifact(root, path), kind="source") for path in sorted(sdk_source.paths(root))]
     )
     denominator = {
-        "compiler": "nightly-2026-05-01", "target": "riscv64gc-unknown-none-elf",
+        "compiler": "nightly-2026-11-21", "target": "riscv64gc-unknown-none-elf",
         "language": "rust", "feature_selection": "api=default;ostd=default;viui=default", "cfg": "target_arch=\"riscv64\"", "cargo_features": "api=default;ostd=default;viui=default", "cargo_profile": "release", "rustflags": "-C relocation-model=pic",
         "runtime_profile": tuple_["runtime_profile"], "source_path": source.snapshot_path(claim_value["source_sha256"]),
         "source_sha256": claim_value["source_sha256"],

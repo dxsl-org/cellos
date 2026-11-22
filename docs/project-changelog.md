@@ -4,6 +4,26 @@
 
 ## [Unreleased] Intel x86-64 C2C-only direction
 
+- **2026-11-22 — Toolchain `nightly-2026-11-21` and Monty (Python) in a Tier 2 std Cell (plan `.agents/261122-1036-monty-thin-port-p0`).** Not yet releasable: the PAL compiler-strategy re-decision (phase 3) and the Spec 23 `source_amendment` (phase 4) need their signers, and `tests/rust-std-promotion` fails until then.
+  - **Toolchain.** `rust-toolchain.toml`, every workflow and the std scripts move from `nightly-2026-05-01` (1.97, `f53b654a8`) to `nightly-2026-11-21` (1.102, `c7d5ba59d`).
+    - `patches/rust-std-cellos.patch` is rebased onto the new std `sys` layout:
+      - the allocator uses per-platform free functions;
+      - futex lives in `sys::sync::futex`;
+      - `abort_immediate` is used;
+      - `cellos` is added to the `io::error` generic arm.
+    - The sysroot stamp now also keys on the rustc commit.
+    - New clippy lints (`chunks_exact_to_as_chunks`, `fetch_update`→`try_update`, `needless_bool`/`needless_range_loop`) are fixed in 52 files.
+    - `c_variadic` is stable, so posix-shim drops its feature gate.
+    - `std-smoke` passes on riscv64, aarch64 and x86_64.
+  - **Monty.** `scripts/fetch-monty.sh` checks out pydantic/monty `v1.7.0-beta.1` (`5f4a3dfc`) into the gitignored `third_party/monty-src/` and applies `third_party/monty/patches/`:
+    - `0001` drops ruff's `stacker` on cellos;
+    - jiter 0.19.0, fetched with its checksum verified, gets its x86_64 SIMD gated on SSE2.
+  - **Witness.** `cells/demos/monty-smoke` is an `UNTRUSTED` rust-std Cell with fail-closed getrandom glue (`entropy.rs`). It runs six Python cases in a Tier 2 domain on the x86_64 test-hooks image: fib, nesting at 200, a nesting rejection, random, json and a feed timeout (`scripts/x86/qemu-monty-smoke.sh`, TCG, 3 runs, 3 domains released). It links on riscv64 and aarch64, and is wired into `rust-std-lane`.
+  - **Kernel.** A kernel-resolved `/bin/monty-smoke` launch gets a 2 MiB user stack (`task::LARGE_STACK_PAGES`, `user_stack_pages_for`). The stack comes from a new 64 × 4 MiB large-stack VA arena (`loader::va_alloc`). With 256 KiB, ruff's parser overflowed at about 31 nesting levels; the fault was contained in the domain.
+  - **Policy.**
+    - `deny.toml` admits `minicbor*` (BlueOak-1.0.0) and `*unicode_names2` (Unicode-DFS-2016) by name.
+    - Allowlist entries cover `entropy.rs` (`c-ffi`) and the `monty-smoke` crate.
+    - The catalog has a `/bin/monty-smoke` row, and `lanes.toml` has two `pr` rows.
 - **2026-11-21 — AArch64 floating-point/SIMD state is per task (2026-11-05 audit re-triage, new finding).** The AArch64 task switch saved only general registers. EL0 runs with FP/SIMD untrapped, and std Cells are built with `+neon` (`targets/aarch64-unknown-cellos.json`), so every Cell shared one vector register file: data leaked between Cells and could be corrupted. This is the AArch64 counterpart of the 2026-11-20 RV64 fix.
   - **Fix.** `CpuContext` gains `fpcr`, `fpsr` and `v: [u128; 32]` (offsets 136/144/160, pinned by `const` asserts). `__switch_el1` and `__switch_el2` save the outgoing task's file eagerly and load the incoming task's after `vi_context_switch_complete`. The kernel is softfloat and touches no vector register outside the two switches (checked by disassembly). On a VHE host, the QEMU-virt world switch keeps no guest bank, so guest values left live after a VM exit now stay with the task that ran the vCPU instead of reaching the next Cell. Two VMs run by one task still share the file; that is audit item 06 S-9 and remains open.
   - **Lane.** `scripts/qemu-fp-context-test-aarch64.sh` builds its own image: the `qemu-aarch64-boot` cell set plus `/bin/fp-context-test` in VIFS1, with the kernel and Image in `target/fp-context-aarch64`. It runs the cell on the EL1 host (cortex-a57) and the VHE host (cortex-a76, `virtualization=on`), each with 1 and 2 CPUs. On AArch64 the cell is Tier 1 (`STANDARD`), the class std Cells run in, because Tier 2 is refused on production and EL2 hosts. Its two threads load `q0`–`q31`/`FPCR`/`FPSR`, `Yield`, and read the file back for 200 rounds. The lane runs in CI's `qemu-aarch64-boot` job (`lanes.toml` tier `pr`). The Tier-1 unsafe total rises 586→587 because the cell's single test-harness `unsafe` now counts as Tier 1; the RV64 and AArch64 `asm!` blocks share that one token.

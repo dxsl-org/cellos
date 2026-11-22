@@ -194,7 +194,7 @@ fn read_page(
                     return Err(String::from("The PDF service returned a non-contiguous or incorrectly sized pixel chunk."));
                 }
                 // Chunk size and all requested offsets are multiples of four.
-                if bytes.chunks_exact(4).any(|pixel| pixel[3] != 255) {
+                if bytes.as_chunks::<4>().0.iter().any(|pixel| pixel[3] != 255) {
                     return Err(String::from(
                         "The PDF service returned non-opaque pixels instead of opaque BGRA8888.",
                     ));

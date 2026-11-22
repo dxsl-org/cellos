@@ -323,7 +323,7 @@ pub(crate) fn deregister(cell_id: CellId) {
     QUOTA_LIMITS[id].store(UNREGISTERED, Ordering::Release);
     GUEST_LIMITS[id].store(0, Ordering::Release);
     for counters in [&IN_USE, &DMA_IN_USE, &GUEST_IN_USE] {
-        let _ = counters[id].fetch_update(Ordering::AcqRel, Ordering::Acquire, |word| {
+        let _ = counters[id].try_update(Ordering::AcqRel, Ordering::Acquire, |word| {
             Some(word & !BYTES_MASK)
         });
     }
@@ -425,7 +425,7 @@ fn add(charge: Charge, account: Account, bytes: usize) -> Result<bool, QuotaExce
     // checked_add refuses a hostile size near MAX instead of wrapping past the
     // limit, and the byte count can never carry into the generation bits.
     account.counters()[id]
-        .fetch_update(Ordering::AcqRel, Ordering::Acquire, |word| {
+        .try_update(Ordering::AcqRel, Ordering::Acquire, |word| {
             if word & !BYTES_MASK != tag {
                 return None;
             }
@@ -448,7 +448,7 @@ pub(crate) fn refund(charge: Charge, account: Account, bytes: usize) {
     let tag = charge.tag();
     #[cfg(feature = "p01-trace")]
     let _write = P01_SOURCE.write();
-    let _ = account.counters()[id].fetch_update(Ordering::AcqRel, Ordering::Acquire, |word| {
+    let _ = account.counters()[id].try_update(Ordering::AcqRel, Ordering::Acquire, |word| {
         (word & !BYTES_MASK == tag).then(|| without_bytes(word, bytes))
     });
 }
@@ -547,7 +547,7 @@ pub(crate) fn refund_owner(owner: usize, size: usize) {
     }
     #[cfg(feature = "p01-trace")]
     let _write = P01_SOURCE.write();
-    let _ = IN_USE[cell_id_raw].fetch_update(Ordering::AcqRel, Ordering::Acquire, |word| {
+    let _ = IN_USE[cell_id_raw].try_update(Ordering::AcqRel, Ordering::Acquire, |word| {
         (word & !BYTES_MASK == owner & !BYTES_MASK).then(|| without_bytes(word, size))
     });
 }

@@ -634,12 +634,30 @@ date = "2026-09-25"
 review_by = "2027-05-28"
 tracking = "Allowlist re-review wave 2026-11-16 (P19, S8c step 6): apps and tests group"
 
+[[file]]
+path = "cells/demos/monty-smoke/src/entropy.rs"
+class = "c-ffi"
+reason = "Tier 2 (UNTRUSTED manifest) Monty witness. Exports `__getrandom_v03_custom` (#[unsafe(no_mangle)]), the symbol getrandom 0.3/0.4's `custom` backend calls, and forms one `slice::from_raw_parts_mut(dest, len)` over the buffer getrandom passes (valid for `len` writes, unaliased for the call). All logic is in the safe `fill`, which fails closed (Err, never zero-fill) when GetRandom yields 0 bytes; host tests in the same file cover that and chunking."
+approver = "dmin"
+date = "2026-11-22"
+review_by = "2027-05-22"
+tracking = ".agents/261122-1036-monty-thin-port-p0 phase 6 (approved plan)"
+
 # ── Crate exemptions from the attribute rule ─────────────────────────────────────
 #
 # Derived from the [[file]] entries above: a crate owning an allowlisted
 # file cannot carry #![forbid(unsafe_code)] on its root. Removing the last
 # [[file]] entry for a crate means this entry must go too — `--check`
 # reports it as unused.
+
+[[crate]]
+name = "monty-smoke"
+class = "c-ffi"
+reason = "The root cannot carry #![forbid(unsafe_code)] because src/entropy.rs holds the allowlisted getrandom export (see its [[file]] entry); the root itself is #![deny(unsafe_code)] and has none. Manifest class UNTRUSTED (Tier 2)."
+approver = "dmin"
+date = "2026-11-22"
+review_by = "2027-05-22"
+tracking = ".agents/261122-1036-monty-thin-port-p0 phase 6 (approved plan)"
 
 [[crate]]
 name = "recovery-demo"

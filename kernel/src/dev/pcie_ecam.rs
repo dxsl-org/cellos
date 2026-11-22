@@ -1338,6 +1338,9 @@ pub fn find_class_where(
 /// match names the device, so no sibling has to decline and release it first.
 /// The Ethernet family gate still applies, so an Ethernet ID with no Driver Cell
 /// is never offered even when its vendor:device pair is queried verbatim.
+// reason: on non-x86_64 the cfg-gated Ethernet guard vanishes and the id guard
+// looks like a needless bool; rewriting it would reorder the x86_64 checks.
+#[allow(clippy::needless_bool)]
 pub fn find_vendor_device(
     vendor_id: u16,
     device_id: u16,

@@ -532,16 +532,14 @@ impl<'a> GgufFile<'a> {
         match elem_type {
             value_type::FLOAT32 => {
                 let bytes = data.get(..count.checked_mul(4)?)?;
-                for chunk in bytes.chunks_exact(4) {
-                    let word: [u8; 4] = chunk.try_into().ok()?;
-                    out.push(f32::from_le_bytes(word));
+                for chunk in bytes.as_chunks::<4>().0 {
+                    out.push(f32::from_le_bytes(*chunk));
                 }
             }
             value_type::FLOAT64 => {
                 let bytes = data.get(..count.checked_mul(8)?)?;
-                for chunk in bytes.chunks_exact(8) {
-                    let word: [u8; 8] = chunk.try_into().ok()?;
-                    out.push(f64::from_le_bytes(word) as f32);
+                for chunk in bytes.as_chunks::<8>().0 {
+                    out.push(f64::from_le_bytes(*chunk) as f32);
                 }
             }
             _ => return None,
@@ -593,54 +591,48 @@ impl<'a> GgufFile<'a> {
             }
             value_type::INT16 => {
                 let bytes = data.get(..count.checked_mul(2)?)?;
-                for chunk in bytes.chunks_exact(2) {
-                    let word: [u8; 2] = chunk.try_into().ok()?;
-                    if !push(i64::from(i16::from_le_bytes(word))) {
+                for chunk in bytes.as_chunks::<2>().0 {
+                    if !push(i64::from(i16::from_le_bytes(*chunk))) {
                         return None;
                     }
                 }
             }
             value_type::UINT16 => {
                 let bytes = data.get(..count.checked_mul(2)?)?;
-                for chunk in bytes.chunks_exact(2) {
-                    let word: [u8; 2] = chunk.try_into().ok()?;
-                    if !push(i64::from(u16::from_le_bytes(word))) {
+                for chunk in bytes.as_chunks::<2>().0 {
+                    if !push(i64::from(u16::from_le_bytes(*chunk))) {
                         return None;
                     }
                 }
             }
             value_type::INT32 => {
                 let bytes = data.get(..count.checked_mul(4)?)?;
-                for chunk in bytes.chunks_exact(4) {
-                    let word: [u8; 4] = chunk.try_into().ok()?;
-                    if !push(i64::from(i32::from_le_bytes(word))) {
+                for chunk in bytes.as_chunks::<4>().0 {
+                    if !push(i64::from(i32::from_le_bytes(*chunk))) {
                         return None;
                     }
                 }
             }
             value_type::UINT32 => {
                 let bytes = data.get(..count.checked_mul(4)?)?;
-                for chunk in bytes.chunks_exact(4) {
-                    let word: [u8; 4] = chunk.try_into().ok()?;
-                    if !push(i64::from(u32::from_le_bytes(word))) {
+                for chunk in bytes.as_chunks::<4>().0 {
+                    if !push(i64::from(u32::from_le_bytes(*chunk))) {
                         return None;
                     }
                 }
             }
             value_type::INT64 => {
                 let bytes = data.get(..count.checked_mul(8)?)?;
-                for chunk in bytes.chunks_exact(8) {
-                    let word: [u8; 8] = chunk.try_into().ok()?;
-                    if !push(i64::from_le_bytes(word)) {
+                for chunk in bytes.as_chunks::<8>().0 {
+                    if !push(i64::from_le_bytes(*chunk)) {
                         return None;
                     }
                 }
             }
             value_type::UINT64 => {
                 let bytes = data.get(..count.checked_mul(8)?)?;
-                for chunk in bytes.chunks_exact(8) {
-                    let word: [u8; 8] = chunk.try_into().ok()?;
-                    let value = u64::from_le_bytes(word);
+                for chunk in bytes.as_chunks::<8>().0 {
+                    let value = u64::from_le_bytes(*chunk);
                     if !push(i64::try_from(value).ok()?) {
                         return None;
                     }
@@ -703,18 +695,16 @@ impl<'a> GgufFile<'a> {
             GgmlDType::F32 => {
                 let needed = count.checked_mul(4).ok_or(GgufError::BadTensorData)?;
                 let src = data.get(..needed).ok_or(GgufError::BadTensorData)?;
-                for (slot, chunk) in target.iter_mut().zip(src.chunks_exact(4)) {
-                    let word: [u8; 4] = chunk.try_into().map_err(|_| GgufError::BadTensorData)?;
-                    *slot = f32::from_le_bytes(word);
+                for (slot, chunk) in target.iter_mut().zip(src.as_chunks::<4>().0) {
+                    *slot = f32::from_le_bytes(*chunk);
                 }
                 Ok(())
             }
             GgmlDType::F16 => {
                 let needed = count.checked_mul(2).ok_or(GgufError::BadTensorData)?;
                 let src = data.get(..needed).ok_or(GgufError::BadTensorData)?;
-                for (slot, chunk) in target.iter_mut().zip(src.chunks_exact(2)) {
-                    let word: [u8; 2] = chunk.try_into().map_err(|_| GgufError::BadTensorData)?;
-                    *slot = f16_to_f32(u16::from_le_bytes(word));
+                for (slot, chunk) in target.iter_mut().zip(src.as_chunks::<2>().0) {
+                    *slot = f16_to_f32(u16::from_le_bytes(*chunk));
                 }
                 Ok(())
             }
@@ -728,8 +718,10 @@ impl<'a> GgufFile<'a> {
                     .ok_or(GgufError::BadTensorData)?;
                 let src = data.get(..needed).ok_or(GgufError::BadTensorData)?;
                 for (chunk, slot) in src
-                    .chunks_exact(Q8_0_BLOCK_BYTES)
-                    .zip(target.chunks_exact_mut(Q8_0_BLOCK_WEIGHTS))
+                    .as_chunks::<Q8_0_BLOCK_BYTES>()
+                    .0
+                    .iter()
+                    .zip(target.as_chunks_mut::<Q8_0_BLOCK_WEIGHTS>().0)
                 {
                     let mut block = [0.0f32; Q8_0_BLOCK_WEIGHTS];
                     q8_0_block_to_f32(chunk, &mut block).map_err(|_| GgufError::BadTensorData)?;

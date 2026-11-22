@@ -115,8 +115,8 @@ impl ViDirHandleAttestation {
         }
         let mut carrier = super::dir_handles::ViSpawnDirHandles::EMPTY;
         carrier.count = count as u32;
-        for i in 0..count {
-            carrier.handles[i] = word64(48 + i * 8);
+        for (i, handle) in carrier.handles[..count].iter_mut().enumerate() {
+            *handle = word64(48 + i * 8);
         }
         Some(Self {
             cell_id,

@@ -769,7 +769,7 @@ pub fn encode_tcp_interests<'a>(
     }
     for (interest, chunk) in interests
         .iter()
-        .zip(output[..len].chunks_exact_mut(NET_READY_RECORD_BYTES))
+        .zip(output[..len].as_chunks_mut::<NET_READY_RECORD_BYTES>().0)
     {
         chunk[..4].copy_from_slice(&interest.cap_id.to_le_bytes());
         chunk[4] = interest.mask;

@@ -76,7 +76,7 @@ fn cell_main() {
 
     // Clear to background.
     let px = surf.pixels_mut();
-    for chunk in px.chunks_exact_mut(4) {
+    for chunk in px.as_chunks_mut::<4>().0 {
         chunk.copy_from_slice(&BG);
     }
     surf.damage_all();
@@ -228,7 +228,7 @@ impl Console {
         for row in y..bottom {
             let start = row * stride + x * 4;
             let end = row * stride + right * 4;
-            for pixel in px[start..end].chunks_exact_mut(4) {
+            for pixel in px[start..end].as_chunks_mut::<4>().0 {
                 pixel.copy_from_slice(&BG);
             }
         }
@@ -257,7 +257,7 @@ impl Console {
         let px = surf.pixels_mut();
         px.copy_within(row_height * stride..row_height * stride + keep_bytes, 0);
         // Also clear any partial grid row below the last complete cell.
-        for pixel in px[keep_bytes..self.height * stride].chunks_exact_mut(4) {
+        for pixel in px[keep_bytes..self.height * stride].as_chunks_mut::<4>().0 {
             pixel.copy_from_slice(&BG);
         }
     }

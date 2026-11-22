@@ -499,6 +499,8 @@ pub const CELLS: &[Cell] = &[
     plain("/bin/mlibc-posix-x86"),
     plain("/bin/cpp-hosted-smoke"),
     plain("/bin/drm-lite-x86"),
+    // Monty (Python) Tier-2 rust-std witness (scripts/x86/qemu-monty-smoke.sh).
+    plain("/bin/monty-smoke"),
     boot_only("/bin/config"),
     boot_only("/bin/compositor"),
     boot_only("/bin/fb-console"),

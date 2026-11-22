@@ -83,7 +83,7 @@ bash scripts/build-cellos-sysroot.sh "$SYSROOT_TARGET"
 STAGING_DIR="$(pwd)/target/cellos-rust-src/library"
 export __CARGO_TESTS_ONLY_SRC_ROOT="$STAGING_DIR"
 
-cargo +nightly-2026-05-01 build --release \
+cargo +nightly-2026-11-21 build --release \
     --manifest-path cells/demos/std-smoke/Cargo.toml \
     -Z build-std=core,alloc,std,panic_abort \
     -Z build-std-features=compiler-builtins-mem \

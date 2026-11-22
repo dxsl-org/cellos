@@ -72,3 +72,31 @@ cargo build -p app-mlibc-smoke --release --target riscv64gc-unknown-none-elf
 RUSTFLAGS="-C relocation-model=pic" \
   cargo build -p app-mlibc-smoke --release --target x86_64-unknown-none
 ```
+
+## monty
+
+**Upstream**: https://github.com/pydantic/monty  
+**Pin**: `5f4a3dfc493538bb9dc319974393391ba9e7cf14` (tag `v1.7.0-beta.1`, 2026-11-20), set in `scripts/fetch-monty.sh`  
+**License**: MIT  
+**Purpose**: Python sandbox interpreter for Tier-2 `UNTRUSTED` std cells (witness: `cells/demos/monty-smoke`)
+
+Not vendored. `scripts/fetch-monty.sh` fetches the pin into the gitignored `third_party/monty-src/`
+and applies `third_party/monty/patches/*.patch` in order. Cells depend on
+`third_party/monty-src/crates/{monty,monty-types}` by path. Python language features go
+upstream; this patch set carries platform fixes only.
+
+| Patch | Purpose | Upstreamable |
+|---|---|---|
+| `0001-gate-ruff-stacker-off-cellos.patch` | Enables `ruff_python_parser/stacker` everywhere except `target_os = "cellos"`; `stacker`/`psm` need `mmap`/`mprotect` and per-OS asm. Hosts on cellos must compile with `source_scan_threshold = 0`, so Monty's nesting pre-scan bounds parser recursion; the parser then recurses on the cell's native stack, which is why the kernel gives Monty paths a 2 MiB user stack (`task::LARGE_STACK_PAGES`). | Yes. Upstream carries a TODO to drop stacker for recursion limits (`Cargo.toml:81-83`). |
+| `jiter/0001-gate-x86_64-simd-on-sse2.patch` | jiter 0.19.0 (Monty's JSON parser, crates.io tarball checked against the cell's `Cargo.lock` checksum) uses SSE2 intrinsics on every x86_64 target; the cellos x86_64 spec is soft-float with SSE disabled, where LLVM cannot lower them. The patch requires `target_feature = "sse2"` for those paths, so cellos takes jiter's scalar fallback. Wired in by `cells/demos/monty-smoke` `[patch.crates-io]`. | Yes, to jiter: SSE2 is not part of every x86_64 target. |
+
+The witness cell also selects `sha1`/`sha2`'s portable backends (`--cfg sha{1,2}_backend="soft"`) for the same
+reason, and builds at `opt-level = "s"`: the kernel copies a signed ELF into its heap to verify it, and a 12.9 MB
+`-O3` image did not fit (8.2 MB does).
+
+Moving the pin: edit `MONTY_PIN`, run the script (each patch must `git apply` cleanly), then rerun
+the witness `scripts/x86/qemu-monty-smoke.sh` and `--link-only` for riscv64/aarch64.
+
+```sh
+bash scripts/fetch-monty.sh
+```

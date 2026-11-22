@@ -410,7 +410,7 @@ pub fn encode_token_ids<'a>(ids: &[u32], out: &'a mut [u8]) -> Option<&'a mut [u
     if out.len() < bytes {
         return None;
     }
-    for (slot, id) in out.chunks_exact_mut(TOKEN_ID_BYTES).zip(ids) {
+    for (slot, id) in out.as_chunks_mut::<TOKEN_ID_BYTES>().0.iter_mut().zip(ids) {
         slot.copy_from_slice(&id.to_le_bytes());
     }
     Some(&mut out[..bytes])
@@ -421,11 +421,11 @@ pub fn encode_token_ids<'a>(ids: &[u32], out: &'a mut [u8]) -> Option<&'a mut [u
 /// A trailing partial word is ignored rather than panicking: a truncated payload is a malformed
 /// message, and silently dropping the tail keeps the reader total.
 pub fn token_ids(tokens: &[u8]) -> impl Iterator<Item = u32> + '_ {
-    tokens.chunks_exact(TOKEN_ID_BYTES).map(|word| {
-        let mut bytes = [0u8; TOKEN_ID_BYTES];
-        bytes.copy_from_slice(word);
-        u32::from_le_bytes(bytes)
-    })
+    tokens
+        .as_chunks::<TOKEN_ID_BYTES>()
+        .0
+        .iter()
+        .map(|word| u32::from_le_bytes(*word))
 }
 
 /// Write embedding values into `out` as little-endian `f32`; see [`encode_token_ids`].
@@ -434,7 +434,12 @@ pub fn encode_embedding_values<'a>(values: &[f32], out: &'a mut [u8]) -> Option<
     if out.len() < bytes {
         return None;
     }
-    for (slot, value) in out.chunks_exact_mut(EMBED_VALUE_BYTES).zip(values) {
+    for (slot, value) in out
+        .as_chunks_mut::<EMBED_VALUE_BYTES>()
+        .0
+        .iter_mut()
+        .zip(values)
+    {
         slot.copy_from_slice(&value.to_le_bytes());
     }
     Some(&mut out[..bytes])
@@ -442,11 +447,11 @@ pub fn encode_embedding_values<'a>(values: &[f32], out: &'a mut [u8]) -> Option<
 
 /// Iterate the values carried by [`AiResponse::Embedding::values`]; see [`token_ids`].
 pub fn embedding_values(values: &[u8]) -> impl Iterator<Item = f32> + '_ {
-    values.chunks_exact(EMBED_VALUE_BYTES).map(|word| {
-        let mut bytes = [0u8; EMBED_VALUE_BYTES];
-        bytes.copy_from_slice(word);
-        f32::from_le_bytes(bytes)
-    })
+    values
+        .as_chunks::<EMBED_VALUE_BYTES>()
+        .0
+        .iter()
+        .map(|word| f32::from_le_bytes(*word))
 }
 
 #[cfg(test)]

@@ -231,7 +231,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
         with:
-          toolchain: nightly-2026-05-01
+          toolchain: nightly-2026-11-21
           components: rust-src,rustfmt,clippy
 
       - if: runner.environment == 'github-hosted'
@@ -290,7 +290,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
         with:
-          toolchain: nightly-2026-05-01
+          toolchain: nightly-2026-11-21
           components: rust-src
           targets: riscv64gc-unknown-none-elf,aarch64-unknown-none-softfloat,x86_64-unknown-none
 
@@ -370,7 +370,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
         with:
-          toolchain: nightly-2026-05-01
+          toolchain: nightly-2026-11-21
           components: rust-src
 
       - if: runner.environment == 'github-hosted'
@@ -522,11 +522,11 @@ jobs:
 
       # The lane patches `library/` of the *pinned* toolchain, so it needs
       # rust-src for exactly that nightly (rust-toolchain.toml and the sysroot
-      # contract pin `nightly-2026-05-01`, rustc f53b654a8).
+      # contract pin `nightly-2026-11-21`, rustc c7d5ba59d).
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
         with:
-          toolchain: nightly-2026-05-01
+          toolchain: nightly-2026-11-21
           components: rust-src
 
       - if: runner.environment == 'github-hosted'
@@ -579,6 +579,24 @@ jobs:
           BOOT_TIMEOUT=90 bash scripts/run-std-smoke-qemu.sh aarch64
           BOOT_TIMEOUT=90 bash scripts/run-std-smoke-qemu.sh x86_64
 
+      # Monty (pinned pydantic/monty + third_party/monty/patches) in a Tier 2
+      # UNTRUSTED rust-std Cell: link proof on riscv64/aarch64, and a runtime
+      # witness on the x86_64 test-hooks image (Python cases + domain release).
+      - name: Fetch Monty at the pin and apply the Cellos patches
+        run: bash scripts/fetch-monty.sh
+
+      - name: Monty witness host tests (entropy shim fails closed)
+        working-directory: cells/demos/monty-smoke
+        run: cargo test --locked --target x86_64-unknown-linux-gnu --bin monty-smoke
+
+      - name: Link the Monty witness (riscv64 + aarch64)
+        run: bash scripts/build-x86_64-monty-smoke-ci.sh --link-only riscv64 aarch64
+
+      - name: Boot the Monty Tier 2 witness (QEMU x86_64)
+        run: |
+          bash scripts/build-x86_64-monty-smoke-ci.sh
+          X86_ACCEL=tcg BOOT_WINDOW=300 bash scripts/x86/qemu-monty-smoke.sh
+
   c2c-broker-oracle-single-guest-local-runtime:
     name: C2C Broker Oracle (single-guest local-runtime QEMU)
     if: ${{ vars.CI_SELF_HOSTED == 'true' || inputs.heavy }}
@@ -612,7 +630,7 @@ jobs:
       - name: Install Rust toolchain for single-guest local-runtime oracle
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
         with:
-          toolchain: nightly-2026-05-01
+          toolchain: nightly-2026-11-21
           components: rust-src
 
       - name: Record single-guest local-runtime Rust setup completion
@@ -691,7 +709,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
         with:
-          toolchain: nightly-2026-05-01
+          toolchain: nightly-2026-11-21
           components: rust-src,clippy
           targets: aarch64-unknown-none-softfloat
 
@@ -722,7 +740,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
         with:
-          toolchain: nightly-2026-05-01
+          toolchain: nightly-2026-11-21
           components: rust-src
           targets: aarch64-unknown-none-softfloat
 
@@ -879,7 +897,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
         with:
-          toolchain: nightly-2026-05-01
+          toolchain: nightly-2026-11-21
           components: rust-src
           targets: aarch64-unknown-none-softfloat
 
@@ -995,7 +1013,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
         with:
-          toolchain: nightly-2026-05-01
+          toolchain: nightly-2026-11-21
           components: rust-src
           targets: aarch64-unknown-none-softfloat
 
@@ -1082,7 +1100,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
         with:
-          toolchain: nightly-2026-05-01
+          toolchain: nightly-2026-11-21
           components: rust-src,clippy
           targets: x86_64-unknown-none
 
@@ -1130,7 +1148,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
         with:
-          toolchain: nightly-2026-05-01
+          toolchain: nightly-2026-11-21
           components: rust-src
           targets: x86_64-unknown-none
 
@@ -1443,7 +1461,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
         with:
-          toolchain: nightly-2026-05-01
+          toolchain: nightly-2026-11-21
           components: rust-src
           targets: x86_64-unknown-none
 
@@ -1564,7 +1582,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
         with:
-          toolchain: nightly-2026-05-01
+          toolchain: nightly-2026-11-21
           components: rust-src
           targets: x86_64-unknown-none
 
@@ -1682,7 +1700,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
         with:
-          toolchain: nightly-2026-05-01
+          toolchain: nightly-2026-11-21
           components: rust-src
           targets: x86_64-unknown-none
 
@@ -1788,7 +1806,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
         with:
-          toolchain: nightly-2026-05-01
+          toolchain: nightly-2026-11-21
           components: rust-src
           targets: x86_64-unknown-none
 
@@ -1873,7 +1891,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
         with:
-          toolchain: nightly-2026-05-01
+          toolchain: nightly-2026-11-21
           components: rust-src
           targets: x86_64-unknown-none
 
@@ -1943,7 +1961,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
         with:
-          toolchain: nightly-2026-05-01
+          toolchain: nightly-2026-11-21
           components: rust-src
 
       - if: runner.environment == 'github-hosted'
@@ -1998,7 +2016,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
         with:
-          toolchain: nightly-2026-05-01
+          toolchain: nightly-2026-11-21
           components: rust-src
 
       - if: runner.environment == 'github-hosted'
@@ -2053,7 +2071,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
         with:
-          toolchain: nightly-2026-05-01
+          toolchain: nightly-2026-11-21
           components: rust-src
 
       - if: runner.environment == 'github-hosted'
@@ -2115,7 +2133,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
         with:
-          toolchain: nightly-2026-05-01
+          toolchain: nightly-2026-11-21
           components: rust-src
 
       - if: runner.environment == 'github-hosted'
@@ -2167,7 +2185,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
         with:
-          toolchain: nightly-2026-05-01
+          toolchain: nightly-2026-11-21
           components: rust-src
 
       - if: runner.environment == 'github-hosted'
@@ -2302,7 +2320,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
         with:
-          toolchain: nightly-2026-05-01
+          toolchain: nightly-2026-11-21
           components: rust-src
 
       - if: runner.environment == 'github-hosted'
@@ -2412,7 +2430,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
         with:
-          toolchain: nightly-2026-05-01
+          toolchain: nightly-2026-11-21
 
       # cargo-deny is deliberately NOT repeated here: the Security Scan job below
       # already runs it over the same workspace, and a second run buys nothing.
@@ -2457,7 +2475,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
         with:
-          toolchain: nightly-2026-05-01
+          toolchain: nightly-2026-11-21
           components: rust-src
 
       - if: runner.environment == 'github-hosted'
@@ -2535,7 +2553,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
         with:
-          toolchain: nightly-2026-05-01
+          toolchain: nightly-2026-11-21
           components: rust-src
 
       - if: runner.environment == 'github-hosted'
@@ -2832,6 +2850,13 @@ jobs:
         # Separate workspace holding long-term P-256 signing keys; its own
         # deny.toml ignores no advisory.
         run: cargo deny --manifest-path cells/guests/silo-guest/Cargo.toml check advisories
+
+      # The Monty witness is its own workspace (pinned pydantic/monty plus the
+      # patched jiter), checked against the root policy.
+      - name: cargo-deny (Monty witness workspace)
+        run: |
+          bash scripts/fetch-monty.sh
+          cargo deny --manifest-path cells/demos/monty-smoke/Cargo.toml --config deny.toml check
 
       - name: Copyleft leaf check (ADR-0030)
         run: scripts/check-copyleft-leaves.sh

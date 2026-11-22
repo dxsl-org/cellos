@@ -126,7 +126,7 @@ pub fn strip(blob: &mut [u8]) -> Result<usize, StripError> {
         }
     }
     let removed = read - write;
-    for word in block[write..read].chunks_exact_mut(4) {
+    for word in block[write..read].as_chunks_mut::<4>().0 {
         word.copy_from_slice(&NOP.to_be_bytes());
     }
     blob[36..40].copy_from_slice(&((size - removed) as u32).to_be_bytes());

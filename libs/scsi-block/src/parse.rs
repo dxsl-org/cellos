@@ -67,11 +67,7 @@ impl<'a> LunList<'a> {
 
     /// The available LUNs in device order, as 8-byte SAM LUNs.
     pub fn iter(&self) -> impl Iterator<Item = [u8; 8]> + 'a {
-        self.entries.chunks_exact(8).map(|chunk| {
-            let mut lun = [0u8; 8];
-            lun.copy_from_slice(chunk);
-            lun
-        })
+        self.entries.as_chunks::<8>().0.iter().copied()
     }
 }
 
