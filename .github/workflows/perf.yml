@@ -85,10 +85,12 @@ jobs:
       - name: Rebuild kernel with bench-aware ramdisk
         run: |
           REL=target/riscv64gc-unknown-none-elf/release
-          # kernel_fs.img is a gitignored build artifact (only init is
-          # committed) — assemble the VIFS1 ramdisk from the cells built above.
+          # kernel_fs.img and init are gitignored build artifacts (the
+          # directory is absent from a fresh checkout) — assemble the VIFS1
+          # ramdisk from the cells built above.
           # bench + bench-probe MUST live in VIFS1: sys_spawn_pinned resolves
           # through the kernel loader (VIFS1/P2 only, no VFS).
+          mkdir -p kernel/src/embedded
           cp "$REL/app-init" kernel/src/embedded/init
           python3 tools/mkfat32.py kernel/src/embedded/kernel_fs.img \
             "$REL/app-init"          /bin/init \
@@ -99,7 +101,7 @@ jobs:
             "$REL/driver-virtio-blk" /bin/block \
             "$REL/bench"             /bin/bench \
             "$REL/bench-probe"       /bin/bench-probe
-          cargo build --release \
+          EMBEDDED_OVERRIDE=kernel/src/embedded cargo build --release \
             --target riscv64gc-unknown-none-elf \
             -Z build-std=core,alloc \
             -p cellos-kernel

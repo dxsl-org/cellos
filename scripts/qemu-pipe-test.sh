@@ -52,7 +52,9 @@ done
 # writes its test-hooks build to the same `cellos-kernel` path, so a stale artifact from
 # another lane would silently change what this run proves (or deny the launch edge).
 echo "==> Building the default-feature kernel"
-cargo build --release --target "$TARGET" -Z build-std=core,alloc -p cellos-kernel
+# The pair gen-disk-ci.sh / gen_disk.ps1 wrote alongside $DISK.
+EMBEDDED_OVERRIDE="${EMBEDDED_OVERRIDE:-kernel/src/embedded}" \
+    cargo build --release --target "$TARGET" -Z build-std=core,alloc -p cellos-kernel
 
 echo "==> Building the pipe-test cells ($TARGET)"
 cargo build --release --target "$TARGET" -p app-pipe-test -p app-pipe-peer

@@ -23,7 +23,7 @@ KERNEL="$TARGET_DIR/x86_64-unknown-none/release/cellos-kernel"
 
 mkdir -p "$ISO_DIR"
 RUSTFLAGS="-C code-model=kernel -C no-redzone=yes -Z cf-protection=full -C relocation-model=static" \
-CARGO_TARGET_DIR="$TARGET_DIR" \
+CARGO_TARGET_DIR="$TARGET_DIR" EMBEDDED_OVERRIDE=kernel/src/embedded-x86_64 \
 cargo build --release -p cellos-kernel --features "x86-idt-cpl3-test$EXTRA_FEATURES" \
     --target x86_64-unknown-none -Z build-std=core,alloc
 

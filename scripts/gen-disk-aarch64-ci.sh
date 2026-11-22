@@ -16,9 +16,10 @@
 # and, once all of those are verified, refreshes the in-tree embedded pair the way
 # `.github/workflows/ci.yml` (`qemu-aarch64-boot`) and `build-aarch64-cells.ps1` do:
 #   kernel/src/embedded-aarch64/kernel_fs.img      (gitignored)
-#   kernel/src/embedded-aarch64/init               (tracked: a change shows in git)
-# so a plain `cargo build -p cellos-kernel --target aarch64-unknown-none-softfloat`
-# (what `scripts/qemu-aarch64-test.sh` boots) embeds the same cells as this image.
+#   kernel/src/embedded-aarch64/init               (gitignored)
+# so a `cargo build -p cellos-kernel --target aarch64-unknown-none-softfloat` with
+# EMBEDDED_OVERRIDE=kernel/src/embedded-aarch64 (what `scripts/qemu-aarch64-test.sh`
+# boots in CI) embeds the same cells as this image.
 #
 # Boot the integration suite against it with:
 #   CARGO_BUILD_TARGET=x86_64-unknown-linux-gnu cargo test \
@@ -509,15 +510,17 @@ mv -f "$NEW_DISK" "$DISK"
 # ── 8. Refresh the in-tree embedded pair ──────────────────────────────────────
 # `qemu-aarch64-boot` in .github/workflows/ci.yml and build-aarch64-cells.ps1 write
 # kernel_fs.img and init straight into kernel/src/embedded-aarch64/, which is what a
-# plain `cargo build -p cellos-kernel` (no EMBEDDED_OVERRIDE) embeds and what
+# kernel built with EMBEDDED_OVERRIDE=kernel/src/embedded-aarch64 embeds and what
 # scripts/qemu-aarch64-test.sh boots. Without this step that kernel kept whatever
 # init and cells were last copied there by hand, so a cell fix rebuilt here never
 # reached it. Done last, so a failed run never leaves a half-refreshed pair.
 IN_TREE="kernel/src/embedded-aarch64"
 INIT_STATE="unchanged"
 if ! cmp -s "$EMB/init" "$IN_TREE/init"; then
-    INIT_STATE="UPDATED (tracked file: review and commit it)"
+    INIT_STATE="updated"
 fi
+# Gitignored build outputs only: absent from a fresh checkout.
+mkdir -p "$IN_TREE"
 cp -f "$EMB/kernel_fs.img" "$IN_TREE/kernel_fs.img"
 cp -f "$EMB/init" "$IN_TREE/init"
 

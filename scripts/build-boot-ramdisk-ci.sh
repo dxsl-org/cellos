@@ -100,6 +100,8 @@ fi
 echo "==> Signing cells..."
 sign_cells "${CELLS_TO_SIGN[@]}"
 echo "==> Assembling $EMB/kernel_fs.img..."
+# Gitignored build outputs only: absent from a fresh checkout.
+mkdir -p "$EMB"
 TMPDIR_KFS=$(mktemp -d)
 trap 'rm -rf "$TMPDIR_KFS"' EXIT
 printf 'ViCell' > "$TMPDIR_KFS/hostname"
@@ -149,7 +151,7 @@ if ! grep -q -- "SFN POLICY.BIN" "$TMPDIR_KFS/fat-layout.txt"; then
 fi
 
 # INIT_ELF (include_bytes! in main.rs) is embedded separately from kernel_fs.img;
-# refresh it so the committed copy can never go stale relative to the image.
+# refresh it so the embedded init can never go stale relative to the image.
 cp "$REL/app-init" "$EMB/init"
 
 echo "==> Done: $(du -sh "$EMB/kernel_fs.img" | cut -f1) at $EMB/kernel_fs.img"

@@ -184,7 +184,7 @@ if $CHECK_ONLY; then
     || warn "kernel_fs.img MISSING or empty — kernel would boot with no cells"
 else
   bash scripts/build-boot-ramdisk-ci.sh || die "ramdisk assembly failed"
-  cargo build --release -p cellos-kernel \
+  EMBEDDED_OVERRIDE=kernel/src/embedded cargo build --release -p cellos-kernel \
     --target riscv64gc-unknown-none-elf -Z build-std=core,alloc \
     || die "kernel build failed"
   info "kernel + ramdisk built ✓"

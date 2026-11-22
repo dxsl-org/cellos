@@ -15,7 +15,9 @@ for tool in "$QEMU" python3; do command -v "$tool" >/dev/null || {
 }; done
 [[ -f "$DISK" ]] || { echo "FAIL: missing disk image $DISK" >&2; exit 1; }
 
-cargo build --release --target "$TARGET" -Z build-std=core,alloc -p cellos-kernel
+# The pair gen-disk-ci.sh / gen_disk.ps1 wrote alongside $DISK.
+EMBEDDED_OVERRIDE="${EMBEDDED_OVERRIDE:-kernel/src/embedded}" \
+    cargo build --release --target "$TARGET" -Z build-std=core,alloc -p cellos-kernel
 cargo build --release --target "$TARGET" -p c-pthread
 PYTHON_BIN=python3 source scripts/lib-sign-cells.sh
 sign_cells "$CELL"

@@ -77,6 +77,7 @@ fi
 
 echo "==> Building the cell-scale experiment kernel (features cell-scale-experiment)"
 RUSTFLAGS="-C relocation-model=pic" CARGO_TARGET_DIR="$TARGET_DIR" \
+EMBEDDED_OVERRIDE="$(dirname "$VIFS1")" \
     cargo build --release --target "$TARGET" -Z build-std=core,alloc \
     -p cellos-kernel --features cell-scale-experiment
 [[ -f "$KERNEL" ]] || { echo "FAIL: kernel not built: $KERNEL" >&2; exit 1; }

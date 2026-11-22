@@ -351,6 +351,8 @@ $embedded = "kernel/src/embedded"
 # Only `init` is embedded as a separate blob (kernel/src/main.rs INIT_ELF).
 # shell/vfs/config/lua ship inside kernel_fs.img — the old standalone copies
 # were dead weight that churned git on every gen_disk run.
+# The directory holds only build outputs (gitignored), so a fresh checkout lacks it.
+New-Item -ItemType Directory -Force $embedded | Out-Null
 Copy-Item "$rel_dir/app-init"       "$embedded/init"   -Force
 
 # 2. Paths — all bootstrap table entries use RELEASE builds.
@@ -725,12 +727,16 @@ Write-Host "  kernel_fs.img: ${kfs_mb} MB"
 #     Must be done before creating disk_v3.img so the test runner picks up the latest kernel.
 Write-Host "Rebuilding kernel (embedding updated kernel_fs.img)..."
 $env:RUSTFLAGS = "-C relocation-model=pic"
+# Name the pair written above explicitly: without the override build.rs embeds
+# whatever in-tree fallback it finds, so the kernel is not a function of this run.
+$env:EMBEDDED_OVERRIDE = $embedded
 $kernOut = & cargo build --release -p cellos-kernel `
     --target riscv64gc-unknown-none-elf `
     -Z build-std=core,alloc 2>&1
 $kernCode = $LASTEXITCODE                     # capture BEFORE the pipe (see Build-Cargo)
 $kernOut | Select-Object -Last 3
 Remove-Item Env:/RUSTFLAGS
+Remove-Item Env:/EMBEDDED_OVERRIDE
 if ($kernCode -ne 0) {
     Write-Host "FATAL: kernel rebuild failed — disk would ship a stale kernel with an old kernel_fs.img." -ForegroundColor Red
     exit 1

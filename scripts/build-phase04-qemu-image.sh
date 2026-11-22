@@ -108,7 +108,7 @@ done
 
 python3 tools/mkfat32.py "$DISK_OUT" "$TEMP_DIR/hostname" /etc/hostname
 echo "[phase04-image] building kernel for $TARGET"
-cargo build --release --target "$TARGET" -p cellos-kernel
+EMBEDDED_OVERRIDE="$EMBEDDED" cargo build --release --target "$TARGET" -p cellos-kernel
 
 echo "PHASE04_KERNEL=$REL/cellos-kernel"
 echo "PHASE04_DISK=$DISK_OUT"

@@ -381,6 +381,9 @@ def create_fat32_image(output_path: str, files: list, config_features="",
     root_dir_start = RESERVED + FATS * fat_sectors  # sector of fixed root dir
 
     # ── 5. Write image ───────────────────────────────────────────────────────
+    # Embedded-image directories hold only gitignored build outputs, so a fresh
+    # checkout has no parent directory to write into.
+    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, 'wb+') as img:
         # a) Zero-fill
         img.seek(sector_count * SECTOR_SIZE - 1)

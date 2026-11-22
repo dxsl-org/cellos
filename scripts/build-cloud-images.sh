@@ -108,7 +108,8 @@ fi
 
 # ── 2. Build kernel ──────────────────────────────────────────────────────────
 echo "[build-cloud] 1/4 Compiling Cellos x86_64 kernel (release)..."
-cargo build --release -p cellos-kernel --target x86_64-unknown-none --features "$KERNEL_FEATURES"
+EMBEDDED_OVERRIDE=kernel/src/embedded-x86_64 \
+    cargo build --release -p cellos-kernel --target x86_64-unknown-none --features "$KERNEL_FEATURES"
 
 # ── 3. Build hybrid ISO ──────────────────────────────────────────────────────
 echo "[build-cloud] 2/4 Generating dual BIOS+UEFI image..."

@@ -68,7 +68,8 @@ fi
 # kernel carries the image just checked (a stale kernel would fail with
 # "command not found" instead of naming the real cause).
 echo "==> Building the default-feature kernel (embeds $VIFS1)"
-cargo build --release --target "$TARGET" -Z build-std=core,alloc -p cellos-kernel
+EMBEDDED_OVERRIDE="$(dirname "$VIFS1")" \
+    cargo build --release --target "$TARGET" -Z build-std=core,alloc -p cellos-kernel
 
 WORKDIR="$(mktemp -d)"
 RAW_LOG="$WORKDIR/qemu.raw.log"

@@ -784,6 +784,9 @@ jobs:
         # explicit embedded path instead and is not signed.
         run: |
           REL=target/aarch64-unknown-none-softfloat/release
+          EMB=kernel/src/embedded-aarch64
+          # Gitignored build outputs only: absent from a fresh checkout.
+          mkdir -p "$EMB"
           PYTHON_BIN=python3
           # shellcheck source=scripts/lib-sign-cells.sh
           source scripts/lib-sign-cells.sh
@@ -792,7 +795,7 @@ jobs:
             "$REL/service-input" "$REL/input-test" "$REL/periph-demo" \
             "$REL/ls" "$REL/cat" "$REL/echo" "$REL/ps" "$REL/kill"
           python3 tools/mkfat32.py --config-features input \
-            kernel/src/embedded-aarch64/kernel_fs.img \
+            "$EMB/kernel_fs.img" \
             "$REL/cellbox"      /bin/cellbox \
             "$REL/service-vfs"    /bin/vfs \
             "$REL/service-config" /bin/config \
@@ -804,7 +807,7 @@ jobs:
             "$REL/echo"           /bin/echo \
             "$REL/ps"             /bin/ps \
             "$REL/kill"           /bin/kill
-          cp "$REL/app-init" kernel/src/embedded-aarch64/init
+          cp "$REL/app-init" "$EMB/init"
 
       - name: Build aarch64 kernel
         env:

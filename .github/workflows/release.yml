@@ -55,6 +55,14 @@ jobs:
           ' "$key_file"
             echo "CELLOS_RELEASE_${name}_PUBLIC_KEY=$key_file" >> "$GITHUB_ENV"
           done
+      # No release-signed boot image exists yet (architecture remediation Phase 03:
+      # release ISO blocked on release signing). Since f830f377c5 the in-tree
+      # fallback image is gone, and before that it was a stale dev-signed init, so
+      # refuse here rather than ship either.
+      - name: Require a release-signed boot image
+        run: |
+          echo "::error::release image assembly needs release signing (Phase 03, .agents/261110-1703-architecture-remediation/phase-03-build-inputs.md); no release-signed init exists"
+          exit 1
       # release-posture = release-signing-key + signing-required + policy-required.
       # --no-default-features drops dev-policy-key, dev-signing-key and dev-weak-rng.
       - name: Build kernel (RV64, release posture)

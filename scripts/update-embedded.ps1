@@ -47,6 +47,8 @@ if (Test-Path $luaBin) {
 
 Write-Host ""
 Write-Host "Installing to $embedded/:"
+# Gitignored build outputs only: absent from a fresh checkout.
+New-Item -ItemType Directory -Force $embedded | Out-Null
 foreach ($c in $cells) {
     $src = if ($c.ContainsKey('FullPath')) { $c.FullPath } else { "$binDir\$($c.Bin)" }
     if (Test-Path $src) {
@@ -60,4 +62,4 @@ foreach ($c in $cells) {
 
 Write-Host ""
 Write-Host "Done. Rebuild the kernel to embed the new cells:"
-Write-Host "  cargo build --release -p cellos-kernel"
+Write-Host "  `$env:EMBEDDED_OVERRIDE = '$embedded'; cargo build --release -p cellos-kernel"

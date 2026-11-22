@@ -5,9 +5,9 @@
 # Produces (gitignored build artifacts unless noted):
 #   kernel/src/embedded/kernel_fs.img   VIFS1 — the bootstrap ramdisk embedded in
 #                                       the kernel via include_bytes! (FAT16)
-#   kernel/src/embedded/init            signed app-init embedded by a kernel built
-#                                       without EMBEDDED_OVERRIDE (tracked: a
-#                                       change shows in git)
+#   kernel/src/embedded/init            signed app-init; with kernel_fs.img the
+#                                       pair the RV64 scripts/qemu-*.sh lanes
+#                                       embed via EMBEDDED_OVERRIDE
 #   target/$TARGET/release/cellos-kernel  production kernel with the fresh VIFS1
 #   disk_v3.img                         MBR disk: P1 FAT32, P2 cell table,
 #                                       P6 FAT cell-store (VirtIO-BLK)
@@ -524,9 +524,9 @@ assert_policy_in_image "$KFS_TMP/fat-layout.txt"
 
 # ── 5. Kernel (embeds VIFS1 via include_bytes!) ───────────────────────────────
 # EMBEDDED_OVERRIDE points the build script at our staging dir. The copies below
-# keep kernel/src/embedded/{init,kernel_fs.img} current for every build without
-# the override: kernel/build.rs falls back to kernel/src/embedded on RV64, so a
-# stale tracked init there boots an init the kernel's launch profile refuses.
+# keep kernel/src/embedded/{init,kernel_fs.img} current for the RV64
+# scripts/qemu-*.sh lanes that embed or inspect that pair, so a stale init there
+# never boots an init the kernel's launch profile refuses.
 echo "==> building kernel (PIC, VIFS1 embedded; extra features: ${CELLOS_KERNEL_FEATURES:-none})"
 cp "$REL/app-init" "$EMBED_DIR/init"
 # CELLOS_KERNEL_FEATURES (default empty) adds measurement-only kernel features,
@@ -558,8 +558,10 @@ fi
 
 INIT_STATE="unchanged"
 if ! cmp -s "$EMBED_DIR/init" kernel/src/embedded/init; then
-    INIT_STATE="UPDATED (tracked file: review and commit it)"
+    INIT_STATE="updated"
 fi
+# Gitignored build outputs only: absent from a fresh checkout.
+mkdir -p kernel/src/embedded
 cp "$KFS" kernel/src/embedded/kernel_fs.img
 cp "$EMBED_DIR/init" kernel/src/embedded/init
 
