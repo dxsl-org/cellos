@@ -88,6 +88,13 @@ pub fn emit_linker_script_entry(entry: &str) {
     // is sufficient for the kernel's cell loader.
     println!("cargo:rustc-link-arg=-pie");
 
+    // Drop assembler-temporary locals (`.L*`) from the symbol table. Since
+    // nightly-2026-11-21 LLVM keeps tens of thousands of RISC-V `.L0` labels
+    // there (cellbox: 19k -> 62k symbols, +1.5 MB of .symtab/.strtab), which
+    // pushed the RV64 P6 cell store past its 32 MB window. Loadable sections
+    // and named symbols are unchanged.
+    println!("cargo:rustc-link-arg=--discard-locals");
+
     println!("cargo:rerun-if-changed=build.rs");
     // The template is embedded via include_str! — a change to cell.ld.in must
     // also invalidate this build script's output.

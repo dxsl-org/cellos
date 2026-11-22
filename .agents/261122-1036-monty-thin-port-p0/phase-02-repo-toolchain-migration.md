@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "Move the repo to the new pin"
-status: in-progress
+status: completed
 priority: P1
 effort: "1.5d"
 dependencies: [1]
@@ -66,7 +66,7 @@ Search: `rg -l "nightly-2026-05-01|f53b654a8|1\.97\.0" -g '!target' -g '!.agents
 ## Success Criteria
 
 - [x] The rg in § Architecture returns only rows classed archival or PAL-governed. Remaining live hits: Spec 23 §3.1 (phase 4) and `tests/rust-std-promotion/rust_src.py` (phase 3).
-- [ ] `ci-local.py run` passes for `lint`, `build` (all rows), `aarch64-lint`, `x86_64-lint` and `unit-tests`. Run so far: `unit-tests` passes; the three clippy gates pass with `-D warnings`; `fmt --check` is clean. The `lint` job's remaining failure is `tests/rust-std-promotion` (phase 3). `build` (all rows) has not been run as a job.
+- [x] `ci-local.py run` passes for `lint`, `build` (rv64, aarch64 and x86_64 rows), `aarch64-lint`, `x86_64-lint` and `unit-tests`, after phase 3 and the lint-generated files (`mutable-globals`, `arch-status`, `code-metrics`) were regenerated.
 - [x] `cellos-sign --check --strict` and `gen-tier1-closure.py --check` pass.
 - [x] `test_cellos_sign.py` (156) and `tests/app-tier-acceptance` (88) pass.
 

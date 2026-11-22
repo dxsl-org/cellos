@@ -4,7 +4,8 @@
 
 ## [Unreleased] Intel x86-64 C2C-only direction
 
-- **2026-11-22 — Toolchain `nightly-2026-11-21` and Monty (Python) in a Tier 2 std Cell (plan `.agents/261122-1036-monty-thin-port-p0`).** Not yet releasable: the PAL compiler-strategy re-decision (phase 3) and the Spec 23 `source_amendment` (phase 4) need their signers, and `tests/rust-std-promotion` fails until then.
+- **2026-11-22 — Toolchain `nightly-2026-11-21` and Monty (Python) in a Tier 2 std Cell (plan `.agents/261122-1036-monty-thin-port-p0`).** The PAL compiler-strategy re-decision was signed by dmin for both COMPILER-INTEGRATION roles over an independent review. Spec 23 §3.1 is re-bound by ledger event 19 (steward lungmat8, reviewer datgausaigon). `tests/rust-std-promotion` passes 33/33.
+  - **Cell symbol tables.** The new LLVM keeps tens of thousands of RISC-V `.L0` labels in each cell's symbol table, which pushed the RV64 P6 cell store to 40 MB (limit 32 MB). `libs/cell-build` now links every cell with `--discard-locals`; cellbox goes from 5.1 MB to 3.0 MB (it was 3.7 MB on the old toolchain).
   - **Toolchain.** `rust-toolchain.toml`, every workflow and the std scripts move from `nightly-2026-05-01` (1.97, `f53b654a8`) to `nightly-2026-11-21` (1.102, `c7d5ba59d`).
     - `patches/rust-std-cellos.patch` is rebased onto the new std `sys` layout:
       - the allocator uses per-platform free functions;
