@@ -358,6 +358,29 @@ hypervisor's virtio-gpu is 2D-only and no Cellos GPU driver offers graphics
 Plan: `.agents/261111-1700-tier3-chrome/plan.md`. ADR-0025 §3.2 is unchanged:
 Chrome is the approved Tier 3 workload, not a general-purpose hypervisor.
 
+## 5e. The window shows only Chromium; the guest is to get more resources (2026-11-25)
+
+The maintainer asked for two things on 2026-11-25.
+
+First, that the guest run Chromium alone, filling the window, with no other part of
+Linux visible. Done the same day (plan phase 01): the window shows the launcher's
+status until Chromium's first frame; Chromium draws no window buttons of its own;
+the pointer is the host's; no key reaches a Linux console; and when Chromium ends,
+the guest powers off (ACPI S5) and the window closes. Chromium now runs as an
+unprivileged guest user with its own sandbox on. That replaces the earlier
+`--no-sandbox` arrangement; the VM boundary is still what contains the guest.
+
+Second, that the guest's CPUs, memory, GPU, file access, sound and clipboard be
+extended so that Chromium runs smoothly. This is direction, not approval of any
+interface: each phase of the plan takes its own Law-1 checkpoints. It lifts two
+earlier limits: "SMP guest is out of scope" (first Chrome plan) and §5d's one vCPU
+and 1536 MiB. Guest GPU acceleration: decided 2026-11-26 in
+[ADR-0037](0037-chrome-guest-gpu-path.md): rendering stays in software (`--disable-gpu`);
+Cellos has no GPU graphics stack to give a guest.
+ADR-0025 §3.2 is unchanged.
+
+Plan: `.agents/261125-1100-chrome-kiosk-guest-resources/plan.md`.
+
 ## 6. Cross-references
 
 | Topic | Document |

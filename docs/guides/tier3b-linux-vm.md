@@ -10,21 +10,57 @@
 > (ADR-0017 §5d), other browser/GUI expansion stays parked.
 >
 > **Chrome guest:** the taskbar's Chrome runs Chromium under cage in an Alpine guest
-> (one vCPU, 1536 MiB guest RAM). The desktop image carries the guest kernel (`/vmlinux`)
+> (one vCPU; the image file `/chrome-guest-vcpus` holding a number asks Intel/VMX guests for
+> that many, capped at four and at half the machine's CPUs, each a thread of the hypervisor Cell;
+> 3072 MiB guest RAM, falling back to 2048 or 1536 MiB when the kernel cannot carve 3072
+> in one run). The desktop image carries the guest kernel (`/vmlinux`)
 > and initramfs (`/chrome-initrd.gz`); the read-only root `chrome-guest.sqfs`
 > (`scripts/build-chrome-guest-image.sh`) lives on `/mnt/sd`, which is a fixed 256 MiB
-> partition. Chromium runs with `--no-sandbox`: the VM boundary is its sandbox, and the
-> guest holds no credentials (user data lives in tmpfs and is gone at exit). The guest
-> takes its own DHCP lease and loads real HTTPS pages (guest clock from the host RTC). Fonts:
-> DejaVu, and WenQuanYi Zen Hei for CJK.
-> Chromium's UI appears ~30 s after the taskbar click on a quiet host. Key repeat comes
+> partition. Chromium runs as an unprivileged guest user with its own sandbox on (user
+> namespaces and seccomp); the VM boundary contains what gets past it, and the guest holds
+> no credentials (user data lives in tmpfs and is gone at exit). The guest takes its own
+> DHCP lease and loads real HTTPS pages (guest clock from the host RTC). Fonts: DejaVu, and
+> WenQuanYi Zen Hei for CJK. Rendering is software only (`--disable-gpu`, cage on pixman):
+> CellOS has no GPU graphics stack to give the guest ([ADR-0037](../decisions/0037-chrome-guest-gpu-path.md)).
+>
+> The window shows Chromium and nothing else of the guest. Until Chromium's first frame it
+> shows the launcher's status line, not the guest's blank screen. Chromium draws no
+> minimize, maximize and close buttons of its own (its "system title bar" preference); the
+> window's controls are the CellOS window's. The pointer is the host's, wearing the guest's
+> cursor image while it is over the window: the hypervisor reads cage's virtio-gpu cursor
+> plane and the launcher hands each image to the compositor, so it becomes an I-beam over
+> text and a hand over links.
+> cage runs without VT switching, so Ctrl+Alt+Fn reaches no Linux console. When Chromium
+> ends (its last window is closed from inside, or it crashes) the guest powers off through
+> ACPI S5 and the window closes; a guest that stops before Chromium ever showed leaves
+> "The Linux guest has stopped." in the window. Chromium's downloads go to
+> `/home/chrome/Downloads`, a folder the hypervisor shares over virtio-9p: the `Chrome`
+> folder of the first data disk (`/mnt/disk/<device>/Chrome`; `run-desktop.sh` attaches
+> `build/chrome-files.img`, made once by `scripts/make-chrome-files-disk.sh` and kept), so
+> files outlast the window. Without a data disk the folder is `/tmp/Chrome` and downloads
+> fail (`/tmp` cannot rename). Downloads over plain HTTP wait for Chromium's "Keep". The
+> rest of the guest's file system, profile included, is temporary.
+>
+> Text copies between Chromium and CellOS apps through the desktop clipboard, which the
+> compositor holds (UTF-8, up to 64 KiB). Only the window with keyboard focus may set or
+> read it, so the guest sees the host's clipboard only when the Chrome window gains focus,
+> and the guest's copies count only while it has focus. In the guest a small agent
+> (`clipboard-agent`, `wl-clipboard` over wlr-data-control, which cage gets from the
+> preloaded `data-control.c`) carries the text over a virtio console (`/dev/hvc0`) as
+> base64 lines. In the Terminal, drag to select, Ctrl+Shift+C copies and Ctrl+Shift+V pastes.
+>
+> Chromium's UI appears 21-23 s after the taskbar click on a quiet host (nested KVM). The
+> guest kernel logs at `loglevel=4`: every console byte is a VM exit to the hypervisor Cell,
+> and the full boot log cost about 9 s of that start. Key repeat comes
 > from the host input service only: the launcher sends each host repeat as a release and
 > press, and cage runs with `no-key-repeat.c` preloaded, which tells Chromium not to
 > repeat keys itself. The machine needs about 3 GiB.
 >
-> To run it: `bash scripts/make-chrome-guest-disk.sh build/chrome-guest-disk.img`; `run-desktop.sh`
-> then attaches that disk (as the lowest-addressed disk, which VFS mounts as `/mnt/sd`) and gives
-> the machine 3 GiB. By hand: `-m 3G -drive file=build/chrome-guest-disk.img,if=none,id=sd,format=raw
+> To run it: `bash scripts/make-chrome-guest-disk.sh build/chrome-guest-disk.img`, then
+> `bash run-desktop.sh --rebuild` (assembles the desktop image from source and boots it; later
+> runs need no `--rebuild`). `run-desktop.sh` attaches that disk (as the lowest-addressed disk,
+> which VFS mounts as `/mnt/sd`) and gives the machine 3 GiB. By hand:
+> `-m 3G -drive file=build/chrome-guest-disk.img,if=none,id=sd,format=raw
 > -device nvme,drive=sd,serial=CELLOSSD` placed before the boot disk, plus a NIC.
 > `scripts/qemu-tier3-chrome-x86.sh` is the KVM lane (not in CI: no nested VMX). Only init, the
 > shell's `hv` and the Chrome launcher may start `/bin/hypervisor`.
@@ -324,6 +360,57 @@ exit
 
 **Use Tier 3 `linux-guest` when**: boot time and startup latency don't matter, but compatibility and ease-of-deployment do.
 
+### Measuring the Chrome guest
+
+`bash scripts/qemu-tier3-chrome-bench-x86.sh` (Intel VMX through nested KVM, not a CI lane)
+opens Chrome from the taskbar, loads `tests/guests/chrome-bench/bench.html` from the build
+host and records what the page measures, the time from the click to Chromium's UI, and the
+hypervisor's statistics. It is a measurement, not a gate: it fails only when a run reports
+nothing.
+
+| Row | What it is |
+|---|---|
+| `ui_s` | click on the taskbar's Chrome (or QEMU start, for `reference`) to Chromium's UI |
+| `report_s` | Enter in the omnibox to the page's report: page load plus the tests below |
+| `raf_*` | `requestAnimationFrame` for 5 s: frames, p50/p95/max interval (ms) |
+| `timer_*` | 200 chained `setTimeout(4)`: p50/p95/max lateness (ms) |
+| `js1_ms`, `jsN_ms` | one fixed integer loop; the same loop in four Web Workers at once |
+| `scroll_*`, `paint_*` | frames and intervals while a long page scrolls, and while a full-window canvas is redrawn, for 5 s each |
+| `host_ms` | a fixed loop on the build host, timed before the run |
+
+The targets run in turns, one of each per round (`BENCH_ROUNDS`, default 3), and the table
+prints the median of each:
+
+- `head`: the desktop image of the working tree;
+- `baseline`: `BENCH_BASELINE_ISO`, a desktop ISO kept from an earlier build, when set;
+- `reference`: the same guest image straight under QEMU/KVM (microvm, virtio-mmio), one
+  nesting level less and no CellOS. `BENCH_REFERENCE=0` skips it.
+
+Only the columns of one table compare. The build host is rarely quiet, and a busy one moves
+every number: `host_ms` doubles and `ui_s` triples. Keep the ISO of a build you want to
+compare against and pass it as `baseline`; do not compare with a table from another hour.
+
+Two lines in the serial log say where a session's time went. They are printed when the VM
+ends, so close the Chrome window before reading them (`tier3_chrome_bench.py --launch-only`
+closes it as soon as Chromium's UI is up, which gives the launch alone):
+
+```text
+[hv-x86] exits to the Cell: uart=2756 uart_ms=157 pic=20761 pic_ms=191 … blk=7823 blk_ms=27294 … hlt=3645 hlt_ms=2531 preempted=2631 preempted_ms=2618
+[hv-x86] vm 1 vcpu 1 stats: runs=38441 run_ms=32187 guest_ms=27712 away_ms=33866 preempted_away_ms=3397 msr=1496 cpuid=1472 cr=2 hlt=4761 host-irq=2836 io=24721 ept=8829 other=0
+```
+
+- Kernel line (VMX only): `runs` is `RunVcpu` calls; `run_ms` the time inside them and
+  `guest_ms` the part between VM entry and VM exit; `away_ms` the time between calls, which is
+  the Cell's own work plus any wait for a CPU; `preempted_away_ms` the part of that after a
+  host interrupt. Then VM exits by cause: `msr`, `cpuid` and `cr` are served in the kernel,
+  the others end the call.
+- Cell line: per device, how often the guest came back for it and how many milliseconds the
+  Cell spent before running the guest again.
+
+At boot the kernel also logs which optional VMX controls the CPU, or the hypervisor under
+it, offers: `[hv-x86] VMX offers: preemption-timer=… tpr-shadow=… msr-bitmaps=… vpid=…
+apic-access=… apic-registers=… virtual-interrupts=… vmcs-shadowing=…`.
+
 ---
 
 ## Limits & Constraints
@@ -382,6 +469,7 @@ hypervisor cell. Passing is emulator evidence — it does not qualify physical h
 | x86 hostile corpus | `BUILD_HOSTILE_ISO=1 bash scripts/qemu-tier3-hostile-runner-x86.sh` | 27 bounded malformed-input scenarios plus a host-read post-reset recovery write | `qemu-x86-tier3-hostile` |
 | x86 display + network (Intel VMX) | `bash scripts/qemu-tier3-display-x86.sh` | guest pattern on screen and in the Chrome window, virtio-input bound, guest DHCP lease beside the host stack, DNS, HTTP, Ocel fetch while the guest runs, Close ends the guest | none (local KVM only) |
 | x86 Chrome (Intel VMX) | `bash scripts/qemu-tier3-chrome-x86.sh` | taskbar Chrome → guest lease → Chromium UI (prints `Chromium UI after N s`; 29–32 s on a quiet host on 2026-11-12, was ~132 s) → a URL typed into Chromium renders https://example.com/ → Maximize resizes Chromium → Close ends launcher and hypervisor | none (local KVM only) |
+| x86 Chrome bench (Intel VMX) | `bash scripts/qemu-tier3-chrome-bench-x86.sh` | nothing: prints launch time, the bench page's frame pacing, timer lateness, JavaScript, scroll and paint figures, and the VM-exit statistics, for this tree beside a kept baseline ISO and plain QEMU/KVM (see "Measuring the Chrome guest") | none (local KVM only) |
 
 CPython is the first useful application gate because its batch-processing result
 can be checked without a display bridge. A browser is a separate, later gate:
