@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: MIT
-//! EPT violations on the VirtIO-MMIO window (`EXIT_REASON_EPT_VIOLATION`).
+//! EPT violations on the emulated windows (`EXIT_REASON_EPT_VIOLATION`): the
+//! VirtIO-MMIO window, whose accesses go to the VMM, and the local APIC page,
+//! which is served here (`lapic`).
 //!
 //! VMX reports neither the access width nor the data register for an EPT
 //! violation, and `VM_EXIT_INSTRUCTION_LEN` is undefined for it, so the
 //! faulting instruction is fetched through the guest page tables and decoded
 //! with the same `decode_mmio` the SVM backend uses. Anything else (a fault
-//! outside the window, an instruction fetch, a page-walk access, an
+//! outside the windows, an instruction fetch, a page-walk access, an
 //! undecodable instruction) is surfaced as `Unknown` with RIP unchanged.
 
 use hal_hypervisor::ViVmExit;
@@ -13,7 +15,7 @@ use types::ViResult;
 
 use super::super::vmcs::*;
 use super::super::vmexit_decode::decode_mmio;
-use super::VmxVcpu;
+use super::{lapic, VmxVcpu};
 
 const QUAL_WRITE: u64 = 1 << 1;
 const QUAL_FETCH: u64 = 1 << 2;
@@ -27,21 +29,22 @@ const ISS_UNDECODABLE: u32 = 0x4d4d_1002;
 const ISS_DURING_EVENT_DELIVERY: u32 = 0x4d4d_1003;
 const VECTORING_VALID: u64 = 1 << 31;
 
-/// True for a final-translation data access to the VirtIO-MMIO window.
+/// True for a final-translation data access to an emulated window.
 fn is_mmio_data_access(qual: u64, gpa: u64) -> bool {
     qual & QUAL_FETCH == 0
         && qual & (QUAL_LINEAR_VALID | QUAL_FINAL_TRANSLATION)
             == (QUAL_LINEAR_VALID | QUAL_FINAL_TRANSLATION)
-        && MMIO_WINDOW.contains(&gpa)
+        && (MMIO_WINDOW.contains(&gpa) || lapic::PAGE.contains(&gpa))
 }
 
 impl VmxVcpu {
     /// Decode the EPT violation at the current exit; on success RIP is moved
-    /// past the decoded instruction.
+    /// past the decoded instruction. `None` when the access was to the local
+    /// APIC and has been served: the guest just continues.
     ///
     /// # Safety
     /// This vCPU's VMCS is current (inside the run scope).
-    pub(super) unsafe fn handle_ept_violation(&mut self) -> ViResult<ViVmExit> {
+    pub(super) unsafe fn handle_ept_violation(&mut self) -> ViResult<Option<ViVmExit>> {
         let qual = vmread(EXIT_QUALIFICATION)?;
         let gpa = vmread(GUEST_PHYSICAL_ADDRESS)?;
         let unknown = |iss| ViVmExit::Unknown {
@@ -49,12 +52,12 @@ impl VmxVcpu {
             iss,
         };
         if !is_mmio_data_access(qual, gpa) {
-            return Ok(unknown(qual as u32));
+            return Ok(Some(unknown(qual as u32)));
         }
         // A fault while delivering an event is not the instruction at RIP;
         // decoding it would advance RIP and lose the event.
         if vmread(IDT_VECTORING_INFO_FIELD)? & VECTORING_VALID != 0 {
-            return Ok(unknown(ISS_DURING_EVENT_DELIVERY));
+            return Ok(Some(unknown(ISS_DURING_EVENT_DELIVERY)));
         }
         let rip = vmread(GUEST_RIP)?;
         let Some((instruction, available)) = self.guest_ram.fetch_instruction(
@@ -64,7 +67,7 @@ impl VmxVcpu {
             vmread(GUEST_IA32_EFER)?,
             rip,
         ) else {
-            return Ok(unknown(ISS_NO_INSTRUCTION));
+            return Ok(Some(unknown(ISS_NO_INSTRUCTION)));
         };
         // `decode_mmio` reads the write flag from bit 1, where VMX keeps it too.
         let Some((exit, length)) = decode_mmio(
@@ -73,10 +76,40 @@ impl VmxVcpu {
             &instruction[..available],
             &mut self.gpr,
         ) else {
-            return Ok(unknown(ISS_UNDECODABLE));
+            return Ok(Some(unknown(ISS_UNDECODABLE)));
         };
         super::complete_instruction(rip.wrapping_add(u64::from(length)))?;
-        Ok(exit)
+        if lapic::PAGE.contains(&gpa) {
+            self.apic_access(exit);
+            return Ok(None);
+        }
+        Ok(Some(exit))
+    }
+
+    /// Serve a decoded access to the local APIC page. Its registers are 32
+    /// bits wide: an access of another width writes nothing and reads 0. A
+    /// read lands in its register as the VMM's would: a byte or word replaces
+    /// the low bits, a doubleword zero-extends.
+    fn apic_access(&mut self, access: ViVmExit) {
+        match access {
+            ViVmExit::MmioWrite { ipa, size: 4, val } => {
+                self.outbox = self
+                    .lapic
+                    .write((ipa - lapic::PAGE.start) as u32, val as u32);
+            }
+            ViVmExit::MmioRead { ipa, size, reg } => {
+                let value = self.lapic.read((ipa - lapic::PAGE.start) as u32);
+                let Some(register) = self.gpr.get_mut(usize::from(reg)) else {
+                    return;
+                };
+                *register = match size {
+                    4 => u64::from(value),
+                    1 => *register & !0xFF,
+                    _ => *register & !0xFFFF,
+                };
+            }
+            _ => {}
+        }
     }
 }
 

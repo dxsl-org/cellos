@@ -1088,6 +1088,10 @@ bit = 44
 doc = '''
 Create a vCPU in `vm_id` with initial PC `entry_pc`; returns `vcpu_id`.
 ABI: a0 = vm_id, a1 = entry_pc → vcpu_id (>0).
+x86 VMX: vCPU 1 enters at `entry_pc`; each later vCPU has APIC ID
+`vcpu_id - 1`, ignores `entry_pc` and waits until another vCPU's local APIC
+sends it INIT and a start-up IPI. x86 SVM: one vCPU per VM; a second call
+returns NotSupported.
 '''
 
 [[syscall]]
@@ -1129,7 +1133,11 @@ number = 225
 group = "Hypervisor (220-225) — HypervisorCap gated (allowlist bit 44)"
 bit = 44
 doc = '''
-Inject a GICv2 virtual interrupt into vCPU (0 ≤ intid ≤ 1019).
+Raise a virtual interrupt for a vCPU.
+AArch64: a GICv2 interrupt (0 ≤ intid ≤ 1019).
+x86: external-interrupt vector `intid` (16..=255). It waits until the guest can
+take a maskable interrupt; raising a vector that still waits is one interrupt.
+Any other x86 value raises nothing.
 ABI: a0 = vm_id, a1 = vcpu_id, a2 = intid → 0.
 '''
 

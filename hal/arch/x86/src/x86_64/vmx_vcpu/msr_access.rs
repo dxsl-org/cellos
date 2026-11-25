@@ -5,13 +5,15 @@
 //! here; the guest never reaches a physical MSR. Guest-context MSRs live where
 //! the hardware takes them from on entry: EFER, FS/GS base and SYSENTER in the
 //! VMCS guest area, KERNEL_GS_BASE and the SYSCALL MSRs in [`VmxGuestRegs`],
-//! which `vmx_vmrun` loads around the world switch. Every other read returns 0
-//! and every other write is dropped, as on the SVM backend.
+//! which `vmx_vmrun` loads around the world switch; `IA32_TSC_DEADLINE` is the
+//! local APIC's timer (`lapic`). Every other read returns 0 and every other
+//! write is dropped, as on the SVM backend.
 
 use types::ViResult;
 
 use super::super::vmcs::*;
 use super::super::world_switch::SyscallMsr;
+use super::lapic::IA32_TSC_DEADLINE;
 use super::{queue_gp, VmxVcpu, CR0_PG};
 
 const MSR_APIC_BASE: u32 = 0x1B;
@@ -27,8 +29,8 @@ const MSR_FS_BASE: u32 = 0xC000_0100;
 const MSR_GS_BASE: u32 = 0xC000_0101;
 const MSR_KERNEL_GS_BASE: u32 = 0xC000_0102;
 
-/// xAPIC enabled at 0xFEE00000, BSP; no x2APIC (the guest LAPIC is the
-/// RAM-backed MMIO window, as on SVM).
+/// xAPIC enabled at 0xFEE00000, BSP; no x2APIC (the guest reaches its local
+/// APIC through the register page).
 const APIC_BASE_VALUE: u64 = 0xFEE0_0000 | (1 << 8) | (1 << 11);
 /// EFER bits the guest may set: SCE, LME, NXE. LMA is hardware-owned.
 const EFER_GUEST_WRITABLE: u64 = (1 << 0) | (1 << 8) | (1 << 11);
@@ -75,12 +77,13 @@ impl VmxVcpu {
             MSR_APIC_BASE => APIC_BASE_VALUE,
             MSR_FS_BASE => vmread(GUEST_FS_BASE)?,
             MSR_GS_BASE => vmread(GUEST_GS_BASE)?,
-            MSR_KERNEL_GS_BASE => self.guest_regs.kernel_gs_base,
+            MSR_KERNEL_GS_BASE => self.guest_regs.loaded_kernel_gs_base(),
+            IA32_TSC_DEADLINE => self.lapic.deadline(),
             MSR_SYSENTER_CS => vmread(GUEST_SYSENTER_CS)?,
             MSR_SYSENTER_ESP => vmread(GUEST_SYSENTER_ESP)?,
             MSR_SYSENTER_EIP => vmread(GUEST_SYSENTER_EIP)?,
             _ => match syscall_slot(index) {
-                Some(slot) => self.guest_regs.syscall[slot as usize],
+                Some(slot) => self.guest_regs.syscall_msr(slot),
                 None => 0,
             },
         })
@@ -106,13 +109,14 @@ impl VmxVcpu {
             }
             MSR_FS_BASE => vmwrite(GUEST_FS_BASE, value)?,
             MSR_GS_BASE => vmwrite(GUEST_GS_BASE, value)?,
-            MSR_KERNEL_GS_BASE => self.guest_regs.kernel_gs_base = value,
+            MSR_KERNEL_GS_BASE => self.guest_regs.set_loaded_kernel_gs_base(value),
+            IA32_TSC_DEADLINE => self.lapic.set_deadline(value),
             MSR_SYSENTER_CS => vmwrite(GUEST_SYSENTER_CS, value & 0xFFFF_FFFF)?,
             MSR_SYSENTER_ESP => vmwrite(GUEST_SYSENTER_ESP, value)?,
             MSR_SYSENTER_EIP => vmwrite(GUEST_SYSENTER_EIP, value)?,
             _ => {
                 if let Some(slot) = syscall_slot(index) {
-                    self.guest_regs.syscall[slot as usize] = value;
+                    self.guest_regs.set_loaded_syscall_msr(slot, value);
                 }
             }
         }

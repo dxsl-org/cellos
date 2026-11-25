@@ -50,3 +50,66 @@ impl GuestFpu {
         core::arch::asm!("fxsave64 [{}]", in(reg) self.0.as_mut_ptr(), options(nostack));
     }
 }
+
+/// Bytes of a standard-format XSAVE image holding x87, SSE and AVX state:
+/// the legacy region (512), the XSAVE header (64: XSTATE_BV, then XCOMP_BV,
+/// which must stay 0 for XRSTOR), the upper YMM halves (256).
+const XSTATE_BYTES: usize = 832;
+/// The AVX component's bit in XCR0 and in an instruction's feature mask.
+const COMPONENT_AVX: u32 = 1 << 2;
+
+/// A VMX vCPU's x87, SSE and AVX state between runs.
+///
+/// The legacy region is the FXSAVE image (`FXSAVE`/`FXRSTOR` move x87 and
+/// SSE whatever the guest's XCR0); the AVX component moves with
+/// `XSAVE`/`XRSTOR` under the guest's XCR0, which then masks it out until the
+/// guest enables AVX (`XSETBV`). Standard format: the AVX component sits at
+/// byte 576 (SDM Vol. 1, 13.4).
+#[repr(C, align(64))]
+pub struct GuestXState([u8; XSTATE_BYTES]);
+
+impl Default for GuestXState {
+    /// Reset state: the legacy defaults of [`GuestFpu`], an all-zero header
+    /// (every component in its initial configuration).
+    fn default() -> Self {
+        let mut image = [0u8; XSTATE_BYTES];
+        image[..512].copy_from_slice(&GuestFpu::default().0);
+        Self(image)
+    }
+}
+
+impl GuestXState {
+    /// Load this state. With `avx`, the AVX component comes back too, as far
+    /// as the XCR0 now in place enables it.
+    ///
+    /// # Safety
+    /// IF=0 until the matching [`Self::save`]; no host code that uses x87,
+    /// SSE or AVX may run in between. With `avx`, CR4.OSXSAVE is set and
+    /// XCR0 is the guest's.
+    #[inline]
+    pub unsafe fn load(&self, avx: bool) {
+        core::arch::asm!("fxrstor64 [{}]", in(reg) self.0.as_ptr(), options(nostack, readonly));
+        if avx {
+            core::arch::asm!("xrstor64 [{}]", in(reg) self.0.as_ptr(),
+                in("eax") COMPONENT_AVX, in("edx") 0u32, options(nostack, readonly));
+        }
+    }
+
+    /// Store the state [`Self::load`] put in place, then clear the upper YMM
+    /// halves so nothing of the guest's vectors stays in the registers.
+    ///
+    /// # Safety
+    /// As for [`Self::load`], with the same `avx` and XCR0.
+    #[inline]
+    pub unsafe fn save(&mut self, avx: bool, xcr0: u64) {
+        if avx {
+            core::arch::asm!("xsave64 [{}]", in(reg) self.0.as_mut_ptr(),
+                in("eax") COMPONENT_AVX, in("edx") 0u32, options(nostack));
+        }
+        core::arch::asm!("fxsave64 [{}]", in(reg) self.0.as_mut_ptr(), options(nostack));
+        // VZEROUPPER is a VEX instruction: #UD unless XCR0 enables SSE and AVX.
+        if avx && xcr0 & 0b110 == 0b110 {
+            core::arch::asm!("vzeroupper", options(nomem, nostack, preserves_flags));
+        }
+    }
+}

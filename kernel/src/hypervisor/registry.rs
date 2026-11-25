@@ -42,7 +42,7 @@ impl VmKey {
         self.owner == (owner.cell().0, owner.generation())
     }
 
-    // reason: only the p01-trace root walk reads the raw parts.
+    // reason: read by the p01-trace root walk and the x86 statistics line only.
     #[allow(dead_code)]
     pub(crate) fn parts(self) -> (u64, usize) {
         (self.owner.0, self.vm_id)

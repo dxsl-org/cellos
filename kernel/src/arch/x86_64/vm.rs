@@ -79,15 +79,19 @@ pub(crate) fn guest_window(owner: Charge, vm_id: usize) -> ViResult<(u64, usize)
     crate::arch::hypervisor::svm_registry::guest_window(owner, vm_id)
 }
 
+/// `budget_ns` bounds the run where the backend can (VMX: the guest is off
+/// the CPU that long after the call at the latest); 0 is no bound.
 pub(crate) fn run_vcpu(
     owner: Charge,
     vm_id: usize,
     vcpu_id: usize,
-    _budget_ns: u64,
+    budget_ns: u64,
 ) -> ViResult<abi::hypervisor::ViVmExit> {
     use abi::hypervisor::ViVmExit as ApiVmExit;
     use hal::ViVmExit as HalVmExit;
-    let hal_exit = crate::arch::hypervisor::svm_registry::run_vcpu_hal(owner, vm_id, vcpu_id)?;
+    let deadline_ns = (budget_ns != 0).then(|| hal::clock::now_ns().saturating_add(budget_ns));
+    let hal_exit =
+        crate::arch::hypervisor::svm_registry::run_vcpu_hal(owner, vm_id, vcpu_id, deadline_ns)?;
     // HAL → API conversion (VERSION 2 ABI — the x86 variants are frozen at
     // discriminants 8-11). `reg` is not decoded for PortIn (guest `IN`
     // always targets (E)AX) → 0.

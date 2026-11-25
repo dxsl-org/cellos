@@ -40,6 +40,8 @@ pub mod msr;
 #[cfg(target_arch = "x86_64")]
 pub mod paging;
 #[cfg(target_arch = "x86_64")]
+pub mod pending_irqs;
+#[cfg(target_arch = "x86_64")]
 pub mod pku;
 #[cfg(target_arch = "x86_64")]
 pub mod rtc;
@@ -618,7 +620,17 @@ pub fn init_sse() {
         let mut cr4: u64;
         core::arch::asm!("mov {}, cr4", out(reg) cr4, options(nomem, nostack));
         cr4 |= (1 << 9) | (1 << 10);
+        // XSAVE on, with XCR0 = x87 | SSE: host code keeps to FXSAVE and gets
+        // #UD from any AVX instruction, as before, while the VMX world switch
+        // can now give a guest its own XCR0 and AVX state (`GuestXState`).
+        let xsave = core::arch::x86_64::__cpuid(1).ecx & (1 << 26) != 0;
+        if xsave {
+            cr4 |= 1 << 18;
+        }
         core::arch::asm!("mov cr4, {}", in(reg) cr4, options(nomem, nostack));
+        if xsave {
+            world_switch::xsetbv0(0b11);
+        }
         core::arch::asm!("fninit", options(nostack));
 
         let mxcsr: u32 = 0x1F80;

@@ -173,7 +173,7 @@ static GUEST_IN_USE: [AtomicUsize; MAX_CELLS] = [const { AtomicUsize::new(0) }; 
 
 /// Low bits of a counter word: live bytes, at most 4 GiB - 1 per account.
 /// Every account's bound fits: the memory and DMA limits default to
-/// `DEFAULT_QUOTA_BYTES` (16 MiB), the largest guest budget is 1544 MiB
+/// `DEFAULT_QUOTA_BYTES` (16 MiB), the largest guest budget is 3080 MiB
 /// (`catalog`), and a larger registered limit is clamped to `BYTES_MASK`.
 const GENERATION_SHIFT: u32 = 32;
 const BYTES_MASK: usize = (1 << GENERATION_SHIFT) - 1;
@@ -881,7 +881,7 @@ mod tests {
             .map(|cell| cell.guest_memory)
             .max()
             .unwrap_or(0);
-        assert_eq!(largest_guest, 1544 * 1024 * 1024, "the hypervisor budget");
+        assert_eq!(largest_guest, 3080 * 1024 * 1024, "the hypervisor budget");
         assert!(largest_guest <= BYTES_MASK && DEFAULT_QUOTA_BYTES <= BYTES_MASK);
 
         let _guard = crate::TEST_STATE_LOCK.lock();

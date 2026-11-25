@@ -4,8 +4,8 @@
 //! CR8 load/store exiting is mandatory in this VMCS: with neither it nor a TPR
 //! shadow, a 64-bit guest's `mov cr8` writes the physical LAPIC TPR, which no
 //! VM exit restores — `mov cr8, 15` would mask the host timer and IPIs on that
-//! CPU for good. Instead the guest owns a virtual TPR (`VmxVcpu::vtpr`) that
-//! only gates the VMM's own interrupt injection.
+//! CPU for good. Instead CR8 is the task priority of the guest's own local
+//! APIC (`lapic`), which only gates what the kernel injects.
 
 use types::ViResult;
 
@@ -30,8 +30,20 @@ pub(super) enum CrOutcome {
     Faulted,
 }
 
+/// Drop what this CPU cached for the guest under the current EPT root. With a
+/// VPID those translations survive VM entries, and a control-register write
+/// applied by `VMWRITE` flushes nothing where the guest's own `MOV` would
+/// have (SDM Vol. 3A 4.10.4.1).
+///
+/// # Safety
+/// This vCPU's VMCS is current.
+pub(super) unsafe fn flush_translations() -> ViResult<()> {
+    super::super::invept::invalidate_context(vmread(EPT_POINTER)?)
+}
+
 impl VmxVcpu {
-    /// Emulate the CR access described by exit qualification `qual`.
+    /// Emulate the CR access described by exit qualification `qual`. A `MOV`
+    /// to CR0 or CR4 emulated here ends with [`flush_translations`].
     ///
     /// # Safety
     /// This vCPU's VMCS is current (inside the run scope).
@@ -47,9 +59,11 @@ impl VmxVcpu {
                     queue_gp()?;
                     return Ok(CrOutcome::Faulted);
                 }
-                self.vtpr = value as u8;
+                self.lapic.set_task_priority_class(value as u8);
             }
-            (8, ACCESS_MOV_FROM_CR) => self.write_gpr(reg, u64::from(self.vtpr))?,
+            (8, ACCESS_MOV_FROM_CR) => {
+                self.write_gpr(reg, u64::from(self.lapic.task_priority_class()))?
+            }
             (0, ACCESS_MOV_TO_CR) => {
                 // Only writes that change a host-owned bit (NE, CD, NW)
                 // against the read shadow exit here. The write is applied by
@@ -78,6 +92,7 @@ impl VmxVcpu {
                 let fixed1 = vmread(CR0_GUEST_HOST_MASK)? & !(CR0_CD | CR0_NW);
                 vmwrite(GUEST_CR0, (value | fixed1) & !(CR0_CD | CR0_NW))?;
                 vmwrite(CR0_READ_SHADOW, value)?;
+                flush_translations()?;
             }
             (4, ACCESS_MOV_TO_CR) => {
                 // Only writes that change a host-owned bit (the VMX fixed-1
@@ -96,6 +111,7 @@ impl VmxVcpu {
                 let fixed1 = vmread(CR4_GUEST_HOST_MASK)?;
                 vmwrite(GUEST_CR4, value | fixed1)?;
                 vmwrite(CR4_READ_SHADOW, value)?;
+                flush_translations()?;
             }
             // Other CR exits are not configured; skipping the instruction
             // keeps the pre-existing behavior for capability-forced exits.

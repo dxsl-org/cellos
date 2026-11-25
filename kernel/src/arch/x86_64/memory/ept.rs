@@ -1,9 +1,10 @@
 //! x86 nested-paging (Intel EPT / AMD NPT) builder for the ViCell hypervisor.
 //!
 //! The x86 analog of [`crate::memory::stage2`] (ARM64 Stage-2). One 4-level tree per
-//! guest: PML4 → PDPT → PD → PT, 4 KiB frames throughout (no large pages in the
-//! MVP). Guest physical address (GPA) base is **0** — x86 Linux/PVH expects low
-//! RAM starting at 0, unlike ARM's IPA 0x4000_0000.
+//! guest: PML4 → PDPT → PD → PT, 4 KiB leaves, and 2 MiB leaves in the PD where
+//! the table allows them ([`NestedPageTable::allow_large_leaves`]). Guest physical
+//! address (GPA) base is **0** — x86 Linux/PVH expects low RAM starting at 0,
+//! unlike ARM's IPA 0x4000_0000.
 //!
 //! # Invariants (enforced, mirror Stage-2)
 //! - Guest RAM GPA range maps exclusively into the carved HPA region (SAS
@@ -22,6 +23,7 @@
 
 extern crate alloc;
 use alloc::vec::Vec;
+use core::sync::atomic::{AtomicU64, Ordering};
 
 use crate::memory::cell_quota::Reservation;
 use crate::memory::frame::{allocate_guest_ram, phys_to_virt};
@@ -63,6 +65,13 @@ const EPT_MEMTYPE_WB: u64 = 6 << 3;
 const NPT_PRESENT: u64 = 1 << 0;
 const NPT_WRITE: u64 = 1 << 1;
 const NPT_USER: u64 = 1 << 2;
+
+/// Bit 7 of a page-directory entry, in both formats: the entry maps a 2 MiB
+/// page itself instead of pointing at a page table.
+const LARGE_LEAF: u64 = 1 << 7;
+const LARGE_BYTES: u64 = 2 * 1024 * 1024;
+/// 4 KiB pages under one 2 MiB leaf.
+const LARGE_PAGES: u64 = 512;
 
 // ── MMIO GPAs left unmapped before VM-entry (mirror ARM MMIO_HOLES) ──────────
 
@@ -114,6 +123,14 @@ fn entry_pa(e: u64) -> usize {
     (e & PA_MASK) as usize
 }
 
+/// Source of [`NestedPageTable::epoch`]. Starts at 1: 0 is a CPU's record
+/// before it has invalidated for any table.
+static NEXT_EPOCH: AtomicU64 = AtomicU64::new(1);
+
+fn next_epoch() -> u64 {
+    NEXT_EPOCH.fetch_add(1, Ordering::Relaxed)
+}
+
 /// x86 nested page table (EPT or NPT) for one VM.
 ///
 /// **Root** is a single 4 KiB PML4 frame (naturally 4 KiB-aligned — EPTP/nCR3
@@ -136,6 +153,14 @@ pub struct NestedPageTable {
     /// it is allocated; a frame the rest cannot cover is refused. The rest is
     /// refunded when the table drops.
     budget: Reservation,
+    /// Names the translations this table gives right now: drawn fresh when the
+    /// table is made and after every change to a leaf, and never drawn twice.
+    /// A CPU that ran `INVEPT` for the root at this value holds nothing stale
+    /// for it — neither from an earlier state of this table nor from a freed
+    /// table whose root frame this one reuses.
+    epoch: u64,
+    /// `map` may write 2 MiB leaves (see [`Self::allow_large_leaves`]).
+    large_leaves: bool,
 }
 
 // SAFETY: not Send/Sync by default (raw `*mut u64`); only touched from
@@ -147,8 +172,9 @@ impl NestedPageTable {
     pub const ROOT_PAGES: usize = 1;
 
     /// Most PDPT, PD and PT tables mapping `pages` contiguous 4 KiB pages at
-    /// any base can need (`map` writes 4 KiB leaves only): one PT per 2 MiB,
-    /// one PD per 1 GiB and one PDPT per 512 GiB the range touches.
+    /// any base can need (with 4 KiB leaves, the most tables a mapping takes):
+    /// one PT per 2 MiB, one PD per 1 GiB and one PDPT per 512 GiB the range
+    /// touches.
     pub const fn table_bound(pages: usize) -> usize {
         pages.div_ceil(512)
             + 1
@@ -196,7 +222,18 @@ impl NestedPageTable {
             guest_ram_pages: 0,
             guest_ram: None,
             budget,
+            epoch: next_epoch(),
+            large_leaves: false,
         })
+    }
+
+    /// Let [`Self::map`] write a 2 MiB leaf wherever a whole 2 MiB of guest and
+    /// host addresses lines up: one entry instead of a page table of 512, and
+    /// a walk one level shorter for the CPU and for the hypervisor under it.
+    /// Only for a format the CPU walks large leaves in (EPT: 2 MiB pages in
+    /// `IA32_VMX_EPT_VPID_CAP`); unmapping part of a large leaf splits it.
+    pub(crate) fn allow_large_leaves(&mut self) {
+        self.large_leaves = true;
     }
 
     /// Physical address of the PML4 root (for the EPTP/nCR3 formatters).
@@ -211,6 +248,12 @@ impl NestedPageTable {
     /// (4 levels); bit6 = accessed/dirty (left 0 in the MVP).
     pub fn eptp(&self) -> u64 {
         (self.root_pa & PA_MASK) | 6 | (3 << 3)
+    }
+
+    /// See the field: what an entering CPU compares with its own record to
+    /// decide whether it must `INVEPT` first.
+    pub fn epoch(&self) -> u64 {
+        self.epoch
     }
 
     /// nCR3 control value (AMD VMCB field): the plain root PA.
@@ -285,6 +328,11 @@ impl NestedPageTable {
         Some((va, pa as u64))
     }
 
+    /// Pages the root and sub-tables take (each table is one page).
+    pub fn table_pages(&self) -> usize {
+        self.tables.len()
+    }
+
     /// Map `n_pages` × 4 KiB at guest `gpa` → host `hpa`.
     ///
     /// All-or-nothing: every interior table the range needs is allocated
@@ -333,14 +381,36 @@ impl NestedPageTable {
                 return Err(EptMapError::SasViolation);
             }
         }
-        // Pass 1: build every interior level. The only fallible step.
-        for page in 0..n_pages as u64 {
-            self.leaf_table(gpa + page * PAGE_SIZE as u64)?;
-        }
-        // Pass 2: write leaves. Cannot fail — every table now exists.
-        for page in 0..n_pages as u64 {
+        // Pass 1: build every interior level. The only fallible step (a split
+        // of a 2 MiB leaf here keeps its translations).
+        let pages = n_pages as u64;
+        let mut page = 0u64;
+        while page < pages {
             let offset = page * PAGE_SIZE as u64;
-            self.map_single(gpa + offset, hpa + offset, writable)?;
+            if self.takes_large_leaf(gpa + offset, hpa + offset, pages - page)? {
+                page += LARGE_PAGES;
+            } else {
+                self.leaf_table(gpa + offset)?;
+                page += 1;
+            }
+        }
+        // Pass 2: write leaves. Cannot fail — every table now exists, and each
+        // range decides as it did in pass 1.
+        let mut page = 0u64;
+        while page < pages {
+            let offset = page * PAGE_SIZE as u64;
+            if self.takes_large_leaf(gpa + offset, hpa + offset, pages - page)? {
+                let slot = self.pd_slot(gpa + offset)?;
+                let leaf = self.leaf_desc(hpa + offset, writable) | LARGE_LEAF;
+                // SAFETY: slot is a live page-directory entry.
+                unsafe {
+                    *slot = leaf;
+                }
+                page += LARGE_PAGES;
+            } else {
+                self.map_single(gpa + offset, hpa + offset, writable)?;
+                page += 1;
+            }
         }
         self.invalidate();
         Ok(())
@@ -385,14 +455,17 @@ impl NestedPageTable {
         self.invalidate();
     }
 
-    /// Drop this context's cached EPT translations on the current CPU.
+    /// A leaf changed: move to a new epoch, so that every CPU invalidates
+    /// before it next enters under this root, and drop this context's cached
+    /// translations on the current CPU now.
     ///
     /// EPT guest-physical mappings are tagged by EP4TA and survive VM exits, so
     /// a cleared or rewritten leaf stays live until `INVEPT`. `INVEPT` is
-    /// CPU-local: the registry also invalidates on the entering CPU before
-    /// every VM entry, which covers CPUs this call cannot reach. NPT needs
-    /// nothing here — every VMRUN flushes the guest's ASID.
-    fn invalidate(&self) {
+    /// CPU-local: the registry invalidates on the entering CPU whenever that
+    /// CPU's record is not this epoch, which covers CPUs this call cannot
+    /// reach. NPT needs nothing here — every VMRUN flushes the guest's ASID.
+    fn invalidate(&mut self) {
+        self.epoch = next_epoch();
         if self.format == NestedFormat::Ept && crate::cpu_features::has_x86_virt() {
             // SAFETY: an EPT table exists only on the VMX backend, and
             // `has_x86_virt` means every online CPU completed VMXON (an AP that
@@ -421,6 +494,9 @@ impl NestedPageTable {
         if !self.is_present(pde) {
             return None;
         }
+        if pde & LARGE_LEAF != 0 {
+            return Some((pde & PA_MASK & !(LARGE_BYTES - 1)) | (gpa & (LARGE_BYTES - 1)));
+        }
         let pt = phys_to_virt(entry_pa(pde)) as *const u64;
         let pte = unsafe { *pt.add(pt_idx(gpa)) };
         if !self.is_present(pte) {
@@ -431,11 +507,34 @@ impl NestedPageTable {
 
     // ── Single-page walk ─────────────────────────────────────────────────────
 
-    /// Walk to the page table covering `gpa`, allocating missing interior
-    /// levels. Writes only table descriptors, never a leaf.
-    fn leaf_table(&mut self, gpa: u64) -> Result<*mut u64, EptMapError> {
+    /// Whether the range from `gpa` (to `hpa`, `pages_left` pages long) starts
+    /// with a 2 MiB leaf: large leaves allowed, both addresses 2 MiB-aligned,
+    /// 2 MiB left to map, and the page-directory entry not already pointing at
+    /// a page table (whose other leaves would be lost). Allocates the upper
+    /// levels of a candidate; changes no leaf.
+    fn takes_large_leaf(
+        &mut self,
+        gpa: u64,
+        hpa: u64,
+        pages_left: u64,
+    ) -> Result<bool, EptMapError> {
+        if !self.large_leaves
+            || !gpa.is_multiple_of(LARGE_BYTES)
+            || !hpa.is_multiple_of(LARGE_BYTES)
+            || pages_left < LARGE_PAGES
+        {
+            return Ok(false);
+        }
+        // SAFETY: pd_slot returns a live page-directory entry.
+        let entry = unsafe { *self.pd_slot(gpa)? };
+        Ok(!self.is_present(entry) || entry & LARGE_LEAF != 0)
+    }
+
+    /// The page-directory entry covering `gpa`, allocating missing upper
+    /// levels. Writes only table descriptors.
+    fn pd_slot(&mut self, gpa: u64) -> Result<*mut u64, EptMapError> {
         let mut level_va = self.root_va;
-        for &idx in &[pml4_idx(gpa), pdpt_idx(gpa), pd_idx(gpa)] {
+        for &idx in &[pml4_idx(gpa), pdpt_idx(gpa)] {
             // SAFETY: level_va valid for 512 entries; idx < 512.
             let slot = unsafe { level_va.add(idx) };
             let e = unsafe { *slot };
@@ -451,7 +550,53 @@ impl NestedPageTable {
                 va
             };
         }
-        Ok(level_va)
+        // SAFETY: level_va is a live page directory; pd_idx < 512.
+        Ok(unsafe { level_va.add(pd_idx(gpa)) })
+    }
+
+    /// Walk to the page table covering `gpa`, allocating missing interior
+    /// levels and splitting a 2 MiB leaf in the way. Writes only table
+    /// descriptors, never a leaf of its own.
+    fn leaf_table(&mut self, gpa: u64) -> Result<*mut u64, EptMapError> {
+        let slot = self.pd_slot(gpa)?;
+        // SAFETY: slot is a live page-directory entry.
+        let e = unsafe { *slot };
+        if self.is_present(e) {
+            return if e & LARGE_LEAF != 0 {
+                self.split(slot, e)
+            } else {
+                Ok(phys_to_virt(entry_pa(e)) as *mut u64)
+            };
+        }
+        let (va, pa) = self.alloc_subtable().ok_or(EptMapError::OutOfMemory)?;
+        let desc = self.table_desc(pa);
+        // SAFETY: slot valid; descriptor bits cannot overlap PA field.
+        unsafe {
+            *slot = desc;
+        }
+        Ok(va)
+    }
+
+    /// Replace the 2 MiB leaf `large` in `slot` by a page table of 512 4 KiB
+    /// leaves with the same output addresses and permissions: the translations
+    /// stay as they were. Returns the new page table.
+    fn split(&mut self, slot: *mut u64, large: u64) -> Result<*mut u64, EptMapError> {
+        let (va, pa) = self.alloc_subtable().ok_or(EptMapError::OutOfMemory)?;
+        let base = large & PA_MASK & !(LARGE_BYTES - 1);
+        let writable = large & (EPT_WRITE | NPT_WRITE) != 0;
+        for index in 0..LARGE_PAGES {
+            let leaf = self.leaf_desc(base + index * PAGE_SIZE as u64, writable);
+            // SAFETY: va is the fresh page table; index < 512.
+            unsafe {
+                *va.add(index as usize) = leaf;
+            }
+        }
+        let desc = self.table_desc(pa);
+        // SAFETY: slot is a live page-directory entry.
+        unsafe {
+            *slot = desc;
+        }
+        Ok(va)
     }
 
     /// Write one leaf. The caller invalidates once its whole batch is written.
@@ -467,7 +612,7 @@ impl NestedPageTable {
 
     fn unmap_single(&mut self, gpa: u64) {
         let mut level_va = self.root_va;
-        for &idx in &[pml4_idx(gpa), pdpt_idx(gpa), pd_idx(gpa)] {
+        for &idx in &[pml4_idx(gpa), pdpt_idx(gpa)] {
             // SAFETY: level_va valid for 512 entries; idx < 512.
             let e = unsafe { *level_va.add(idx) };
             if !self.is_present(e) {
@@ -475,9 +620,32 @@ impl NestedPageTable {
             }
             level_va = phys_to_virt(entry_pa(e)) as *mut u64;
         }
-        // SAFETY: level_va is the PT; clear the leaf.
+        // SAFETY: level_va is a live page directory; pd_idx < 512.
+        let slot = unsafe { level_va.add(pd_idx(gpa)) };
+        let e = unsafe { *slot };
+        if !self.is_present(e) {
+            return;
+        }
+        let pt = if e & LARGE_LEAF != 0 {
+            match self.split(slot, e) {
+                Ok(pt) => pt,
+                // No frame for the page table: the whole 2 MiB goes. That takes
+                // away more than was asked and never leaves a page mapped that
+                // the caller unmapped.
+                Err(_) => {
+                    // SAFETY: slot is a live page-directory entry.
+                    unsafe {
+                        *slot = 0;
+                    }
+                    return;
+                }
+            }
+        } else {
+            phys_to_virt(entry_pa(e)) as *mut u64
+        };
+        // SAFETY: pt is the page table; clear the leaf.
         unsafe {
-            *level_va.add(pt_idx(gpa)) = 0;
+            *pt.add(pt_idx(gpa)) = 0;
         }
     }
 }
@@ -500,10 +668,10 @@ impl Drop for NestedPageTable {
             }
         }
         // An INVEPT error is logged and the frames are still freed, as
-        // before: every VM entry invalidates its own EPTP on the entering CPU
-        // first, so a later VM whose root lands on these frames never walks
-        // this VM's entries. NPT needs nothing: ASIDs are never reused and
-        // every VMRUN flushes its guest's ASID.
+        // before: a later table whose root lands on these frames has another
+        // epoch, so every CPU invalidates that root before it first enters
+        // under it and never walks this VM's entries. NPT needs nothing: ASIDs
+        // are never reused and every VMRUN flushes its guest's ASID.
         let mut batch = Batch::new();
         for run in self.tables.drain(..) {
             run.retire_into(&mut batch);

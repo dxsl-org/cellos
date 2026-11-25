@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
-//! VMCS host-state area, rewritten from the executing CPU before every entry.
+//! VMCS host-state area, kept equal to the executing CPU before every entry.
 //!
 //! A VM exit loads GS.base, TR (and through it the IST stacks), GDTR, IDTR
 //! and CR3 from these fields. The vCPU's owner task may be scheduled on any
 //! hart between `RunVcpu` calls, so values captured once at creation would
 //! resume the host with another CPU's `CpuLocal` (`gs:`), TSS and IST stacks.
 //! [`refresh`] therefore runs on every entry, inside the same IF=0 window as
-//! the world switch, so the CPU it reads is the CPU that takes the exit.
+//! the world switch, so the CPU it reads is the CPU that takes the exit; it
+//! writes only when the CPU, the address space or the caller's FS moved.
 //! HOST_RSP/HOST_RIP are written by the world-switch stub itself.
 
 use types::ViResult;
@@ -37,16 +38,51 @@ pub(super) unsafe fn live_cr3() -> u64 {
     cr3
 }
 
-/// Write every per-CPU host-state field of the current VMCS from this CPU,
-/// with `host_cr3` as the exit address space.
+/// What the host-state area was last written from. The fields that differ
+/// between entries are functions of these five values: GS.base is the CPU's
+/// `CpuLocal`, so it names the CPU, and a CPU's selectors, TR, GDTR, IDTR and
+/// EFER are loaded once when it is brought up.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) struct Stamp {
+    cr0: u64,
+    cr3: u64,
+    cr4: u64,
+    fs_base: u64,
+    gs_base: u64,
+}
+
+impl Stamp {
+    /// A value that differs between CPUs: the base of the CPU's `CpuLocal`.
+    pub(super) fn cpu(&self) -> u64 {
+        self.gs_base
+    }
+}
+
+/// Make the host-state area of the current VMCS describe this CPU, with
+/// `host_cr3` as the exit address space. `written` is the vCPU's record of
+/// what the area holds (it survives `VMCLEAR`); when nothing it depends on
+/// moved, no field is written: 17 `VMWRITE`s that each trap when CellOS itself
+/// runs under a hypervisor.
 ///
 /// # Safety
 /// VMX root operation, the target VMCS current on this CPU, IF=0 until the
 /// following world switch returns (no migration between refresh and entry).
-pub(super) unsafe fn refresh(host_cr3: u64) -> ViResult<()> {
+pub(super) unsafe fn refresh(host_cr3: u64, written: &mut Option<Stamp>) -> ViResult<()> {
     let (cr0, cr4): (u64, u64);
     core::arch::asm!("mov {}, cr0", out(reg) cr0, options(nomem, nostack, preserves_flags));
     core::arch::asm!("mov {}, cr4", out(reg) cr4, options(nomem, nostack, preserves_flags));
+    let now = Stamp {
+        cr0,
+        cr3: host_cr3,
+        cr4,
+        fs_base: msr::read(MSR_FS_BASE),
+        gs_base: msr::read(MSR_GS_BASE),
+    };
+    if *written == Some(now) {
+        return Ok(());
+    }
+    // A write that fails part-way must not pass for a complete one.
+    *written = None;
     vmwrite(HOST_CR0, cr0)?;
     vmwrite(HOST_CR3, host_cr3)?;
     vmwrite(HOST_CR4, cr4)?;
@@ -83,9 +119,10 @@ pub(super) unsafe fn refresh(host_cr3: u64) -> ViResult<()> {
     vmwrite(HOST_TR_BASE, gdt::tss_base())?;
     // The exit reloads both bases from here: GS is this CPU's kernel
     // `CpuLocal`, FS the calling cell's own value.
-    vmwrite(HOST_FS_BASE, msr::read(MSR_FS_BASE))?;
-    vmwrite(HOST_GS_BASE, msr::read(MSR_GS_BASE))?;
+    vmwrite(HOST_FS_BASE, now.fs_base)?;
+    vmwrite(HOST_GS_BASE, now.gs_base)?;
     // Loaded on exit (EXIT_LOAD_IA32_EFER); this CPU's value, like the rest.
     vmwrite(HOST_IA32_EFER, msr::read(MSR_EFER))?;
+    *written = Some(now);
     Ok(())
 }

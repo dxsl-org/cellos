@@ -492,6 +492,21 @@ pub(crate) fn early(_hartid: usize, dtb: usize) -> EarlyPlatform {
                         "x86 virt: root operation active (VMX)"
                     }
                 });
+                if matches!(kind, crate::arch::boot::cpu_features::X86Virt::Vmx) {
+                    // SAFETY: VMX root operation was just entered on this CPU.
+                    let offers = unsafe { hal::vmx::offers() };
+                    log::info!(
+                        "[hv-x86] VMX offers: preemption-timer={} tpr-shadow={} msr-bitmaps={} vpid={} apic-access={} apic-registers={} virtual-interrupts={} vmcs-shadowing={}",
+                        offers.preemption_timer,
+                        offers.tpr_shadow,
+                        offers.msr_bitmaps,
+                        offers.vpid,
+                        offers.apic_access,
+                        offers.apic_registers,
+                        offers.virtual_interrupts,
+                        offers.vmcs_shadowing
+                    );
+                }
             }
             Err(reason) => {
                 puts("[INFO] x86 virt: ");

@@ -64,6 +64,8 @@ pub mod hypervisor {
     /// x86 SVM VM store + run loop (Tier 3 P03), the x86 twin of the aarch64
     /// branch in [`crate::hypervisor::registry`].
     pub mod svm_registry;
+    /// One vCPU's lock and mailbox; interrupts between vCPUs.
+    mod vcpu_slot;
 }
 
 pub mod memory {

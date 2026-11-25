@@ -9,8 +9,9 @@
 //! context clean on the CPU about to enter the guest must invalidate on that
 //! CPU with interrupts masked up to VM entry.
 //!
-//! The supported invalidation types come from `IA32_VMX_EPT_VPID_CAP`, read
-//! once and cached: capabilities are uniform across the CPUs of one machine.
+//! The supported invalidation types, and whether EPT walks 2 MiB leaves, come
+//! from `IA32_VMX_EPT_VPID_CAP`, read once and cached: capabilities are uniform
+//! across the CPUs of one machine.
 
 use core::sync::atomic::{AtomicU8, Ordering};
 
@@ -32,6 +33,9 @@ const CAP_INVEPT: u64 = 1 << 20;
 const CAP_SINGLE_CONTEXT: u64 = 1 << 25;
 /// `IA32_VMX_EPT_VPID_CAP[26]`: all-context `INVEPT` is supported.
 const CAP_ALL_CONTEXT: u64 = 1 << 26;
+/// `IA32_VMX_EPT_VPID_CAP[16]`: an EPT page-directory entry may map a 2 MiB
+/// page.
+const CAP_2MIB_PAGES: u64 = 1 << 16;
 
 /// `INVEPT` type operands (SDM Vol. 3C 29.4.3.1).
 const TYPE_SINGLE_CONTEXT: u64 = 1;
@@ -42,6 +46,7 @@ const TYPE_ALL_CONTEXT: u64 = 2;
 const PROBED: u8 = 1 << 7;
 const SINGLE: u8 = 1 << 0;
 const ALL: u8 = 1 << 1;
+const LARGE: u8 = 1 << 2;
 static CAPS: AtomicU8 = AtomicU8::new(0);
 
 /// Read and cache which `INVEPT` types this CPU implements.
@@ -69,6 +74,9 @@ unsafe fn caps() -> u8 {
                     caps |= ALL;
                 }
             }
+            if cap & CAP_2MIB_PAGES != 0 {
+                caps |= LARGE;
+            }
         }
     }
     CAPS.store(caps, Ordering::Relaxed);
@@ -84,6 +92,16 @@ unsafe fn caps() -> u8 {
 pub unsafe fn supported() -> bool {
     // SAFETY: forwarded caller contract.
     unsafe { caps() & (SINGLE | ALL) != 0 }
+}
+
+/// True if EPT on this CPU walks 2 MiB leaves; without it such an entry is an
+/// EPT misconfiguration.
+///
+/// # Safety
+/// The CPU must support VMX (`CPUID.1:ECX[5]`).
+pub unsafe fn large_pages_supported() -> bool {
+    // SAFETY: forwarded caller contract.
+    unsafe { caps() & LARGE != 0 }
 }
 
 /// Execute `INVEPT ty, [descriptor]`.

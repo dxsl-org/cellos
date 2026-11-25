@@ -1,34 +1,36 @@
 // SPDX-License-Identifier: MIT
-//! Host XCR0/PKRU preservation across a guest run.
+//! Host PKRU preservation across a guest entry.
 //!
-//! Neither `#VMEXIT` (SVM) nor a VMX VM exit reloads XCR0 or PKRU, so whatever
-//! the guest left there would otherwise govern the host kernel after the exit.
+//! Neither `#VMEXIT` (SVM) nor a VMX VM exit reloads PKRU, so whatever the
+//! guest left there would otherwise govern the host kernel after the exit.
 //! PKRU also gates *supervisor* data accesses to U=1 pages: an all-deny guest
 //! PKRU makes the kernel fault on its first write to a user buffer (the exit
-//! record). XCR0 decides which extended state user code may use and how large
-//! an XSAVE image is.
+//! record).
 //!
-//! The registers are only accessible while the matching CR4 bit is set
-//! (`OSXSAVE` for XGETBV/XSETBV, `PKE` for RDPKRU/WRPKRU — otherwise #UD), so
-//! CR4 is read once per switch and gates every access. Writes happen only when
-//! the value differs, keeping the common exit path to a register compare.
+//! XCR0 needs no such care around an entry: both backends intercept `XSETBV`
+//! (VMX always, SVM through the VMCB), so a guest never writes it. A VMX vCPU
+//! puts its guest's XCR0 in place for a whole run (`VmxVcpu::run`), through
+//! [`xsetbv0`].
+//!
+//! PKRU is only accessible while `CR4.PKE` is set (RDPKRU/WRPKRU #UD
+//! otherwise), so CR4 is read once per switch and gates every access. Writes
+//! happen only when the value differs, keeping the common exit path to a
+//! register compare.
 //!
 //! Callers run with IF=0 from [`HostExtState::enter`] to
-//! [`HostExtState::exit`]: no host code that depends on PKRU/XCR0 may run in
+//! [`HostExtState::exit`]: no host code that depends on PKRU may run in
 //! between.
 
-const CR4_OSXSAVE: u64 = 1 << 18;
 const CR4_PKE: u64 = 1 << 22;
 
 /// Host values captured immediately before guest entry.
 pub(super) struct HostExtState {
     cr4: u64,
-    xcr0: u64,
     pkru: u32,
 }
 
 impl HostExtState {
-    /// Snapshot host XCR0/PKRU and install the guest's PKRU.
+    /// Snapshot host PKRU and install the guest's.
     ///
     /// # Safety
     /// CPL 0, IF=0, and the guest must be entered before any host access to a
@@ -37,7 +39,6 @@ impl HostExtState {
     pub(super) unsafe fn enter(guest_pkru: u32) -> Self {
         let cr4: u64;
         core::arch::asm!("mov {}, cr4", out(reg) cr4, options(nomem, nostack, preserves_flags));
-        let xcr0 = if cr4 & CR4_OSXSAVE != 0 { xgetbv0() } else { 0 };
         let pkru = if cr4 & CR4_PKE != 0 {
             let host = rdpkru();
             if host != guest_pkru {
@@ -47,14 +48,14 @@ impl HostExtState {
         } else {
             0
         };
-        Self { cr4, xcr0, pkru }
+        Self { cr4, pkru }
     }
 
-    /// Record the guest's PKRU into `guest_pkru` and restore host XCR0/PKRU.
+    /// Record the guest's PKRU into `guest_pkru` and restore the host's.
     ///
     /// Must run right after the exit, before any host access to a U=1 page.
     /// Host CR4 equals the value read in [`Self::enter`] (VMX reloads it from
-    /// `HOST_CR4`, SVM from the host save area), so the same gates apply.
+    /// `HOST_CR4`, SVM from the host save area), so the same gate applies.
     ///
     /// # Safety
     /// CPL 0, IF=0, paired with the [`Self::enter`] of this switch.
@@ -67,14 +68,11 @@ impl HostExtState {
                 wrpkru(self.pkru);
             }
         }
-        if self.cr4 & CR4_OSXSAVE != 0 && xgetbv0() != self.xcr0 {
-            xsetbv0(self.xcr0);
-        }
     }
 }
 
 #[inline(always)]
-unsafe fn xgetbv0() -> u64 {
+pub(crate) unsafe fn xgetbv0() -> u64 {
     let (lo, hi): (u32, u32);
     core::arch::asm!("xgetbv", in("ecx") 0u32, out("eax") lo, out("edx") hi,
         options(nomem, nostack, preserves_flags));
@@ -82,7 +80,7 @@ unsafe fn xgetbv0() -> u64 {
 }
 
 #[inline(always)]
-unsafe fn xsetbv0(value: u64) {
+pub(crate) unsafe fn xsetbv0(value: u64) {
     core::arch::asm!("xsetbv", in("ecx") 0u32, in("eax") value as u32, in("edx") (value >> 32) as u32,
         options(nostack, preserves_flags));
 }

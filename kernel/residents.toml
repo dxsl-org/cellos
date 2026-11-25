@@ -164,6 +164,7 @@
 "kernel/src/arch/x86_64/gpio_irq.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/x86_64/hart_local.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/x86_64/hypervisor/svm_registry.rs" = { category = "A", owner = "hypervisor" }
+"kernel/src/arch/x86_64/hypervisor/vcpu_slot.rs" = { category = "A", owner = "hypervisor" }
 "kernel/src/arch/x86_64/icache.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/x86_64/iommu.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/x86_64/irq.rs" = { category = "A", owner = "arch" }

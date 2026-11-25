@@ -170,6 +170,9 @@ pub unsafe fn has_true_ctls() -> bool {
 
 // ── VMCS Field Encodings (Intel SDM Appendix B) ──────────────────────────────
 
+// 16-bit Control Fields
+pub const VIRTUAL_PROCESSOR_ID: u32 = 0x0000;
+
 // 16-bit Guest State Fields
 pub const GUEST_ES_SELECTOR: u32 = 0x0800;
 pub const GUEST_CS_SELECTOR: u32 = 0x0802;
@@ -267,6 +270,7 @@ pub const GUEST_TR_AR_BYTES: u32 = 0x4822;
 pub const GUEST_INTERRUPTIBILITY_INFO: u32 = 0x4824;
 pub const GUEST_ACTIVITY_STATE: u32 = 0x4826;
 pub const GUEST_SYSENTER_CS: u32 = 0x482A;
+pub const VMX_PREEMPTION_TIMER_VALUE: u32 = 0x482E;
 
 // 32-bit Host State Fields
 pub const HOST_IA32_SYSENTER_CS: u32 = 0x4C00;
@@ -366,6 +370,7 @@ pub const SEC_PAUSE_LOOP_EXITING: u32 = 1 << 10;
 pub const SEC_RDRAND_EXITING: u32 = 1 << 11;
 pub const SEC_ENABLE_INVPCID: u32 = 1 << 12;
 pub const SEC_ENABLE_VMFUNC: u32 = 1 << 13;
+pub const SEC_VMCS_SHADOWING: u32 = 1 << 14;
 
 // VM-exit controls
 pub const EXIT_SAVE_DEBUG_CONTROLS: u32 = 1 << 2;

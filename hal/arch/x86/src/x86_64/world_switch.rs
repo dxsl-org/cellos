@@ -17,12 +17,21 @@
 //!   `#VMEXIT` clears IF in hardware, so no host handler ever runs inside the
 //!   fence — see the inline comment at the `sti`).
 //!
-//! - **XCR0 / PKRU** (both backends) and, on VMX, **CR8 (TPR)**,
-//!   **IA32_KERNEL_GS_BASE** and the **SYSCALL MSRs (STAR/LSTAR/CSTAR/SFMASK)**
-//!   — no exit reloads them, so the Rust wrappers [`svm_vmrun`] / [`vmx_vmrun`]
-//!   snapshot the host values before entry and restore them right after the
-//!   exit (see `host_ext_state`). SVM's KernelGSBase and SYSCALL MSRs are
-//!   already covered by the VMSAVE/VMLOAD pair.
+//! - **PKRU** (both backends) and, on VMX, **CR8 (TPR)** — no exit reloads
+//!   them, so the Rust wrappers [`svm_vmrun`] / [`vmx_vmrun`] snapshot the
+//!   host values before entry and restore them right after the exit (see
+//!   `host_ext_state`). **XCR0** is never written by a guest (`XSETBV` is
+//!   intercepted); a VMX vCPU sets its guest's for a whole run.
+//! - On VMX, **IA32_KERNEL_GS_BASE** and the **SYSCALL MSRs
+//!   (STAR/LSTAR/CSTAR/SFMASK)** — no exit reloads these either. They are
+//!   switched once around a whole run of entries
+//!   ([`VmxGuestRegs::load_msrs`] / [`VmxGuestRegs::unload_msrs`]). SVM's are
+//!   covered by the VMSAVE/VMLOAD pair.
+//! - **x87/SSE/AVX registers** — SVM switches the guest's x87/SSE image around
+//!   every entry ([`svm_vmrun`]); VMX switches x87/SSE and the guest's AVX
+//!   state once per run, under the guest's XCR0 ([`GuestXState`], loaded and
+//!   saved by the VMX vCPU): the kernel between two entries uses none of them,
+//!   and an interrupt taken there saves and restores x87/SSE itself.
 //!
 //! # gpr[] index = x86 register number
 //! 0=RAX 1=RCX 2=RDX 3=RBX 4=RSP 5=RBP 6=RSI 7=RDI 8..15=R8..R15.
@@ -32,8 +41,9 @@ use core::arch::global_asm;
 
 mod guest_fpu;
 mod host_ext_state;
-pub use guest_fpu::GuestFpu;
+pub use guest_fpu::{GuestFpu, GuestXState};
 use host_ext_state::HostExtState;
+pub(crate) use host_ext_state::{xgetbv0, xsetbv0};
 
 use super::msr;
 
@@ -92,58 +102,127 @@ pub struct VmxGuestRegs {
     pub pkru: u32,
     /// The guest's `swapgs` partner; without the swap-back the VMM cell would
     /// resume with a guest-chosen user GS base.
-    pub kernel_gs_base: u64,
+    kernel_gs_base: u64,
     /// Guest STAR/LSTAR/CSTAR/SFMASK, indexed by [`SyscallMsr`]. VMX switches
     /// none of them, and the guest writes them only through emulated `WRMSR`
-    /// (no MSR bitmap), so they are loaded before entry and never read back.
+    /// (no MSR bitmap), so they are never read back from the registers.
+    syscall: [u64; 4],
+    /// x87, SSE and AVX state, loaded before a run's first entry and saved
+    /// after its last exit (by the VMX vCPU, under the guest's XCR0).
+    pub xstate: GuestXState,
+}
+
+/// The host's values of the MSRs [`VmxGuestRegs::load_msrs`] replaced.
+pub struct HostMsrs {
+    kernel_gs_base: u64,
+    /// STAR/LSTAR/CSTAR/SFMASK. A CPU's values do not change after it is
+    /// brought up, so a caller that stays on one CPU may keep and pass them
+    /// back instead of having them read again.
     pub syscall: [u64; 4],
-    /// x87/SSE image, loaded before entry and saved at exit.
-    pub fpu: GuestFpu,
+}
+
+impl VmxGuestRegs {
+    /// Put the guest's KERNEL_GS_BASE and SYSCALL MSRs into the registers and
+    /// return the host's. `host_syscall` is the host's SYSCALL MSRs when the
+    /// caller knows them for this CPU.
+    ///
+    /// No VM exit reloads these MSRs, so they are switched by hand; and they
+    /// are switched once for a whole run of entries, not around each one,
+    /// because every read or write of a SYSCALL MSR traps when the kernel
+    /// itself runs under a hypervisor.
+    ///
+    /// # Safety
+    /// IF=0 and no return to user mode until [`Self::unload_msrs`]: a host
+    /// `syscall` in between would enter the guest's LSTAR, and an interrupt
+    /// return to user mode would `swapgs` to the guest's GS base.
+    pub unsafe fn load_msrs(&self, host_syscall: Option<[u64; 4]>) -> HostMsrs {
+        let host = HostMsrs {
+            kernel_gs_base: msr::read(MSR_KERNEL_GS_BASE),
+            syscall: host_syscall.unwrap_or_else(|| SYSCALL_MSRS.map(|index| msr::read(index))),
+        };
+        if self.kernel_gs_base != host.kernel_gs_base {
+            msr::write(MSR_KERNEL_GS_BASE, self.kernel_gs_base);
+        }
+        for (slot, &index) in SYSCALL_MSRS.iter().enumerate() {
+            if self.syscall[slot] != host.syscall[slot] {
+                msr::write(index, self.syscall[slot]);
+            }
+        }
+        host
+    }
+
+    /// Take the guest's KERNEL_GS_BASE back out of the register (the guest's
+    /// `swapgs` changes it without an exit) and restore the host's MSRs.
+    ///
+    /// # Safety
+    /// The MSRs are loaded ([`Self::load_msrs`] returned `host`), IF=0.
+    pub unsafe fn unload_msrs(&mut self, host: HostMsrs) {
+        for (slot, &index) in SYSCALL_MSRS.iter().enumerate() {
+            if self.syscall[slot] != host.syscall[slot] {
+                msr::write(index, host.syscall[slot]);
+            }
+        }
+        self.kernel_gs_base = msr::read(MSR_KERNEL_GS_BASE);
+        if self.kernel_gs_base != host.kernel_gs_base {
+            msr::write(MSR_KERNEL_GS_BASE, host.kernel_gs_base);
+        }
+    }
+
+    /// The guest's KERNEL_GS_BASE while its MSRs are loaded: the register.
+    ///
+    /// # Safety
+    /// Between [`Self::load_msrs`] and [`Self::unload_msrs`].
+    pub unsafe fn loaded_kernel_gs_base(&self) -> u64 {
+        msr::read(MSR_KERNEL_GS_BASE)
+    }
+
+    /// The guest's `WRMSR` to KERNEL_GS_BASE while its MSRs are loaded.
+    ///
+    /// # Safety
+    /// Between [`Self::load_msrs`] and [`Self::unload_msrs`]; `value` is a
+    /// canonical address (anything else faults the host here).
+    pub unsafe fn set_loaded_kernel_gs_base(&mut self, value: u64) {
+        self.kernel_gs_base = value;
+        msr::write(MSR_KERNEL_GS_BASE, value);
+    }
+
+    pub fn syscall_msr(&self, which: SyscallMsr) -> u64 {
+        self.syscall[which as usize]
+    }
+
+    /// The guest's `WRMSR` to a SYSCALL MSR while its MSRs are loaded.
+    ///
+    /// # Safety
+    /// Between [`Self::load_msrs`] and [`Self::unload_msrs`]; `value` is one
+    /// the register accepts (a canonical LSTAR/CSTAR, SFMASK below 2^32).
+    pub unsafe fn set_loaded_syscall_msr(&mut self, which: SyscallMsr, value: u64) {
+        self.syscall[which as usize] = value;
+        msr::write(SYSCALL_MSRS[which as usize], value);
+    }
 }
 
 /// Enter the VMX guest via `vmlaunch` (if `launched == 0`) or `vmresume`.
 ///
-/// Returns 0 on VM exit, 1 on VMfailInvalid, 2 on VMfailValid. The host's
-/// PKRU, XCR0, KERNEL_GS_BASE, SYSCALL MSRs and CR8 are identical before and
-/// after the call (its x87/SSE registers are not: the syscall path restores
-/// them); `guest` carries the guest's PKRU/KERNEL_GS_BASE/FPU across exits. CR8 is restored only as a backstop: the VMCS sets CR8-load/store
-/// exiting, so the guest never reaches the physical TPR.
+/// Returns 0 on VM exit, 1 on VMfailInvalid, 2 on VMfailValid. PKRU, XCR0 and
+/// CR8 are identical before and after the call (XCR0 because the guest cannot
+/// write it); `guest` carries the guest's
+/// PKRU across exits. The x87/SSE/AVX registers are the guest's on entry and
+/// on exit: the caller switches them once per run ([`GuestXState`]). CR8 is
+/// restored only as a backstop: the VMCS sets CR8-load/store exiting, so the
+/// guest never reaches the physical TPR.
 ///
 /// # Safety
 /// VMX root operation, this vCPU's VMCS current and fully initialised
-/// (host-state fields describing the *current* CPU), `gpr_ptr` a live
-/// `[u64; 16]`, and IF=0 for the whole call: between the SYSCALL-MSR load and
-/// the restore, a host `syscall` would enter the guest's LSTAR.
+/// (host-state fields describing the *current* CPU), the guest's MSRs and
+/// extended state loaded ([`VmxGuestRegs::load_msrs`], [`GuestXState::load`]),
+/// `gpr_ptr` a live `[u64; 16]`, and IF=0 for the whole call.
 #[inline]
 pub unsafe fn vmx_vmrun(gpr_ptr: *mut u64, launched: u64, guest: &mut VmxGuestRegs) -> u32 {
     let host_tpr: u64;
     core::arch::asm!("mov {}, cr8", out(reg) host_tpr, options(nomem, nostack, preserves_flags));
-    let host_kgs = msr::read(MSR_KERNEL_GS_BASE);
-    if guest.kernel_gs_base != host_kgs {
-        msr::write(MSR_KERNEL_GS_BASE, guest.kernel_gs_base);
-    }
-    let mut host_syscall = [0u64; 4];
-    for (slot, &index) in SYSCALL_MSRS.iter().enumerate() {
-        host_syscall[slot] = msr::read(index);
-        if guest.syscall[slot] != host_syscall[slot] {
-            msr::write(index, guest.syscall[slot]);
-        }
-    }
     let host = HostExtState::enter(guest.pkru);
-    guest.fpu.load();
     let status = vmx_world_switch(gpr_ptr, launched);
-    guest.fpu.save();
     host.exit(&mut guest.pkru);
-    for (slot, &index) in SYSCALL_MSRS.iter().enumerate() {
-        if guest.syscall[slot] != host_syscall[slot] {
-            msr::write(index, host_syscall[slot]);
-        }
-    }
-    let kgs = msr::read(MSR_KERNEL_GS_BASE);
-    guest.kernel_gs_base = kgs;
-    if kgs != host_kgs {
-        msr::write(MSR_KERNEL_GS_BASE, host_kgs);
-    }
     let tpr: u64;
     core::arch::asm!("mov {}, cr8", out(reg) tpr, options(nomem, nostack, preserves_flags));
     if tpr != host_tpr {

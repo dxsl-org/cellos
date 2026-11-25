@@ -10,6 +10,7 @@ use hal_hypervisor::ViVmExit;
 
 use super::guest_cpuid;
 use super::guest_mem::GuestRam;
+use super::pending_irqs::PendingIrqs;
 use super::vmcb::{
     VmcbView, EFER_SVME, OFF_CR0, OFF_CR3, OFF_CR4, OFF_EVENTINJ, OFF_EXITCODE, OFF_EXITINFO1,
     OFF_EXITINFO2, OFF_INT_SHADOW, OFF_NRIP, OFF_RAX, OFF_RFLAGS, OFF_RIP, VMEXIT_CLGI,
@@ -72,6 +73,8 @@ pub struct SvmVcpu {
     guest_pkru: u32,
     /// Guest x87/SSE image, loaded and saved around every VMRUN.
     guest_fpu: GuestFpu,
+    /// External interrupts raised and not yet taken ([`Self::raise_irq`]).
+    pending: PendingIrqs,
 }
 
 // SAFETY: single-CPU kernel context in the current TCG bring-up (mirror
@@ -117,6 +120,7 @@ impl SvmVcpu {
             pause_backlog: 0,
             guest_pkru: 0,
             guest_fpu: GuestFpu::default(),
+            pending: PendingIrqs::default(),
         }
     }
 
@@ -206,19 +210,28 @@ impl SvmVcpu {
         self.vmcb.w64(OFF_EVENTINJ, EVENTINJ_VALID | vector as u64);
     }
 
-    /// [`Self::inject_ext_irq`], but dropped when the guest cannot take a
+    /// [`Self::inject_ext_irq`], but refused when the guest cannot take a
     /// maskable interrupt right now (IF=0 or interrupt shadow). This is the
     /// safe form for the cell-driven tick path: a Preempted exit can interrupt
     /// the guest anywhere — including IRQ-off critical sections and pre-IDT
     /// early boot, where a forced injection would corrupt or triple-fault the
-    /// guest. A dropped tick is delivered by a later exit instead.
-    pub fn inject_ext_irq_gated(&mut self, vector: u8) -> bool {
+    /// guest.
+    fn inject_ext_irq_gated(&mut self, vector: u8) -> bool {
         if !self.irq_window_open() {
             return false;
         }
         self.inject_ext_irq(vector);
         true
     }
+
+    /// Raise external interrupt `vector`: it waits until a [`Self::run`]
+    /// starts with the guest able to take it. This backend asks for no
+    /// interrupt-window exit, so that is the next exit boundary where the
+    /// guest has interrupts enabled.
+    pub fn raise_irq(&mut self, vector: u8) {
+        self.pending.raise(vector);
+    }
+
     fn fault_instruction(&self) -> Option<([u8; 15], usize)> {
         let assisted_len = self.vmcb.r8(OFF_INSN_LEN) as usize;
         if (1..=15).contains(&assisted_len) {
@@ -245,6 +258,11 @@ impl SvmVcpu {
     /// SVM root operation must be active and interrupts masked (IF=0) — see
     /// [`svm_vmrun`]'s contract (the VMRUN→VMLOAD `gs:` window).
     pub unsafe fn run(&mut self) -> ViVmExit {
+        if let Some(vector) = self.pending.lowest_above(0) {
+            if self.inject_ext_irq_gated(vector) {
+                self.pending.clear(vector);
+            }
+        }
         let mut internal = 0u32;
         loop {
             // Sync caller-managed RAX/RSP into the VMCB before entry.

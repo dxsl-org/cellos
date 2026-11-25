@@ -11,8 +11,11 @@
 extern crate alloc;
 
 use alloc::collections::BTreeMap;
+use alloc::sync::Arc;
 use alloc::vec::Vec;
+use core::sync::atomic::{AtomicU64, Ordering};
 
+use super::vcpu_slot::{deliver_ipi, kick, VcpuSlot, Vcpus};
 use crate::arch::memory::ept::{EptMapError, NestedFormat, NestedPageTable};
 use crate::hypervisor::registry::{next_vm_id, VmCreateError, VmKey};
 use crate::memory::cell_quota::{Account, Charge, Reservation};
@@ -20,9 +23,10 @@ use crate::memory::frame::phys_to_virt;
 use crate::memory::frame_run::{PrivateRun, RunKind};
 use crate::memory::paging::PAGE_SIZE;
 use crate::memory::tag_pool::{TagLease, TagPool, TagRefusal};
+use crate::sched::smp::MAX_HARTS;
 use crate::sync::Spinlock;
 use hal::x86_64::svm_vcpu::SvmVcpu;
-use hal::x86_64::vmx_vcpu::VmxVcpu;
+use hal::x86_64::vmx_vcpu::{RunContext, VmxVcpu};
 use hal::ViVmExit as HalVmExit;
 use types::{ViError, ViResult};
 
@@ -81,7 +85,10 @@ fn vm_structure(pages: usize, budget: &mut Reservation) -> ViResult<PrivateRun> 
     PrivateRun::allocate(pages, charge, RunKind::VmStructure).ok_or(ViError::OutOfMemory)
 }
 
-enum X86Vcpu {
+// reason: one value per vCPU sits in a `Vec`; a box would put a pointer chase
+// on every run to save some hundred bytes on the backend a machine does not use.
+#[allow(clippy::large_enum_variant)]
+pub(super) enum X86Vcpu {
     Svm(SvmVcpu),
     Vmx(VmxVcpu),
 }
@@ -101,17 +108,19 @@ impl X86Vcpu {
         }
     }
 
-    unsafe fn run(&mut self) -> HalVmExit {
+    /// Raise an external interrupt: it waits until the guest can take it.
+    fn raise_irq(&mut self, vector: u8) {
         match self {
-            Self::Svm(v) => v.run(),
-            Self::Vmx(v) => v.run().unwrap_or(HalVmExit::Shutdown),
+            Self::Svm(v) => v.raise_irq(vector),
+            Self::Vmx(v) => v.raise_irq(vector),
         }
     }
 
-    fn inject_ext_irq_gated(&mut self, vector: u8) -> bool {
+    /// What the vCPU has cost; the SVM backend keeps no such record.
+    fn stats(&self) -> Option<hal::x86_64::vmx_vcpu::VcpuStats> {
         match self {
-            Self::Svm(v) => v.inject_ext_irq_gated(vector),
-            Self::Vmx(v) => v.inject_ext_irq_gated(vector),
+            Self::Svm(_) => None,
+            Self::Vmx(v) => Some(v.stats()),
         }
     }
 
@@ -182,8 +191,8 @@ static SVM_ASIDS: TagPool =
 /// SVM vCPUs one cell incarnation may create (census §8.5).
 pub(crate) const SVM_ASIDS_PER_OWNER: u32 = 4;
 
-/// One VM. Dropped only after it left [`VM_REGISTRY`], so no vCPU can enter
-/// it: `run_vcpu_hal` holds the registry across every guest entry. Each field
+/// One VM. Dropped only after it left [`VM_REGISTRY`] and its owner's
+/// members quiesced (`reap_vms_for`), so no vCPU is in a run. Each field
 /// frees its own frames as it drops — the NPT/EPT its tree and guest RAM
 /// (after the teardown INVEPT), then the xAPIC page, then each vCPU's control
 /// structures (a VMCS after its VMCLEAR), after the vCPUs that point at them.
@@ -196,8 +205,51 @@ struct SvmVm {
     /// it on HLT. Not tracked by the NPT, which owns only its own tree + guest
     /// RAM.
     apic_frame: PrivateRun,
-    vcpus: Vec<X86Vcpu>,
+    /// The vCPUs, by index (vCPU id - 1, the APIC ID). A runner takes a
+    /// reference and releases the registry before it enters the guest;
+    /// `create_vcpu` replaces the slice, so a run in flight keeps the one it
+    /// took.
+    vcpus: Vcpus,
     vcpu_frames: Vec<VcpuFrames>,
+}
+
+impl SvmVm {
+    /// One line per VM (its nested-table pages) and one per vCPU that ran
+    /// (VMX only): where its time went and why it stopped. Parsed by the bench
+    /// lane (`scripts/tier3_chrome_bench.py`).
+    fn log_stats(&self, vm_id: usize) {
+        use hal::x86_64::vmx_vcpu::ExitClass::*;
+        log::info!(
+            "[hv-x86] vm {} nested-table pages: {} for {} MiB of guest RAM",
+            vm_id,
+            self.npt.table_pages(),
+            (self.guest_pages * PAGE_SIZE) >> 20
+        );
+        for (index, slot) in self.vcpus.iter().enumerate() {
+            let Some(stats) = slot.vcpu.lock().stats().filter(|stats| stats.runs != 0) else {
+                continue;
+            };
+            log::info!(
+                "[hv-x86] vm {} vcpu {} stats: runs={} run_ms={} guest_ms={} away_ms={} preempted_away_ms={} msr={} cpuid={} cr={} hlt={} host-irq={} deadline={} io={} ept={} other={}",
+                vm_id,
+                index + 1,
+                stats.runs,
+                stats.run_ns / 1_000_000,
+                stats.guest_ns / 1_000_000,
+                stats.away_ns / 1_000_000,
+                stats.preempted_away_ns / 1_000_000,
+                stats.exits(Msr),
+                stats.exits(Cpuid),
+                stats.exits(Cr),
+                stats.exits(Hlt),
+                stats.exits(HostInterrupt),
+                stats.exits(Deadline),
+                stats.exits(Io),
+                stats.exits(Ept),
+                stats.exits(Other)
+            );
+        }
+    }
 }
 
 static VM_REGISTRY: Spinlock<Option<BTreeMap<VmKey, SvmVm>>> =
@@ -252,6 +304,12 @@ pub(crate) fn create_vm(owner: Charge, guest_pages: usize) -> Result<usize, VmCr
         log::error!("[hv-x86] create_vm: NestedPageTable::new OOM");
         ViError::OutOfMemory
     })?;
+    // 2 MiB leaves on EPT where the CPU walks them. NPT stays at 4 KiB: its
+    // lanes run under TCG, and no measurement asks for the change there.
+    // SAFETY: an EPT table is made only on the VMX backend, after VMXON.
+    if format == NestedFormat::Ept && unsafe { hal::x86_64::invept::large_pages_supported() } {
+        npt.allow_large_leaves();
+    }
     let guest_pa = npt.carve_guest_ram(guest_pages).ok_or_else(|| {
         log::error!(
             "[hv-x86] create_vm: carve_guest_ram({} pages = {} MiB) — no contiguous run",
@@ -265,10 +323,13 @@ pub(crate) fn create_vm(owner: Charge, guest_pages: usize) -> Result<usize, VmCr
         ViError::OutOfMemory
     })?;
 
-    // RAM-backed xAPIC window: a kernel frame mapped at 0xFEE00000 so guest
-    // LAPIC MMIO hits memory (QEMU TCG has no DecodeAssist → per-access
+    // RAM-backed xAPIC window (SVM): a kernel frame mapped at 0xFEE00000 so
+    // guest LAPIC MMIO hits memory (QEMU TCG has no DecodeAssist → per-access
     // emulation is impossible). Zeroed, then ID(0x20)=0 / VERSION(0x30)=0x50014
     // pre-populated; the timer is polled kernel-side on HLT.
+    // On VMX the window stays unmapped: every access exits to the local APIC
+    // the vCPU models (`hal::x86_64::vmx_vcpu`). The frame is still taken, so
+    // a VM costs its owner the same on both backends.
     let apic_frame = vm_structure(1, &mut apic_budget).inspect_err(|_| {
         log::error!("[hv-x86] create_vm: xAPIC frame OOM");
     })?;
@@ -280,9 +341,10 @@ pub(crate) fn create_vm(owner: Charge, guest_pages: usize) -> Result<usize, VmCr
         (va.add(0x20) as *mut u32).write_volatile(0); // APIC ID = 0
         (va.add(0x30) as *mut u32).write_volatile(0x0005_0014); // version 0x14, max-LVT 5
     }
-    if npt
-        .map_device_frame(APIC_GPA, apic_frame.base() as u64, true)
-        .is_err()
+    if format == NestedFormat::Npt
+        && npt
+            .map_device_frame(APIC_GPA, apic_frame.base() as u64, true)
+            .is_err()
     {
         // No leaf was written; the frame and the table go back on return.
         log::error!("[hv-x86] create_vm: xAPIC NPT map OOM");
@@ -307,28 +369,38 @@ pub(crate) fn create_vm(owner: Charge, guest_pages: usize) -> Result<usize, VmCr
             guest_pa,
             guest_pages,
             apic_frame,
-            vcpus: Vec::new(),
+            vcpus: Arc::from([]),
             vcpu_frames: Vec::new(),
         },
     );
     Ok(id)
 }
 
-/// Create a vCPU entering at GPA `entry_pc`; returns the 1-based `vcpu_id`.
+/// Create a vCPU; returns the 1-based `vcpu_id`.
+///
+/// VMX: a VM's first vCPU enters at GPA `entry_pc` (PVH); each later one is an
+/// application processor with APIC ID `vcpu_id - 1`, waiting for INIT and a
+/// start-up IPI from another vCPU (`entry_pc` unused), up to one per host CPU
+/// the kernel supports. SVM: one vCPU per VM; a second is `NotSupported`.
 ///
 /// The vCPU's control structures are the owner's guest charge, taken after
 /// the VM is found and before the ASID or any frame: a refusal
 /// (`OutOfMemory`) spends neither.
 pub(crate) fn create_vcpu(owner: Charge, vm_id: usize, entry_pc: u64) -> ViResult<usize> {
     let key = VmKey::new(owner, vm_id);
-    // Refuse an unknown VM before charging or consuming a non-reusable ASID.
-    VM_REGISTRY
+    let vmx = crate::arch::boot::cpu_features::x86_virt_kind()
+        == Some(crate::arch::boot::cpu_features::X86Virt::Vmx);
+    // Refuse an unknown VM, or one with all the vCPUs it may have, before
+    // charging or consuming a non-reusable ASID.
+    let existing = VM_REGISTRY
         .lock()
         .as_ref()
         .and_then(|map| map.get(&key))
+        .map(|vm| vm.vcpus.len())
         .ok_or(ViError::NotFound)?;
-    let vmx = crate::arch::boot::cpu_features::x86_virt_kind()
-        == Some(crate::arch::boot::cpu_features::X86Virt::Vmx);
+    if existing >= if vmx { MAX_HARTS } else { 1 } {
+        return Err(ViError::NotSupported);
+    }
     let pages = if vmx { VMX_VCPU_PAGES } else { SVM_VCPU_PAGES };
     let mut budget = Reservation::take(owner, Account::Guest, pages * PAGE_SIZE).map_err(|_| {
         log::warn!(
@@ -346,6 +418,9 @@ pub(crate) fn create_vcpu(owner: Charge, vm_id: usize, entry_pc: u64) -> ViResul
         let map = guard.as_mut().ok_or(ViError::NotFound)?;
         let vm = map.get_mut(&key).ok_or(ViError::NotFound)?;
         let vcpu_id = vm.vcpus.len() + 1;
+        if vcpu_id > MAX_HARTS {
+            return Err(ViError::NotSupported);
+        }
         let host_cr3 = unsafe { hal::x86_64::paging::read_cr3() & !0xFFF };
         let vmcs_pa = vmcs.0.base();
         let mut vcpu = match unsafe {
@@ -362,11 +437,26 @@ pub(crate) fn create_vcpu(owner: Charge, vm_id: usize, entry_pc: u64) -> ViResul
                 return Err(e);
             }
         };
-        if let Err(e) = unsafe { vcpu.init_pvh(entry_pc, 0, vm.npt.eptp(), host_cr3) } {
-            log::error!("[vmx] init_pvh failed: {:?}", e);
+        // The vCPU's 1-based id is its VPID: nonzero, and distinct under this
+        // VM's EPT root, which is all the tag has to be. Its APIC ID is its
+        // index.
+        let vpid = u16::try_from(vcpu_id).map_err(|_| ViError::InvalidInput)?;
+        let eptp = vm.npt.eptp();
+        let initialized = if vcpu_id == 1 {
+            unsafe { vcpu.init_pvh(entry_pc, 0, eptp, vpid, host_cr3) }
+        } else {
+            unsafe { vcpu.init_ap(eptp, vpid, (vcpu_id - 1) as u8, host_cr3) }
+        };
+        if let Err(e) = initialized {
+            log::error!("[vmx] vCPU {} setup failed: {:?}", vcpu_id, e);
             return Err(e);
         }
-        vm.vcpus.push(X86Vcpu::Vmx(vcpu));
+        vm.vcpus = vm
+            .vcpus
+            .iter()
+            .cloned()
+            .chain([Arc::new(VcpuSlot::new(X86Vcpu::Vmx(vcpu)))])
+            .collect();
         vm.vcpu_frames.push(VcpuFrames::Vmx { vmcs });
         return Ok(vcpu_id);
     }
@@ -459,7 +549,7 @@ pub(crate) fn create_vcpu(owner: Charge, vm_id: usize, entry_pc: u64) -> ViResul
             vm.guest_pages * PAGE_SIZE,
         )
     };
-    vm.vcpus.push(X86Vcpu::Svm(vcpu));
+    vm.vcpus = Arc::from([Arc::new(VcpuSlot::new(X86Vcpu::Svm(vcpu)))]);
     vm.vcpu_frames.push(VcpuFrames::Svm {
         vmcb: vmcb_run,
         host: host_run,
@@ -508,35 +598,108 @@ pub(crate) fn map_guest_memory(
         })
 }
 
-/// Make this CPU's EPT translations for `eptp` current before VM entry.
+/// Per CPU: the [`NestedPageTable::epoch`] the CPU last ran `INVEPT` for, 0
+/// before any. Slot N is read and written by CPU N only, interrupts masked.
+static EPT_VALIDATED: [AtomicU64; MAX_HARTS] = [const { AtomicU64::new(0) }; MAX_HARTS];
+
+/// Make what this CPU has cached under `eptp` safe for `vcpu` to run on. The
+/// caller keeps interrupts masked from here to the VM entry.
 ///
-/// `INVEPT` is CPU-local and the VMM task may migrate between runs, so an
-/// unmap or a freed-and-reused root invalidated elsewhere could still be
-/// cached here. Invalidating on the entering CPU, with interrupts masked up to
-/// the entry, closes that for every CPU (the SVM path flushes its ASID on
-/// every VMRUN for the same reason).
-fn invalidate_ept_on_this_cpu(eptp: u64) -> ViResult<()> {
+/// EPT-derived translations are tagged by the root (and, with VPIDs, by the
+/// vCPU) and survive VM exits; `INVEPT` acts on the executing CPU only, and
+/// the VMM task may be on another CPU at every run. This CPU can hold a stale
+/// translation in two ways, and invalidates in both:
+/// - the table changed, or its root frame belonged to a table since freed,
+///   after this CPU last invalidated: the table's epoch is not the one
+///   recorded for this CPU;
+/// - the vCPU ran elsewhere since it last ran here, where the guest may have
+///   remapped a page and flushed only that CPU.
+///
+/// Otherwise everything cached here was made under the table as it is now,
+/// since this vCPU last arrived, and the `INVEPT` is skipped: it would empty
+/// the guest's translations on every run, and it traps when CellOS itself runs
+/// under a hypervisor. (The SVM path flushes its ASID on every VMRUN instead.)
+fn validate_ept_on_this_cpu(vcpu: &mut VmxVcpu, eptp: u64, epoch: u64) -> ViResult<()> {
     if !crate::cpu_features::has_x86_virt() {
         return Err(ViError::NotSupported);
     }
-    // SAFETY: `has_x86_virt` means every online CPU completed VMXON (an AP that
-    // fails it never comes online), and only the VMX backend builds VMX vCPUs.
-    unsafe { hal::x86_64::invept::invalidate_context(eptp) }
+    let cpu = crate::sched::hart_local::current_hart_id();
+    let validated = EPT_VALIDATED.get(cpu).ok_or(ViError::NotSupported)?;
+    if validated.load(Ordering::Relaxed) != epoch || vcpu.last_cpu() != Some(cpu) {
+        // SAFETY: `has_x86_virt` means every online CPU completed VMXON (an AP
+        // that fails it never comes online), and only the VMX backend builds
+        // VMX vCPUs.
+        unsafe { hal::x86_64::invept::invalidate_context(eptp) }?;
+        validated.store(epoch, Ordering::Relaxed);
+    }
+    vcpu.set_last_cpu(cpu);
+    Ok(())
 }
 
-/// World-switch into a vCPU and return the HAL exit. Runs with interrupts
+/// The VM's vCPUs and its nested table's current EPTP and epoch, read under
+/// the registry, which is released on return.
+fn vm_for_run(owner: Charge, vm_id: usize) -> ViResult<(Vcpus, u64, u64)> {
+    let guard = VM_REGISTRY.lock();
+    let vm = guard
+        .as_ref()
+        .and_then(|map| map.get(&VmKey::new(owner, vm_id)))
+        .ok_or(ViError::NotFound)?;
+    Ok((vm.vcpus.clone(), vm.npt.eptp(), vm.npt.epoch()))
+}
+
+/// One vCPU of a VM, by its 1-based id.
+fn slot(owner: Charge, vm_id: usize, vcpu_id: usize) -> ViResult<Arc<VcpuSlot>> {
+    let (vcpus, _, _) = vm_for_run(owner, vm_id)?;
+    vcpus
+        .get(vcpu_id.saturating_sub(1))
+        .cloned()
+        .ok_or(ViError::NotFound)
+}
+
+/// World-switch into a vCPU and return the HAL exit: the guest's own, or
+/// `Preempted` at `deadline_ns` (VMX), when mail asks for a new run (see
+/// `VmxVcpu::run`), or at a host interrupt (SVM, and VMX without a deadline
+/// or when the caller runs with interrupts masked).
+///
+/// A host interrupt that takes a VMX guest off the CPU before its deadline
+/// does not end the call: [`run_once`] has released the vCPU's lock, which
+/// restores the caller's interrupt state, so the host takes the interrupt
+/// there (and may switch tasks) before the guest is entered again. Mail that
+/// came with a kick from another vCPU or thread so reaches the guest without
+/// a trip to the VMM and its scheduler queue.
+pub(crate) fn run_vcpu_hal(
+    owner: Charge,
+    vm_id: usize,
+    vcpu_id: usize,
+    deadline_ns: Option<u64>,
+) -> ViResult<HalVmExit> {
+    loop {
+        let (exit, vmx) = run_once(owner, vm_id, vcpu_id, deadline_ns)?;
+        let early = vmx
+            && matches!(exit, HalVmExit::Preempted)
+            && interrupts_enabled()
+            && deadline_ns.is_some_and(|deadline| hal::clock::now_ns() < deadline);
+        if !early {
+            return Ok(exit);
+        }
+    }
+}
+
+/// One entry of [`run_vcpu_hal`], and whether the vCPU is a VMX one. The
+/// registry is released first; the vCPU's own lock is held for the run, so
+/// other vCPUs of the VM run on other CPUs meanwhile. Runs with interrupts
 /// masked (the `svm_vmrun` GS.base window requires IF=0).
-pub(crate) fn run_vcpu_hal(owner: Charge, vm_id: usize, vcpu_id: usize) -> ViResult<HalVmExit> {
-    let mut guard = VM_REGISTRY.lock();
-    let map = guard.as_mut().ok_or(ViError::NotFound)?;
-    let vm = map
-        .get_mut(&VmKey::new(owner, vm_id))
-        .ok_or(ViError::NotFound)?;
-    let eptp = vm.npt.eptp();
-    let vcpu = vm
-        .vcpus
-        .get_mut(vcpu_id.saturating_sub(1))
-        .ok_or(ViError::NotFound)?;
+fn run_once(
+    owner: Charge,
+    vm_id: usize,
+    vcpu_id: usize,
+    deadline_ns: Option<u64>,
+) -> ViResult<(HalVmExit, bool)> {
+    let (vcpus, eptp, epoch) = vm_for_run(owner, vm_id)?;
+    let index = vcpu_id.saturating_sub(1);
+    let slot = vcpus.get(index).ok_or(ViError::NotFound)?;
+    let mut guard = slot.vcpu.lock();
+    let vcpu = &mut *guard;
 
     let if_was_set = interrupts_enabled();
     // SAFETY: cli masks IRQs for the whole VMRUN→VMLOAD window (svm_vmrun
@@ -544,8 +707,8 @@ pub(crate) fn run_vcpu_hal(owner: Charge, vm_id: usize, vcpu_id: usize) -> ViRes
     unsafe {
         core::arch::asm!("cli", options(nomem, nostack));
     }
-    if matches!(vcpu, X86Vcpu::Vmx(_)) {
-        if let Err(error) = invalidate_ept_on_this_cpu(eptp) {
+    if let X86Vcpu::Vmx(vmx) = vcpu {
+        if let Err(error) = validate_ept_on_this_cpu(vmx, eptp, epoch) {
             if if_was_set {
                 // SAFETY: restore the caller's interrupt-enable state.
                 unsafe {
@@ -556,8 +719,26 @@ pub(crate) fn run_vcpu_hal(owner: Charge, vm_id: usize, vcpu_id: usize) -> ViRes
             return Err(error);
         }
     }
-    // SAFETY: SVM root operation is active (P01 latched has_x86_virt); IF=0.
-    let exit = unsafe { vcpu.run() };
+    let exit = match vcpu {
+        // SAFETY: SVM root operation is active (P01 latched has_x86_virt); IF=0.
+        X86Vcpu::Svm(svm) => unsafe { svm.run() },
+        X86Vcpu::Vmx(vmx) => {
+            // Published before the mailbox is read (`VcpuShared`): a sender
+            // that posts after the read sees this CPU and interrupts it.
+            slot.shared
+                .set_running(Some(crate::sched::hart_local::current_hart_id()));
+            let mut send = |ipi| deliver_ipi(&vcpus, index, ipi);
+            let mut ctx = RunContext {
+                deadline_ns,
+                shared: &slot.shared,
+                vcpus: vcpus.len() as u8,
+                send: &mut send,
+            };
+            let exit = vmx.run(&mut ctx).unwrap_or(HalVmExit::Shutdown);
+            slot.shared.set_running(None);
+            exit
+        }
+    };
     if matches!(exit, HalVmExit::Shutdown) {
         let (rip, rflags, cr0) = vcpu.shutdown_diagnostics();
         log::error!(
@@ -583,7 +764,7 @@ pub(crate) fn run_vcpu_hal(owner: Charge, vm_id: usize, vcpu_id: usize) -> ViRes
             core::arch::asm!("sti", options(nomem, nostack));
         }
     }
-    Ok(exit)
+    Ok((exit, matches!(vcpu, X86Vcpu::Vmx(_))))
 }
 
 /// Copy `src` into guest RAM at GPA `gpa` (GPA base 0). Bounds-checked
@@ -673,15 +854,8 @@ pub(crate) fn vcpu_regs(
     regs: &mut [u64; 32],
     write: bool,
 ) -> ViResult<usize> {
-    let mut guard = VM_REGISTRY.lock();
-    let map = guard.as_mut().ok_or(ViError::NotFound)?;
-    let vm = map
-        .get_mut(&VmKey::new(owner, vm_id))
-        .ok_or(ViError::NotFound)?;
-    let vcpu = vm
-        .vcpus
-        .get_mut(vcpu_id.saturating_sub(1))
-        .ok_or(ViError::NotFound)?;
+    let slot = slot(owner, vm_id, vcpu_id)?;
+    let mut vcpu = slot.vcpu.lock();
     if write {
         vcpu.gpr_mut().copy_from_slice(&regs[..16]);
     } else {
@@ -690,22 +864,25 @@ pub(crate) fn vcpu_regs(
     Ok(0)
 }
 
-/// Queue an external-interrupt `vector` for delivery into the vCPU on its next
-/// `VMRUN` (SVM EVENTINJ). Used for the emulated 8259 IRQ lines (e.g. PIT IRQ0).
-/// Gated on the guest interrupt window: a Preempted exit can catch the guest in
-/// an IRQ-off section (or pre-IDT boot), where a forced EVENTINJ — which skips
-/// the hardware IF check — would corrupt it. A closed window drops the tick.
+/// Raise external interrupt `vector` for the vCPU (the emulated 8259 lines,
+/// e.g. PIT IRQ0). It waits until the guest can take a maskable interrupt: a
+/// forced injection, which skips the hardware IF check, would corrupt a guest
+/// caught in an IRQ-off section or before it has an IDT. A vector raised again
+/// while it waits is one interrupt. Values that are not external-interrupt
+/// vectors (below 16, above 255) raise nothing.
 pub(crate) fn inject_irq(owner: Charge, vm_id: usize, vcpu_id: usize, vector: u32) -> ViResult<()> {
-    let mut guard = VM_REGISTRY.lock();
-    let map = guard.as_mut().ok_or(ViError::NotFound)?;
-    let vm = map
-        .get_mut(&VmKey::new(owner, vm_id))
-        .ok_or(ViError::NotFound)?;
-    let vcpu = vm
-        .vcpus
-        .get_mut(vcpu_id.saturating_sub(1))
-        .ok_or(ViError::NotFound)?;
-    vcpu.inject_ext_irq_gated(vector as u8);
+    let slot = slot(owner, vm_id, vcpu_id)?;
+    let Some(vector) = u8::try_from(vector).ok().filter(|vector| *vector >= 16) else {
+        return Ok(());
+    };
+    if slot.vmx {
+        // The vCPU may be in a run on another CPU, holding its lock: the
+        // mailbox and a kick reach it there.
+        slot.shared.raise_line(vector);
+        kick(&slot.shared);
+    } else {
+        slot.vcpu.lock().raise_irq(vector);
+    }
     Ok(())
 }
 
@@ -713,7 +890,7 @@ pub(crate) fn inject_irq(owner: Charge, vm_id: usize, vcpu_id: usize, vector: u3
 /// structures and guest charge. Called once per incarnation from the
 /// root-retirement funnel, after every member quiesced.
 pub(crate) fn reap_vms_for(owner: Charge) {
-    let dead: Vec<SvmVm> = {
+    let dead: Vec<(VmKey, SvmVm)> = {
         let mut guard = VM_REGISTRY.lock();
         let Some(map) = guard.as_mut() else { return };
         let keys: Vec<VmKey> = map
@@ -721,8 +898,13 @@ pub(crate) fn reap_vms_for(owner: Charge) {
             .filter(|key| key.owned_by(owner))
             .copied()
             .collect();
-        keys.iter().filter_map(|k| map.remove(k)).collect()
+        keys.iter()
+            .filter_map(|k| map.remove(k).map(|vm| (*k, vm)))
+            .collect()
     };
+    for (key, vm) in &dead {
+        vm.log_stats(key.parts().1);
+    }
     drop(dead); // each SvmVm field frees its own frames and refunds their charge
 }
 

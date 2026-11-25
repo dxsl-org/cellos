@@ -59,6 +59,52 @@ pub fn is_root() -> bool {
     cr4 & CR4_VMXE != 0
 }
 
+/// Optional VMX controls the CPU, or the hypervisor under it, allows to be
+/// set (the capability MSRs' allowed-1 halves). None is used unless a vCPU's
+/// setup asks for it; this is what later setup can rely on.
+#[derive(Clone, Copy, Debug)]
+pub struct Offers {
+    pub preemption_timer: bool,
+    pub tpr_shadow: bool,
+    pub msr_bitmaps: bool,
+    pub vpid: bool,
+    pub apic_access: bool,
+    pub apic_registers: bool,
+    pub virtual_interrupts: bool,
+    pub vmcs_shadowing: bool,
+}
+
+/// Read [`Offers`] from this CPU.
+///
+/// # Safety
+/// CPL 0 on a CPU that advertises VMX (the capability MSRs must exist).
+pub unsafe fn offers() -> Offers {
+    use super::vmcs::*;
+    // SAFETY (all reads below): the caller's contract.
+    let (pin_msr, proc_msr) = if unsafe { has_true_ctls() } {
+        (
+            MSR_IA32_VMX_TRUE_PINBASED_CTLS,
+            MSR_IA32_VMX_TRUE_PROCBASED_CTLS,
+        )
+    } else {
+        (MSR_IA32_VMX_PINBASED_CTLS, MSR_IA32_VMX_PROCBASED_CTLS)
+    };
+    let allowed = |bit: u32, msr: u32| unsafe { adjust_vmx_ctrl(bit, msr) } & bit != 0;
+    // The secondary controls' MSR exists only when the primary ones can activate them.
+    let secondary = allowed(PROC_ACTIVATE_SECONDARY_CONTROLS, proc_msr);
+    let second = |bit: u32| secondary && allowed(bit, MSR_IA32_VMX_PROCBASED_CTLS2);
+    Offers {
+        preemption_timer: allowed(PIN_VMX_PREEMPTION_TIMER, pin_msr),
+        tpr_shadow: allowed(PROC_USE_TPR_SHADOW, proc_msr),
+        msr_bitmaps: allowed(PROC_USE_MSR_BITMAPS, proc_msr),
+        vpid: second(SEC_ENABLE_VPID),
+        apic_access: second(SEC_VIRTUALIZE_APIC_ACCESSES),
+        apic_registers: second(SEC_APIC_REGISTER_VIRTUALIZATION),
+        virtual_interrupts: second(SEC_VIRTUAL_INTERRUPT_DELIVERY),
+        vmcs_shadowing: second(SEC_VMCS_SHADOWING),
+    }
+}
+
 /// Enter VMX root operation on the current CPU. Idempotent.
 ///
 /// # Arguments

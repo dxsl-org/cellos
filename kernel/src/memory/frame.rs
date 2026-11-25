@@ -507,43 +507,39 @@ impl FrameAllocator {
         }
     }
 
-    /// Index of the first run of `n` free frames, scanning the whole index space.
-    ///
-    /// Linear: one pass counting the current run, so a request that must span a
-    /// large free tail costs one bitmap read per frame rather than a re-scan from
-    /// every candidate start. Index space is the concatenation of the managed
-    /// ranges, so a run can only sit inside one range — a hole between ranges
-    /// still ends it.
-    pub fn find_free_run(&self, n: usize) -> Option<usize> {
-        if n == 0 || n > self.total_frames {
+    /// Index of the first run of `n` free frames inside one managed range whose
+    /// first frame's address is a multiple of `align_bytes` (a power of two, at
+    /// least a page). Linear: an allocated frame moves the candidate start past
+    /// it, to the next aligned frame, so no frame is read twice. A run never
+    /// crosses from one range into the next: index space concatenates the
+    /// ranges, so consecutive indices on either side of a range boundary are
+    /// not consecutive frames.
+    pub fn find_free_run_aligned(&self, n: usize, align_bytes: usize) -> Option<usize> {
+        let align = align_bytes / PAGE_SIZE;
+        if n == 0 || align == 0 || !align.is_power_of_two() {
             return None;
         }
-        let mut run_start = 0usize;
-        let mut run_len = 0usize;
-        let mut idx = 0usize;
-        while idx < self.total_frames {
-            // When not in a run and on a 64-bit boundary, fast-skip fully allocated blocks
-            if run_len == 0
-                && idx.is_multiple_of(64)
-                && idx + 64 <= self.total_frames
-                && self.bitmap.slice()[idx / 64] == !0
-            {
-                idx += 64;
-                continue;
-            }
-
-            if self.is_frame_allocated(idx) {
-                run_len = 0;
-            } else {
-                if run_len == 0 {
-                    run_start = idx;
-                }
-                run_len += 1;
-                if run_len == n {
-                    return Some(run_start);
+        for range in self.ranges[..self.range_count].iter().flatten() {
+            let first_pfn = range.start / PAGE_SIZE;
+            let end = range.index_base + range.frames;
+            // The first index at or after `index` whose frame is aligned.
+            let aligned_from = |index: usize| {
+                let pfn = first_pfn + (index - range.index_base);
+                index + (pfn.next_multiple_of(align) - pfn)
+            };
+            let mut start = aligned_from(range.index_base);
+            let mut index = start;
+            while index < end && index - start < n {
+                if self.is_frame_allocated(index) {
+                    start = aligned_from(index + 1);
+                    index = start;
+                } else {
+                    index += 1;
                 }
             }
-            idx += 1;
+            if index <= end && index - start == n {
+                return Some(start);
+            }
         }
         None
     }
@@ -1513,34 +1509,36 @@ mod tests {
         assert_eq!(allocator.allocate_contiguous(8), Some(0x20000));
     }
 
-    /// The guest-RAM search takes the first run that fits and never spans a hole
-    /// between two managed ranges.
+    /// The guest-RAM search takes the first run that fits.
     #[test]
-    fn find_free_run_takes_the_first_fitting_run_and_never_spans_a_hole() {
+    fn a_page_aligned_search_takes_the_first_fitting_run() {
         let mut allocator = allocator(32);
         // Used: [0, 8) and [16, 20); free: [8, 16) and [20, 32).
         allocator.mark_range_used(0, 8);
         allocator.mark_range_used(16, 4);
-
-        assert_eq!(allocator.find_free_run(8), Some(8), "first run that fits");
-        assert_eq!(
-            allocator.find_free_run(9),
-            Some(20),
-            "skips the 8-frame run"
-        );
-        assert_eq!(allocator.find_free_run(12), Some(20));
-        assert_eq!(
-            allocator.find_free_run(13),
-            None,
-            "12 + 8 frames, no single run"
-        );
-        assert_eq!(
-            allocator.find_free_run(0),
-            None,
-            "a zero-frame request is not a run"
-        );
+        let run = |n| allocator.find_free_run_aligned(n, PAGE_SIZE);
+        assert_eq!(run(8), Some(8), "first run that fits");
+        assert_eq!(run(9), Some(20), "skips the 8-frame run");
+        assert_eq!(run(12), Some(20));
+        assert_eq!(run(13), None, "12 + 8 frames, no single run");
+        assert_eq!(run(0), None, "a zero-frame request is not a run");
         assert_eq!(allocator.largest_free_run(), 12);
-        assert_eq!(allocator.used_frames(), 12);
+    }
+
+    /// Two ranges with a hole between them: their frames are consecutive in
+    /// index space, but a run across the boundary is not contiguous memory, so
+    /// it must not be handed out as guest RAM (a 2048 MiB guest on a 3 GiB
+    /// machine got one and died in early boot).
+    #[test]
+    fn a_guest_run_never_spans_the_hole_between_ranges() {
+        let mut allocator = multi_range_allocator(&[(0x1000, 8), (0x20000, 8)]);
+        assert_eq!(allocator.find_free_run_aligned(16, PAGE_SIZE), None);
+        assert_eq!(allocator.find_free_run_aligned(9, PAGE_SIZE), None);
+        // Index 4 starts a free tail of 4 frames in the first range and 8 more
+        // in the second: 12 by index, 4 by memory.
+        allocator.mark_range_used(0, 4);
+        assert_eq!(allocator.find_free_run_aligned(5, PAGE_SIZE), Some(8));
+        assert_eq!(allocator.frame_addr(8), 0x20000);
     }
 
     /// A carve marks the run it returns, so the next search cannot hand the same
@@ -1548,12 +1546,39 @@ mod tests {
     #[test]
     fn a_carved_run_is_marked_used_in_the_same_pass() {
         let mut allocator = allocator(32);
-        let start = allocator.find_free_run(20).expect("20 frames fit");
+        let start = allocator
+            .find_free_run_aligned(20, PAGE_SIZE)
+            .expect("20 frames fit");
         assert_eq!(start, 0);
         allocator.mark_range_used(start, 20);
         assert_eq!(allocator.used_frames(), 20);
-        assert_eq!(allocator.find_free_run(20), None, "the run is gone");
+        assert_eq!(
+            allocator.find_free_run_aligned(20, PAGE_SIZE),
+            None,
+            "the run is gone"
+        );
         assert_eq!(allocator.largest_free_run(), 12);
+    }
+
+    /// Guest RAM wants a run that starts on a 2 MiB boundary (here: 8 frames).
+    /// The fixture's first frame is at 4 KiB, so index `i` is frame `i + 1`.
+    #[test]
+    fn an_aligned_run_starts_on_the_boundary_and_skips_used_frames() {
+        const ALIGN: usize = 8 * PAGE_SIZE;
+        let mut allocator = allocator(64);
+        allocator.mark_range_used(10, 1);
+        // Index 7 (frame 8) is the first boundary; its run would cover index 10.
+        assert_eq!(allocator.find_free_run_aligned(3, ALIGN), Some(7));
+        assert_eq!(allocator.find_free_run_aligned(4, ALIGN), Some(15));
+        // From index 15 to the end are 49 frames, and no later boundary has more.
+        assert_eq!(allocator.find_free_run_aligned(49, ALIGN), Some(15));
+        assert_eq!(allocator.find_free_run_aligned(50, ALIGN), None);
+        assert_eq!(
+            allocator.frame_addr(15) % ALIGN,
+            0,
+            "the run's address is aligned"
+        );
+        assert_eq!(allocator.find_free_run_aligned(4, 3 * PAGE_SIZE), None);
     }
 
     fn allocator(total_frames: usize) -> FrameAllocator {
@@ -1866,12 +1891,19 @@ mod tests {
 /// request — so the whole search belongs inside the lock, and the frames are
 /// marked in the same hold. There is no window left in which a candidate run can
 /// be taken by someone else.
+///
+/// The run starts 2 MiB-aligned when the allocator has such a run: the nested
+/// page table can then map it with 2 MiB leaves. Otherwise any run inside one
+/// managed range will do.
 pub fn allocate_guest_ram(n_pages: usize) -> Option<PhysAddr> {
+    const LARGE_LEAF: usize = 2 * 1024 * 1024;
     with(|allocator| {
         if allocator.quarantine_refuses() {
             return None;
         }
-        let start = allocator.find_free_run(n_pages)?;
+        let start = allocator
+            .find_free_run_aligned(n_pages, LARGE_LEAF)
+            .or_else(|| allocator.find_free_run_aligned(n_pages, PAGE_SIZE))?;
         allocator.mark_range_used(start, n_pages);
         Some(allocator.frame_addr(start))
     })

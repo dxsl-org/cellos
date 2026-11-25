@@ -393,9 +393,9 @@ pub const CELLS: &[Cell] = &[
                 ..CapSet::EMPTY
             },
         ))),
-        // The largest profile (Chrome, 1536 MiB guest RAM), its ~3 MiB of
+        // The largest profile (Chrome, 3072 MiB guest RAM), its ~6 MiB of
         // nested tables and its vCPU structures, with headroom (census §6.1).
-        guest_memory: 1544 * MIB,
+        guest_memory: 3080 * MIB,
         ..ROW
     },
     // ── PCIe / device Driver Cells ──────────────────────────────────────────
