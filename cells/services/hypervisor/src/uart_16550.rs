@@ -66,6 +66,9 @@ pub struct Uart16550 {
     /// another host diagnostic cannot splice guest text into its origin.
     tx_line: [u8; TX_LINE_CAP],
     tx_line_len: usize,
+    /// When a boundary first found the guest not writing, since its latest TX
+    /// byte ([`Self::flush_tx_if_quiescent`]).
+    tx_quiet_since_ns: Option<u64>,
 }
 
 impl Uart16550 {
@@ -82,6 +85,7 @@ impl Uart16550 {
             thre_latch: false,
             tx_line: [0; TX_LINE_CAP],
             tx_line_len: 0,
+            tx_quiet_since_ns: None,
         }
     }
 
@@ -109,12 +113,25 @@ impl Uart16550 {
         (self.ier & IER_RDA != 0 && !self.rx.is_empty()) || self.thre_irq_pending()
     }
 
-    /// Publish a partial TX record only after the guest has drained THRE work.
+    /// Publish a partial TX record once the guest has stopped writing, so a
+    /// prompt without a newline reaches the console. Never while a THRE
+    /// interrupt is pending: the driver still has bytes to send.
     ///
-    /// A true HLT with no pending THRE interrupt is the serial driver's
-    /// quiescence boundary for non-newline output such as interactive prompts.
-    pub fn flush_tx_if_quiescent(&mut self) {
-        if self.tx_line_len != 0 && !self.thre_irq_pending() {
+    /// `halted`: the guest executed `HLT`, the serial driver's quiescence
+    /// boundary. Otherwise the guest was taken off the CPU (`Preempted`),
+    /// which can fall between any two bytes of a line, so the line goes out
+    /// only when no byte came for `QUIET_NS` from the first such boundary
+    /// (`now_ns` is the Cell's clock). On VMX a halted guest waits in the guest
+    /// and only the second kind reaches the Cell.
+    pub fn flush_tx_if_quiescent(&mut self, halted: bool, now_ns: u64) {
+        /// Long enough for a slow guest (TCG, a loaded host) between two bytes
+        /// of one line; short enough for a prompt to look immediate.
+        const QUIET_NS: u64 = 100_000_000;
+        if self.tx_line_len == 0 || self.thre_irq_pending() {
+            return;
+        }
+        let since = *self.tx_quiet_since_ns.get_or_insert(now_ns);
+        if halted || now_ns.saturating_sub(since) >= QUIET_NS {
             self.flush_tx_line();
         }
     }
@@ -223,6 +240,7 @@ impl Uart16550 {
             b'?'
         };
         self.tx_line_len += 1;
+        self.tx_quiet_since_ns = None;
     }
 
     fn flush_tx_line(&mut self) {

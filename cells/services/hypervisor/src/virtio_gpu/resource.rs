@@ -6,7 +6,10 @@ use super::command;
 use alloc::{collections::BTreeMap, vec::Vec};
 
 mod control;
+mod cursor_image;
 mod render;
+
+pub use cursor_image::MAX_CURSOR_EDGE;
 
 const BYTES_PER_PIXEL: usize = 4;
 const MAX_RESOURCES: usize = 64;

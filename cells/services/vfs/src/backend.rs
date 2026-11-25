@@ -153,6 +153,17 @@ pub trait FsBackend: Send {
         Err(FsError::Unsupported)
     }
 
+    /// POSIX rename from `old` to `new` within this backend: a file or an
+    /// empty directory at `new` is replaced; a non-empty directory there, a
+    /// file/directory mismatch and a directory moved into its own subtree are
+    /// refused. Atomicity is the backend's to state.
+    ///
+    /// Only FAT implements it; `dir_ops` reaches it for `/mnt/disk` alone.
+    fn rename_replace(&mut self, old: &str, new: &str) -> Result<(), FsError> {
+        let _ = (old, new);
+        Err(FsError::Unsupported)
+    }
+
     // ── D03 conditional save. Defaults: unsupported (FAT32, bootfs, RamFS). ──
 
     /// Staging object path for transaction `id`, inside this backend; `None`

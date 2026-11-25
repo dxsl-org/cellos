@@ -20,12 +20,14 @@ use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 
 mod appearance;
+mod clipboard;
 mod cursor_sprite;
 mod cursor_state;
 mod framebuffer;
 mod input_handler;
 mod message_handler;
 mod owner_watch;
+mod pointer_look;
 mod pointer_router;
 mod render;
 mod stacking;
@@ -45,24 +47,6 @@ use wire::display::Rect;
 use wire::proto::input::INPUT_EVENT_OPCODE;
 use z_order::ZOrder;
 
-/// Build a 64×64 BGRA8888 sprite for the VirtIO GPU hardware cursor.
-///
-/// Stamps the 16×16 software cursor into the top-left corner; all other pixels
-/// are transparent (0x00_00_00_00). The 64×64 size is fixed by the VirtIO GPU
-/// spec (`CURSOR_RECT` in virtio-drivers `gpu.rs:145-148`).
-fn build_hw_cursor_sprite() -> [u8; 64 * 64 * 4] {
-    let mut buf = [0u8; 64 * 64 * 4];
-    for row in 0..cursor_sprite::CURSOR_H as usize {
-        for col in 0..cursor_sprite::CURSOR_W as usize {
-            if let Some(px) = cursor_sprite::cursor_pixel(row as u32, col as u32) {
-                let off = (row * 64 + col) * 4;
-                buf[off..off + 4].copy_from_slice(&px);
-            }
-        }
-    }
-    buf
-}
-
 #[cfg(target_os = "none")]
 ostd::declare_custom_heap!(10 * 1024 * 1024);
 
@@ -80,6 +64,7 @@ pub fn main() {
         z_order: ZOrder::new(),
         input: InputState::new(),
         appearance: appearance::Appearance::new(),
+        clipboard: clipboard::Clipboard::new(),
         pending_dirty: None,
         last_res_check_ms: 0,
         owners: BTreeMap::new(),
@@ -88,14 +73,13 @@ pub fn main() {
     // Register as input focus so keyboard + mouse events flow to us.
     connect_to_input(&mut compositor.input);
 
-    // Attempt to upload the hardware cursor sprite (64×64 BGRA8888).
-    // The 16×16 software sprite is placed in the top-left; the rest is transparent.
-    // If the GPU cursor is unavailable (setup_cursor returns error), we fall back to
-    // the Phase 01 software cursor path for the session.
+    // Attempt to upload the hardware cursor sprite (64×64 BGRA8888): the
+    // arrow in the top-left, the rest transparent. If the GPU cursor is
+    // unavailable (setup_cursor returns error), we fall back to the software
+    // cursor path for the session.
     {
-        let (hot_x, hot_y) = cursor_sprite::hotspot();
-        let sprite = build_hw_cursor_sprite();
-        let ok = sys_gpu_cursor(0, sprite.as_ptr(), 0, 0, hot_x as u32, hot_y as u32).is_ok();
+        let (sprite, (hot_x, hot_y)) = pointer_look::PointerLook::Arrow.hw_sprite();
+        let ok = sys_gpu_cursor(0, sprite.as_ptr(), 0, 0, hot_x, hot_y).is_ok();
         compositor.input.hw_cursor = ok;
         if ok {
             println("[compositor] hardware cursor active");
@@ -121,6 +105,7 @@ struct Compositor {
     z_order: ZOrder,
     input: InputState,
     appearance: appearance::Appearance,
+    clipboard: clipboard::Clipboard,
     // Compositor-initiated repaint region: set by cursor moves, surface destroy/raise.
     // Consumed (taken) on each render_frame call.
     pending_dirty: Option<Rect>,
@@ -201,6 +186,7 @@ impl Handler for Compositor {
                 z_order: &mut self.z_order,
                 pending_dirty: &mut self.pending_dirty,
                 appearance: &mut self.appearance,
+                clipboard: &mut self.clipboard,
             },
         );
     }
@@ -231,8 +217,28 @@ impl Handler for Compositor {
                     .map_or(stale, |dirty| dirty.union(&stale)),
             );
         }
+        // The look of the surface under the pointer, after whatever this
+        // turn's requests and input changed.
+        self.input.refresh_look(
+            &self.table,
+            &self.frames,
+            &self.z_order,
+            &mut self.pending_dirty,
+        );
+        // Whatever this turn's requests and input did to keyboard focus, the
+        // surface holding it is offered clipboard text it has not seen.
+        self.clipboard.offer_to_focus(
+            self.input.keyboard_focus(),
+            &mut self.table,
+            &mut clipboard::Syscalls,
+        );
         // Damage-driven: render when a surface reports damage or cursor/compositor dirty.
         if self.table.has_damage() || self.pending_dirty.is_some() {
+            let cursor = (!self.input.hw_cursor).then_some((
+                &self.input.look,
+                self.input.mouse_x,
+                self.input.mouse_y,
+            ));
             let _ = render_frame(
                 &mut self.fb,
                 &mut self.table,
@@ -246,8 +252,7 @@ impl Handler for Compositor {
                     drag: self.input.drag_feedback(),
                     palette: self.appearance.palette(),
                 },
-                self.input.mouse_x,
-                self.input.mouse_y,
+                cursor,
             );
         }
 

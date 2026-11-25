@@ -194,4 +194,19 @@ impl Pit8253 {
         self.irq0_periods_delivered = elapsed_periods;
         true
     }
+
+    /// Nanoseconds until channel 0 next owes the guest an interrupt, 0 when
+    /// one is due now; `None` while it is not counting or has fired its one
+    /// shot. The same period count [`Self::take_irq0_due`] consumes.
+    pub fn ns_until_irq0(&self) -> Option<u64> {
+        let channel = &self.ch[0];
+        let next = self.irq0_periods_delivered + 1;
+        if !channel.armed || (channel.one_shot && next > 1) {
+            return None;
+        }
+        let left = next
+            .saturating_mul(channel.period())
+            .saturating_sub(channel.elapsed());
+        Some((u128::from(left) * u128::from(NS_PER_SEC)).div_ceil(u128::from(PIT_HZ)) as u64)
+    }
 }

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build the Tier 3 Chrome guest root: a read-only xz squashfs holding Alpine
 # 3.21 with cage, Chromium, fonts (DejaVu, and WenQuanYi Zen Hei for CJK), dbus,
-# eudev, seatd and wlr-randr, plus the guest init (scripts/chrome-guest/init.sh).
+# eudev, seatd, wlr-randr and wl-clipboard, plus the guest init (scripts/chrome-guest/init.sh).
 # The hypervisor serves it as its only disk (/dev/vda); stage 1 in the Alpine
 # initramfs mounts it under a tmpfs overlay.
 #
@@ -12,8 +12,8 @@
 #   chrome-guest.sqfs   the guest root
 #   packages.txt        installed package set (name-version), sorted
 #   SHA256SUMS          checksums of both
-#   INPUTS.sha256       digest of this builder, the guest init and the cage key-repeat
-#                       shim, so a consumer (scripts/make-chrome-guest-disk.sh) can tell
+#   INPUTS.sha256       digest of this builder, the guest init and the cage shims
+#                       (key repeat, clipboard), so a consumer (scripts/make-chrome-guest-disk.sh) can tell
 #                       a stale image
 #
 # Usage: bash scripts/build-chrome-guest-image.sh [OUT_DIR]
@@ -32,6 +32,8 @@ PACKAGES=(
     chromium=136.0.7103.113-r0
     cage=0.2.0-r0
     wlr-randr=0.4.1-r0
+    # The clipboard agent (wl-paste --watch, wl-copy) between Chromium and CellOS.
+    wl-clipboard=2.2.1-r0
     seatd=0.9.1-r0
     eudev=3.2.14-r5
     font-dejavu=2.37-r5
@@ -65,6 +67,9 @@ install -m 0755 /in/init.sh /rootfs/sbin/chrome-guest-init
 mkdir -p /rootfs/usr/lib/chrome-guest
 gcc -O2 -shared -fPIC -Wall -Werror -o /rootfs/usr/lib/chrome-guest/no-key-repeat.so \
     /in/no-key-repeat.c
+gcc -O2 -shared -fPIC -Wall -Werror -o /rootfs/usr/lib/chrome-guest/data-control.so \
+    /in/data-control.c -ldl
+install -m 0755 /in/clipboard-agent.sh /rootfs/usr/lib/chrome-guest/clipboard-agent
 unsquashfs -q -n -d /modloop-root /modloop
 mkdir -p /rootfs/lib/modules
 cp -a /modloop-root/modules/. /rootfs/lib/modules/

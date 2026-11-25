@@ -95,7 +95,7 @@ pub fn run(
                 }
             }
         }
-        let ret = vmm::run_vcpu(vm_id, vcpu_id, &mut exit);
+        let ret = vmm::run_vcpu(vm_id, vcpu_id, vmm::SCHED_TICK_BUDGET_NS, &mut exit);
         if ret == usize::MAX {
             println("[hv] run_vcpu kernel error — aborting");
             gpu.shutdown();

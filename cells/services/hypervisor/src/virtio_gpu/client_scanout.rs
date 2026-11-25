@@ -5,6 +5,7 @@
 //! (`VmmEvent`), never sent, so a launcher that stops receiving cannot park the
 //! vCPU loop; damage is coalesced and retried at the next poll.
 
+use super::client_pointer::{ClientPointer, CursorImage};
 use super::{command, resource::ResourceTable};
 use ostd::syscall::{sys_grant_share, sys_post, SyscallResult};
 use wire::vmm_session::VmmEvent;
@@ -17,6 +18,7 @@ pub struct ClientScanout {
     shared_reg: usize,
     announced_reg: usize,
     pending_damage: Option<command::Rect>,
+    pointer: ClientPointer,
 }
 
 impl ClientScanout {
@@ -28,7 +30,14 @@ impl ClientScanout {
             shared_reg: 0,
             announced_reg: 0,
             pending_damage: None,
+            pointer: ClientPointer::new(),
         }
+    }
+
+    /// The guest set its cursor image, or hid it (`None`): the launcher's
+    /// window wears it under the host pointer.
+    pub fn update_cursor(&mut self, image: Option<CursorImage>) {
+        self.pointer.update(self.client_tid, image);
     }
 
     pub fn bring_up(&mut self, resources: &mut ResourceTable) {
@@ -59,8 +68,10 @@ impl ClientScanout {
         self.poll(resources);
     }
 
-    /// Announce a replaced Grant, then post coalesced damage.
+    /// Post a pointer change the launcher has not taken yet, announce a
+    /// replaced Grant, then post coalesced damage.
     pub fn poll(&mut self, resources: &ResourceTable) {
+        self.pointer.poll(self.client_tid);
         if !self.announce(resources) {
             return;
         }

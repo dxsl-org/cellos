@@ -68,6 +68,11 @@ pub(crate) fn rmdir(vfs: &mut VfsManager, caller: Caller, path: &str) -> VfsResp
     }
 }
 
+/// Where a rename may happen. Both names under `/srv/`: atomic, never
+/// replacing (CellosFS). Both under `/mnt/disk/`: POSIX, replacing (FAT,
+/// `backend_fat::rename`), and on one volume — two volumes answer
+/// `Unsupported`. Anything else, including one name in each area, is refused.
+/// Both names need the caller's mutate right and the access rules' write.
 pub(crate) fn rename(
     vfs: &mut VfsManager,
     caller: Caller,
@@ -77,12 +82,23 @@ pub(crate) fn rename(
     if !caller.may_mutate() {
         return VfsResponse::Err(VfsError::Denied as u8);
     }
-    if !old.starts_with("/srv/") || !new.starts_with("/srv/") {
-        return VfsResponse::Err(VfsError::Denied as u8);
-    }
     if !vfs.access.can_write(caller, old) || !vfs.access.can_write(caller, new) {
         return VfsResponse::Err(VfsError::Denied as u8);
     }
+    let under = |area: &str| old.starts_with(area) && new.starts_with(area);
+    if under("/srv/") {
+        rename_srv(vfs, old, new)
+    } else if under(DISK_AREA) {
+        rename_on_disk(vfs, old, new)
+    } else {
+        VfsResponse::Err(VfsError::Denied as u8)
+    }
+}
+
+/// Secondary disks' FAT volumes, one mounted at each `/mnt/disk/<device>`.
+const DISK_AREA: &str = "/mnt/disk/";
+
+fn rename_srv(vfs: &mut VfsManager, old: &str, new: &str) -> VfsResponse<'static> {
     let Ok(old_key) = crate::namespace::NamespaceKey::parse(old) else {
         return VfsResponse::Err(VfsError::Denied as u8);
     };
@@ -106,6 +122,36 @@ pub(crate) fn rename(
     if !ok {
         return VfsResponse::Err(VfsError::Io as u8);
     }
-    vfs.quota.move_writer(old, new);
+    vfs.quota.move_tree(old, new);
+    VfsResponse::Ok
+}
+
+/// The volume roots themselves never move. A replaced entry's charge goes back
+/// to whoever was charged for it; the moved records follow the new name.
+fn rename_on_disk(vfs: &mut VfsManager, old: &str, new: &str) -> VfsResponse<'static> {
+    if [old, new]
+        .iter()
+        .any(|path| vfs.is_mount_point(path) || vfs.is_mount_ancestor(path))
+    {
+        return VfsResponse::Err(VfsError::Denied as u8);
+    }
+    if !vfs.healthy(old) || !vfs.healthy(new) {
+        return VfsResponse::Err(VfsError::Io as u8);
+    }
+    let replaced = if crate::paths::may_alias(old, new) {
+        None
+    } else {
+        match vfs.stat(new) {
+            Ok(Some((size, is_dir))) => Some(if is_dir { 0 } else { size }),
+            _ => None,
+        }
+    };
+    if let Err(error) = vfs.rename_replace(old, new) {
+        return VfsResponse::Err(error.wire());
+    }
+    if let Some(size) = replaced {
+        vfs.quota.release_path(new, size);
+    }
+    vfs.quota.move_tree(old, new);
     VfsResponse::Ok
 }

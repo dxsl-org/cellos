@@ -2,8 +2,8 @@
 
 use types::{ViError, ViResult};
 use wire::display::{
-    compositor_ops, AppearancePalette, SetAppearance, SetIcon, SetTitle, SurfaceStateRequest,
-    WindowConfigure,
+    compositor_ops, AppearancePalette, PointerImage, SetAppearance, SetIcon, SetPointerImage,
+    SetTitle, SurfaceStateRequest, WindowConfigure,
 };
 
 use crate::syscall::{sys_grant_register, sys_grant_share, sys_grant_slice};
@@ -42,6 +42,21 @@ impl ViSurface {
         let frame = SetIcon {
             icon: icon as u8,
             cap: self.cap,
+        }
+        .encode();
+        ipc::send_lifecycle_request(self.comp_tid, &frame)
+    }
+
+    /// Set what the pointer looks like over this surface's content. An image
+    /// is read from `grant` (a Grant this task registered and shared with the
+    /// compositor) when the compositor receives the request.
+    ///
+    /// # Errors
+    /// Returns `IO` when the request cannot be sent.
+    pub fn set_pointer_image(&self, image: PointerImage) -> ViResult<()> {
+        let frame = SetPointerImage {
+            cap: self.cap,
+            image,
         }
         .encode();
         ipc::send_lifecycle_request(self.comp_tid, &frame)

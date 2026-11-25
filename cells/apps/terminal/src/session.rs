@@ -51,6 +51,17 @@ pub enum RunState {
     Failed(Status),
 }
 
+/// Outcome of [`TerminalSession::paste`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Pasted {
+    Sent,
+    /// Not submitted: no running session or empty text (`None`), or refused by the
+    /// session without harm to it.
+    Dropped(Option<Status>),
+    /// The attachment broke; the session failed and its notice is on the grid.
+    Failed,
+}
+
 pub struct TerminalSession {
     host: Option<FrontendHost>,
     pub grid: TerminalGrid,
@@ -138,6 +149,29 @@ impl TerminalSession {
             Err(status) => {
                 self.fail("input failed", status);
                 true
+            }
+        }
+    }
+
+    /// Submit clipboard text as one paste. Like a key, a paste the session refuses is
+    /// dropped and only a broken attachment fails the session.
+    pub fn paste(&mut self, text: &str) -> Pasted {
+        let Some(host) = self.host.as_mut().filter(|_| !text.is_empty()) else {
+            return Pasted::Dropped(None);
+        };
+        match host.submit_paste(text) {
+            Ok(()) => Pasted::Sent,
+            // Too long, control characters, a paste already in flight, a full queue, or
+            // a trust prompt that refuses pastes (`Cancelled`).
+            Err(
+                status @ (Status::QuotaExceeded
+                | Status::WouldBlock
+                | Status::UnsupportedInput
+                | Status::Cancelled),
+            ) => Pasted::Dropped(Some(status)),
+            Err(status) => {
+                self.fail("paste failed", status);
+                Pasted::Failed
             }
         }
     }

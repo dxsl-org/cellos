@@ -6,8 +6,8 @@ use alloc::string::ToString;
 
 use ostd::syscall::{sys_post, sys_recv_timeout, sys_try_recv, SyscallResult};
 use wire::vmm_session::{
-    VmmEvent, VmmInputForwardRequest, VmmLaunchReply, VmmLaunchRequest, VmmResizeRequest,
-    VMM_OP_TERMINATE_APP, VMM_STATUS_OK,
+    VmmClipboardRequest, VmmEvent, VmmInputForwardRequest, VmmLaunchReply, VmmLaunchRequest,
+    VmmResizeRequest, VMM_OP_TERMINATE_APP, VMM_STATUS_OK,
 };
 
 use crate::input_bridge::GuestEvent;
@@ -83,6 +83,21 @@ impl Guest {
             height,
         };
         let _ = sys_post(self.hypervisor_tid, &request.encode());
+    }
+
+    /// Hand the guest `len` bytes of clipboard text at the start of `grant`
+    /// (this launcher's, shared read-only with the hypervisor); `false` when
+    /// the hypervisor's mailbox is full.
+    pub fn send_clipboard(&self, grant: u32, len: u32) -> bool {
+        let request = VmmClipboardRequest {
+            session_id: self.session_id,
+            grant,
+            len,
+        };
+        matches!(
+            sys_post(self.hypervisor_tid, &request.encode()),
+            SyscallResult::Ok(0)
+        )
     }
 
     /// End the guest; the hypervisor exits after it.

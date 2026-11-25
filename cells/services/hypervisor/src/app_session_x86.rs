@@ -3,17 +3,18 @@
 //! A Tier 3 app launcher (`cells/apps/chrome`) spawns its own hypervisor with
 //! the argument `app` and sends `VMM_OP_LAUNCH_APP` with its window's content
 //! size. The session is bound to that sender for the VM's whole life: only it
-//! may forward input, resize the guest display, or end the guest. Every other
-//! sender's message is dropped. The session protocol is
-//! `wire::vmm_session`.
+//! may forward input, resize the guest display, exchange clipboard text, or
+//! end the guest. Every other sender's message is dropped. The session
+//! protocol is `wire::vmm_session`.
 
 use ostd::io::println;
 use ostd::syscall::{sys_post, sys_recv_timeout, sys_try_recv, SyscallResult};
 use wire::vmm_session::{
-    self as vmm_ipc, display_size_valid, VmmInputForwardRequest, VmmLaunchReply, VmmLaunchRequest,
-    VmmResizeRequest,
+    self as vmm_ipc, display_size_valid, VmmClipboardRequest, VmmInputForwardRequest,
+    VmmLaunchReply, VmmLaunchRequest, VmmResizeRequest,
 };
 
+use crate::client_clipboard::{self, ClientClipboard};
 use crate::virtio_gpu::GpuDev;
 use crate::virtio_input::InputDev;
 use crate::virtio_mmio::VirtioMmio;
@@ -32,6 +33,9 @@ pub fn app_mode() -> bool {
 
 pub struct AppSession {
     client_tid: usize,
+    clipboard: ClientClipboard,
+    /// The newest launcher text not yet handed to the guest's console.
+    clipboard_for_guest: Option<alloc::string::String>,
 }
 
 /// What the launcher asked for in one poll.
@@ -86,7 +90,12 @@ pub fn wait_for_launch() -> Option<(AppSession, u32, u32)> {
             width,
             request.height
         ));
-        return Some((AppSession { client_tid: sender }, width, request.height));
+        let session = AppSession {
+            client_tid: sender,
+            clipboard: ClientClipboard::new(),
+            clipboard_for_guest: None,
+        };
+        return Some((session, width, request.height));
     }
     println("[hv-x86] no launcher LAUNCH arrived; exiting");
     None
@@ -104,6 +113,16 @@ impl AppSession {
         let _ = sys_post(self.client_tid, &event.encode());
     }
 
+    /// The guest copied `text`: hand it to the launcher.
+    pub fn clipboard_from_guest(&mut self, text: &str) {
+        self.clipboard.send(self.client_tid, text);
+    }
+
+    /// The newest clipboard text the launcher sent for the guest.
+    pub fn take_clipboard_for_guest(&mut self) -> Option<alloc::string::String> {
+        self.clipboard_for_guest.take()
+    }
+
     /// Drain the launcher's queued requests into the devices.
     pub fn poll(
         &mut self,
@@ -111,6 +130,7 @@ impl AppSession {
         gpu_vmio: &mut VirtioMmio,
         input: &mut InputDev,
     ) -> SessionRequest {
+        self.clipboard.poll(self.client_tid);
         let mut buf = [0u8; 64];
         for _ in 0..MESSAGES_PER_POLL {
             buf.fill(0);
@@ -143,6 +163,21 @@ impl AppSession {
                         )
                     {
                         gpu_vmio.signal_config_change();
+                    }
+                }
+                vmm_ipc::VMM_OP_CLIPBOARD => {
+                    let Ok(request) = VmmClipboardRequest::decode(&buf) else {
+                        continue;
+                    };
+                    if request.session_id != SESSION_ID {
+                        continue;
+                    }
+                    if let Some(text) = client_clipboard::from_launcher(self.client_tid, &request) {
+                        println(&alloc::format!(
+                            "[hv-x86] clipboard to guest: {} bytes",
+                            text.len()
+                        ));
+                        self.clipboard_for_guest = Some(text);
                     }
                 }
                 vmm_ipc::VMM_OP_TERMINATE_APP => {

@@ -87,6 +87,27 @@ fn pending_used_interrupt_retries_until_acknowledged() {
 }
 
 #[test]
+fn the_interrupt_line_rises_once_per_acknowledgement() {
+    let mut mmio = VirtioMmio::default();
+    let mut device = DummyDevice::default();
+    assert!(!mmio.take_interrupt_edge());
+
+    mmio.signal_used();
+    assert!(mmio.take_interrupt_edge());
+    // More completions before the guest acknowledges are the same interrupt.
+    mmio.signal_used();
+    mmio.signal_config_change();
+    assert!(!mmio.take_interrupt_edge());
+
+    // An acknowledgement that leaves a bit set raises the line again.
+    write(&mut mmio, &mut device, 0x064, 1);
+    assert!(mmio.take_interrupt_edge());
+    assert!(!mmio.take_interrupt_edge());
+    write(&mut mmio, &mut device, 0x064, 2);
+    assert!(!mmio.take_interrupt_edge());
+}
+
+#[test]
 fn invalid_queue_selection_cannot_mutate_the_previous_queue() {
     let mut mmio = VirtioMmio::default();
     let mut device = DummyDevice::default();

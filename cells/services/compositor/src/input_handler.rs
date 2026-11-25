@@ -42,6 +42,9 @@ pub struct InputState {
     /// then one newly created window may take focus from the panel, so an app
     /// the user just launched from the shell gets the keyboard.
     launch_armed: bool,
+    /// The look the pointer wears now: the arrow, or that of the surface
+    /// [`Self::refresh_look`] last found under it.
+    pub look: crate::pointer_look::PointerLook,
 }
 
 impl InputState {
@@ -54,7 +57,37 @@ impl InputState {
             pointer: PointerRouter::new(),
             hw_cursor: false,
             launch_armed: false,
+            look: crate::pointer_look::PointerLook::Arrow,
         }
+    }
+
+    /// Wear the look of the surface that takes the pointer now (after input
+    /// moved it, or a surface changed its look or went away).
+    pub fn refresh_look(
+        &mut self,
+        table: &SurfaceTable,
+        frames: &FrameRegistry,
+        z_order: &ZOrder,
+        pending_dirty: &mut Option<Rect>,
+    ) {
+        let next = self
+            .pointer
+            .look_surface(self.mouse_x, self.mouse_y, table, frames, z_order)
+            .and_then(|cap| table.get(cap))
+            .map(|surface| surface.pointer.clone())
+            .unwrap_or_default();
+        if next == self.look {
+            return;
+        }
+        cursor_state::show(
+            &self.look,
+            &next,
+            self.mouse_x,
+            self.mouse_y,
+            self.hw_cursor,
+            pending_dirty,
+        );
+        self.look = next;
     }
 
     pub const fn menu_button_hover(&self) -> Option<crate::pointer_router::MenuButtonHover> {
@@ -76,6 +109,14 @@ impl InputState {
 
     pub const fn selected_cap(&self) -> Option<u64> {
         self.pointer.selected_cap()
+    }
+
+    /// The client owner and its surface that hold keyboard focus; `None` while
+    /// keys go to the console shell.
+    pub fn keyboard_focus(&self) -> Option<(usize, u64)> {
+        let owner = self.pointer.focused_owner();
+        let cap = self.pointer.selected_cap()?;
+        (owner != 0).then_some((owner, cap))
     }
 
     pub fn remove_surface(&mut self, cap: u64) {
@@ -258,6 +299,7 @@ pub fn handle_input_event(
             cursor_state::update(
                 x,
                 y,
+                &state.look,
                 state.hw_cursor,
                 &mut state.mouse_x,
                 &mut state.mouse_y,

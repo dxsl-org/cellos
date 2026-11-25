@@ -8,7 +8,7 @@ use ostd::display::linear::{Bgra, Canvas, RoundRect, Shadow};
 use ostd::syscall::{sys_get_resolution, sys_gpu_flush};
 use wire::display::Rect;
 
-use crate::cursor_sprite::{cursor_pixel, CURSOR_H, CURSOR_W};
+use crate::pointer_look::PointerLook;
 use crate::surface_table::SurfaceState;
 use crate::window_decoration;
 
@@ -186,11 +186,14 @@ impl ScreenFb {
         .drop_shadow(core::slice::from_ref(shape), shadow);
     }
 
-    pub fn composite_cursor(&mut self, cx: i32, cy: i32, dirty: Rect) {
+    /// Blend `look` over the frame with its hot spot at `(cx, cy)`, inside
+    /// `dirty` and the screen.
+    pub fn composite_cursor(&mut self, look: &PointerLook, cx: i32, cy: i32, dirty: Rect) {
         let stride = self.width as usize * 4;
-        for row in 0..CURSOR_H {
-            for col in 0..CURSOR_W {
-                let (x, y) = (cx + col as i32, cy + row as i32);
+        let area = look.rect(cx, cy);
+        for row in 0..area.h {
+            for col in 0..area.w {
+                let (x, y) = (area.x + col as i32, area.y + row as i32);
                 if x < dirty.x
                     || y < dirty.y
                     || x < 0
@@ -202,7 +205,7 @@ impl ScreenFb {
                 {
                     continue;
                 }
-                let Some(src) = cursor_pixel(row, col) else {
+                let Some(src) = look.pixel(row, col) else {
                     continue;
                 };
                 if src[3] == 0 {

@@ -222,6 +222,29 @@ impl PointerRouter {
         damage
     }
 
+    /// The surface whose pointer look shows at `(x, y)`: the one a pointer
+    /// event there would reach (its capture, else the content under it).
+    /// `None` over decorations, an open menu, a drag or a resize: the arrow.
+    pub fn look_surface(
+        &self,
+        x: i32,
+        y: i32,
+        table: &SurfaceTable,
+        frames: &FrameRegistry,
+        z_order: &ZOrder,
+    ) -> Option<u64> {
+        if self.menu.is_some() {
+            return None;
+        }
+        match self.capture {
+            Some(Capture::Client(cap)) => Some(cap),
+            Some(_) => None,
+            None => target::at(x, y, table, frames, z_order)
+                .filter(|target| target.hit == Hit::Content)
+                .map(|target| target.cap),
+        }
+    }
+
     pub fn forget(&mut self, cap: u64) {
         if self.hover.is_some_and(|hover| hover.cap == cap) {
             self.hover = None;

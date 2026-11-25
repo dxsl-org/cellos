@@ -35,7 +35,7 @@ const BACKEND_TIMEOUT_TICKS: u64 = 2000;
 const BACKEND_TICKS_PER_4K: u64 = 1000;
 
 /// IPC budget for a chunk of `bytes`, never below the base request budget.
-fn chunk_timeout_ticks(bytes: usize) -> u64 {
+pub(crate) fn chunk_timeout_ticks(bytes: usize) -> u64 {
     BACKEND_TIMEOUT_TICKS + (bytes.div_ceil(4096) as u64) * BACKEND_TICKS_PER_4K
 }
 
@@ -625,7 +625,7 @@ fn blk_write(backend: &mut Backend, sector: u64, bufs: &[DescBuf], vm_id: usize)
 /// Grants come from contiguous frames, so a large chunk can fail once the
 /// allocator is fragmented. Halving down to one page keeps bulk I/O working
 /// (more round trips) instead of failing the request.
-fn alloc_chunk_grant(want: usize) -> Option<(ostd::grant::GrantHandle<u8>, usize)> {
+pub(crate) fn alloc_chunk_grant(want: usize) -> Option<(ostd::grant::GrantHandle<u8>, usize)> {
     // A request can be smaller than the chunk cap — a single sector, or the
     // tail of a chain — so the halving floor is one byte: refusing a small
     // request outright would fail writes the device is supposed to serve.
@@ -645,7 +645,7 @@ fn alloc_chunk_grant(want: usize) -> Option<(ostd::grant::GrantHandle<u8>, usize
 ///
 /// `bufs` are the request's data descriptors in chain order; their lengths
 /// concatenate into the request's byte range.
-fn scatter_to_guest(vm_id: usize, bufs: &[DescBuf], start: usize, src: &[u8]) -> bool {
+pub(crate) fn scatter_to_guest(vm_id: usize, bufs: &[DescBuf], start: usize, src: &[u8]) -> bool {
     let mut written = 0usize;
     let mut cursor = 0usize;
     for buf in bufs {
@@ -672,7 +672,12 @@ fn scatter_to_guest(vm_id: usize, bufs: &[DescBuf], start: usize, src: &[u8]) ->
 }
 
 /// Copy the guest bytes of `bufs` at request offset `start` into `dst`.
-fn gather_from_guest(vm_id: usize, bufs: &[DescBuf], start: usize, dst: &mut [u8]) -> bool {
+pub(crate) fn gather_from_guest(
+    vm_id: usize,
+    bufs: &[DescBuf],
+    start: usize,
+    dst: &mut [u8],
+) -> bool {
     let mut read = 0usize;
     let mut cursor = 0usize;
     for buf in bufs {

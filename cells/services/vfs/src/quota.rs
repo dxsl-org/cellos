@@ -172,11 +172,23 @@ impl QuotaTracker {
         self.set_writer(path, owner);
     }
 
-    /// Move the record for `old` to `new` after a rename: nothing on disk was
-    /// freed, so nothing is released.
-    pub fn move_writer(&mut self, old: &str, new: &str) {
-        if let Some(owner) = self.writers.remove(old) {
-            self.set_writer(new, owner);
+    /// Move the records at and below `old` to the same places below `new`
+    /// after a rename: nothing on disk was freed, so nothing is released.
+    pub fn move_tree(&mut self, old: &str, new: &str) {
+        let (old, new) = (old.trim_end_matches('/'), new.trim_end_matches('/'));
+        let moved: alloc::vec::Vec<String> = self
+            .writers
+            .keys()
+            .filter(|held| {
+                held.strip_prefix(old)
+                    .is_some_and(|rest| rest.is_empty() || rest.starts_with('/'))
+            })
+            .cloned()
+            .collect();
+        for path in moved {
+            if let Some(owner) = self.writers.remove(&path) {
+                self.set_writer(&alloc::format!("{new}{}", &path[old.len()..]), owner);
+            }
         }
     }
 

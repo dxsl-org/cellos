@@ -9,18 +9,24 @@ cd "$REPO_ROOT"
 
 ISO="build/cellos-x86_64-desktop.qcow2"
 
-# `--rebuild`: dev fixture image from the current tree — builds + signs Ocel
-# (desktop profile) and NET (qemu-dev-https), injects them into the embedded
-# ramdisk, builds the kernel, and makes the disk from an *explicitly selected*
-# kernel copy (`X86_KERNEL`, the fixture route that stays open while the default
-# rollout route is blocked). This is a local development image, not a release
-# or qualification artifact. Signing needs a passing F1/F5 for the whole tree.
-# The tracked embedded image is restored right after the kernel build, so the repo stays unchanged.
+# `--rebuild`: dev fixture image from the current tree — assembles the desktop
+# image from source (`assemble-x86-image.py --profile desktop`: the desktop cells,
+# Chrome's launcher and hypervisor, the Chrome guest's kernel and initramfs),
+# builds + signs Ocel (desktop profile) and NET (qemu-dev-https), replaces them in
+# that image, builds the kernel around it, and makes the disk from an *explicitly
+# selected* kernel copy (`X86_KERNEL`, the fixture route that stays open while the
+# default rollout route is blocked). This is a local development image, not a
+# release or qualification artifact. Signing needs a passing F1/F5 for the whole tree.
+# The image is assembled in CELLOS_DESKTOP_WORK (default /tmp/cellos-desktop-fixture):
+# the assembler's dev-key route refuses an output or cargo target directory inside
+# the repository.
 if [[ "${1:-}" == "--rebuild" ]]; then
-    KFS="kernel/src/embedded-x86_64/kernel_fs.img"
-    mkdir -p build
-    cp "$KFS" build/kernel_fs.saved.img
-    trap 'cp build/kernel_fs.saved.img "$KFS"' EXIT
+    WORK="${CELLOS_DESKTOP_WORK:-/tmp/cellos-desktop-fixture}"
+    KFS="$WORK/embedded/kernel_fs.img"
+    mkdir -p build "$WORK"
+    echo "  [Build]    Desktop image ..."
+    CARGO_TARGET_DIR="$WORK/cells-target" python3 scripts/assemble-x86-image.py \
+        --profile desktop --out-dir "$WORK/embedded"
     echo "  [Build]    Ocel (desktop) ..."
     RUSTFLAGS="-C relocation-model=pic" cargo build --release -p ocel --no-default-features --features desktop \
         --target x86_64-unknown-none -Z build-std=core,alloc
@@ -30,10 +36,12 @@ if [[ "${1:-}" == "--rebuild" ]]; then
     python3 scripts/cellos-sign --sign target/x86_64-unknown-none/release/ocel target/x86_64-unknown-none/release/service-net
     python3 scripts/package-ocel-profile.py "$KFS" target/x86_64-unknown-none/release/ocel
     python3 scripts/package-ocel-profile.py "$KFS" target/x86_64-unknown-none/release/service-net --dest /bin/net
+    # The assembler's manifest no longer describes the image, and the kernel build
+    # refuses an image that differs from the manifest beside it.
+    rm -f "$WORK/embedded/manifest.json"
     echo "  [Build]    Kernel ..."
-    cargo build --release -p cellos-kernel --target x86_64-unknown-none \
+    EMBEDDED_OVERRIDE="$WORK/embedded" cargo build --release -p cellos-kernel --target x86_64-unknown-none \
         --features "dev-policy-key,dev-signing-key,dev-weak-rng,signing-required,native-domains,qemu-dev-https,large-cell-va"
-    cp build/kernel_fs.saved.img "$KFS"
     cp target/x86_64-unknown-none/release/cellos-kernel build/cellos-kernel-desktop-fixture
     X86_KERNEL="$REPO_ROOT/build/cellos-kernel-desktop-fixture" X86_ISO_ROOT="$REPO_ROOT/build/desktop-fixture-isoroot" \
         bash scripts/x86/make-iso-ci.sh build/cellos-x86_64-desktop-fixture.iso
@@ -100,17 +108,26 @@ rm -f /tmp/qmp-desktop.sock
 
 # Chrome (Tier 3): the guest root disk from scripts/make-chrome-guest-disk.sh, when present.
 # VFS mounts the lowest-addressed disk as /mnt/sd, so the guest disk is created before
-# the boot disk; the guest needs 1536 MiB of the machine's RAM.
+# the boot disk; the guest takes up to 3072 MiB of the machine's RAM in one run.
 CHROME_DISK="build/chrome-guest-disk.img"
+# Chrome's Downloads: a FAT32 data disk (scripts/make-chrome-files-disk.sh), created once and
+# kept; VFS mounts it under /mnt/disk/ and the hypervisor shares its Chrome folder. It sits on
+# q35's AHCI controller: each block driver Cell drives one controller (NVMe and virtio-blk
+# are taken).
+CHROME_FILES="build/chrome-files.img"
 MEMORY=2048M
 DISK_OPTS=(-drive file="$ISO",format=qcow2,if=virtio)
 if [[ -f "$CHROME_DISK" ]]; then
     echo "  [Chrome]   Đĩa khách Chrome: $CHROME_DISK (gắn làm /mnt/sd)."
-    MEMORY=3072M
+    MEMORY=6144M
     DISK_OPTS=(-drive file="$CHROME_DISK",if=none,id=sd,format=raw
                -device nvme,drive=sd,serial=CELLOSSD
                -drive file="$ISO",format=qcow2,if=none,id=boot
                -device virtio-blk-pci,drive=boot,bootindex=0)
+    bash scripts/make-chrome-files-disk.sh "$CHROME_FILES"
+    echo "  [Chrome]   Đĩa dữ liệu (Downloads của Chrome): $CHROME_FILES."
+    DISK_OPTS+=(-drive file="$CHROME_FILES",if=none,id=files,format=raw
+                -device ide-hd,drive=files,bus=ide.1)
 else
     echo "  [Chrome]   Chưa có $CHROME_DISK: chạy bash scripts/make-chrome-guest-disk.sh $CHROME_DISK"
 fi

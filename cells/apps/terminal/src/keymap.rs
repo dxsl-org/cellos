@@ -138,6 +138,34 @@ pub fn idle_action(ke: &KeyEvent) -> IdleAction {
     }
 }
 
+/// A clipboard chord the Terminal handles itself.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ClipChord {
+    /// Ctrl+Shift+C: copy the selection.
+    Copy,
+    /// Ctrl+Shift+V: paste the clipboard into the session.
+    Paste,
+}
+
+/// Ctrl+Shift+C / Ctrl+Shift+V in any key state: the caller acts on the press and
+/// swallows the repeats and release too, so no part of a chord reaches the shell.
+/// Ctrl+C and Ctrl+V without Shift stay the shell's (interrupt, literal next).
+pub fn clip_chord(ke: &KeyEvent) -> Option<ClipChord> {
+    let m = ke.modifiers;
+    if !m.contains(Modifiers::CTRL)
+        || !m.contains(Modifiers::SHIFT)
+        || m.contains(Modifiers::ALT)
+        || m.contains(Modifiers::META)
+    {
+        return None;
+    }
+    match ke.char()?.to_ascii_lowercase() {
+        'c' => Some(ClipChord::Copy),
+        'v' => Some(ClipChord::Paste),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -500,6 +528,43 @@ mod tests {
         assert_eq!(
             idle_action(&ev(KeySym::Printable, 'x', 0, KeyState::Pressed)),
             IdleAction::None
+        );
+    }
+
+    #[test]
+    fn ctrl_shift_c_and_v_are_clipboard_chords_in_every_state() {
+        for state in [KeyState::Pressed, KeyState::Repeated, KeyState::Released] {
+            for (ch, chord) in [
+                ('C', ClipChord::Copy),
+                ('c', ClipChord::Copy),
+                ('V', ClipChord::Paste),
+                ('v', ClipChord::Paste),
+            ] {
+                let ke = ev(KeySym::Printable, ch, CTRL | SHIFT, state);
+                assert_eq!(clip_chord(&ke), Some(chord), "{ch} {state:?}");
+            }
+        }
+        // Locks do not change the chord.
+        let caps = Modifiers::CAPS_LOCK.0 | CTRL | SHIFT;
+        assert_eq!(
+            clip_chord(&ev(KeySym::Printable, 'C', caps, KeyState::Pressed)),
+            Some(ClipChord::Copy)
+        );
+    }
+
+    #[test]
+    fn other_combinations_are_not_clipboard_chords() {
+        let no = |ch, mods| clip_chord(&ev(KeySym::Printable, ch, mods, KeyState::Pressed));
+        // Ctrl-C stays the interrupt and Ctrl-V the shell's.
+        assert_eq!(no('c', CTRL), None);
+        assert_eq!(no('v', CTRL), None);
+        assert_eq!(no('C', SHIFT), None);
+        assert_eq!(no('C', CTRL | SHIFT | ALT), None);
+        assert_eq!(no('C', CTRL | SHIFT | META), None);
+        assert_eq!(no('X', CTRL | SHIFT), None);
+        assert_eq!(
+            clip_chord(&ev(KeySym::Return, '\0', CTRL | SHIFT, KeyState::Pressed)),
+            None
         );
     }
 }

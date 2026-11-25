@@ -170,6 +170,9 @@ pub(crate) fn route_compositor_frame(frame: &[u8]) {
         compositor_events::APPEARANCE_CHANGED => {
             super::appearance::note_frame(frame);
         }
+        compositor_events::CLIPBOARD_CHANGED => {
+            super::clipboard::note_frame(frame);
+        }
         _ => {}
     }
 }

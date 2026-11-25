@@ -14,7 +14,9 @@
 
 use types::{ViError, ViResult};
 
+pub mod clipboard;
 pub mod events;
+pub use clipboard::*;
 pub use events::*;
 
 pub const VMM_OP_LAUNCH_APP: u8 = 1;
@@ -22,6 +24,8 @@ pub const VMM_OP_RESIZE_APP: u8 = 2;
 pub const VMM_OP_FORWARD_INPUT: u8 = 3;
 pub const VMM_OP_QUERY_STATUS: u8 = 4;
 pub const VMM_OP_TERMINATE_APP: u8 = 5;
+/// [`VmmClipboardRequest`]: the host's clipboard text for the guest.
+pub const VMM_OP_CLIPBOARD: u8 = 6;
 
 pub const VMM_STATUS_OK: u32 = 0;
 pub const VMM_STATUS_INVALID_ARG: u32 = 1;

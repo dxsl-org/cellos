@@ -64,6 +64,9 @@ def guest_checks(log: str, prefix: str) -> list:
     checks.append((f"{prefix}display-irq-delivered", irq.isdigit() and int(irq) > 0))
     checks.append((f"{prefix}no-fixture-failure", "X86_GPU_FAIL" not in log))
     checks.append((f"{prefix}guest-xmm-intact", "X86_FPU_CORRUPT" not in log))
+    # Phase 07 of the Chrome plan: the VMX guest has AVX, and all 256 bits of
+    # ymm0..ymm15 survive VM exits (fpu-check.S).
+    checks.append((f"{prefix}guest-ymm-intact", "X86_AVX_OK" in log))
     checks.append((f"{prefix}vmx-root", "root operation active (VMX)" in log))
     host = re.search(r"\[net\] IP address: (\S+)", log)
     host_ip = ipv4(host.group(1)) if host else None

@@ -77,6 +77,9 @@ pub struct VirtioMmio {
     queue_sel: usize,
     queues: [QueueCfg; MAX_QUEUES],
     pub intr_status: u32,
+    /// The guest has been interrupted for the status bits now set and has not
+    /// acknowledged since ([`Self::take_interrupt_edge`]).
+    intr_raised: bool,
 }
 
 impl VirtioMmio {
@@ -194,7 +197,12 @@ impl VirtioMmio {
             }
             #[cfg(feature = "hostile-backend-recovery")]
             0x0fc => dev.hostile_backend_fault(val),
-            0x064 => self.intr_status &= !val, // InterruptACK
+            0x064 => {
+                // InterruptACK. Bits still set, or set again while the guest's
+                // handler ran, raise the line once more.
+                self.intr_status &= !val;
+                self.intr_raised = false;
+            }
             0x070 => {
                 if val == 0 {
                     dev.reset();
@@ -261,9 +269,19 @@ impl VirtioMmio {
         self.intr_status |= 2;
     }
 
-    #[cfg(any(target_arch = "x86_64", test))]
+    #[cfg(test)]
     pub fn interrupt_pending(&self) -> bool {
         self.intr_status != 0
+    }
+
+    /// The rising edge of the device's interrupt line, once: true when a
+    /// status bit is set that the guest has not been interrupted for. x86
+    /// raises the line's vector on it; the guest's acknowledgement re-arms it.
+    #[cfg(any(target_arch = "x86_64", test))]
+    pub fn take_interrupt_edge(&mut self) -> bool {
+        let edge = self.intr_status != 0 && !self.intr_raised;
+        self.intr_raised |= edge;
+        edge
     }
 }
 

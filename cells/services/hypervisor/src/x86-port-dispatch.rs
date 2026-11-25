@@ -2,7 +2,9 @@
 
 extern crate alloc;
 
-use crate::{cmos_rtc::CmosRtc, pic_8259::Pic8259, pit_8253::Pit8253, uart_16550::Uart16550};
+use crate::{
+    acpi_pm::AcpiPm, cmos_rtc::CmosRtc, pic_8259::Pic8259, pit_8253::Pit8253, uart_16550::Uart16550,
+};
 use ostd::io::println;
 
 fn is_absent_pci_config(port: u16) -> bool {
@@ -24,6 +26,7 @@ pub fn write(
     pic: &mut Pic8259,
     pit: &mut Pit8253,
     rtc: &mut CmosRtc,
+    pm: &mut AcpiPm,
 ) -> bool {
     if Uart16550::owns(port) {
         uart.write(port, value);
@@ -41,7 +44,12 @@ pub fn write(
     } else if is_absent_legacy_uart(port) {
         // Linux probes the fixed ISA COM2-COM4 candidates. The platform freezes
         // them absent, so writes vanish and reads expose an idle ISA bus.
-    } else if matches!(port, 0x604 | 0x501 | 0xB004) {
+    } else if AcpiPm::owns(port) {
+        if pm.write(port, value) {
+            println("[hv-x86] guest power-off (ACPI S5)");
+            return false;
+        }
+    } else if matches!(port, 0x501 | 0xB004) {
         println("[hv-x86] guest power-off port write");
         return false;
     } else {
@@ -60,6 +68,7 @@ pub fn read(
     pic: &Pic8259,
     pit: &mut Pit8253,
     rtc: &mut CmosRtc,
+    pm: &AcpiPm,
 ) -> u32 {
     if Uart16550::owns(port) {
         uart.read(port)
@@ -69,6 +78,8 @@ pub fn read(
         pit.read(port)
     } else if CmosRtc::owns(port) {
         rtc.read(port)
+    } else if AcpiPm::owns(port) {
+        pm.read(port)
     } else {
         0xFFFF_FFFF
     }

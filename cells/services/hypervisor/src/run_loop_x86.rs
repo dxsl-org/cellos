@@ -1,22 +1,23 @@
 //! x86 (SVM/VT-x) VmExit dispatch loop for the hypervisor cell.
 //!
 //! The x86 twin of the aarch64 [`crate::run_loop`]. It services the port-I/O
-//! device models (16550 UART, 8259 PIC, 8253 PIT, CMOS RTC), injects the PIT
-//! timer IRQ on guest idle so jiffies advance, forwards host keystrokes
-//! (kernel UART ring, `sys_read(0)`) into the 16550 RX FIFO as guest IRQ4,
-//! serves the launcher session of an app-mode hypervisor (`app_session_x86`:
-//! its window's input, display resizes and termination), and surfaces guest
-//! shutdown. One external interrupt is injected per entry
-//! (single EVENTINJ slot): UART RX wins over the PIT tick because RX pending
-//! clears within one guest IRQ handler pass while ticks recur forever.
-//! RIP advancing is done kernel-side (IOIO via EXITINFO2; HLT/MSR/PAUSE via
+//! device models (16550 UART, 8259 PIC, 8253 PIT, CMOS RTC), raises the PIT
+//! tick and the virtio interrupts, forwards host keystrokes (kernel UART ring,
+//! `sys_read(0)`) into the 16550 RX FIFO as guest IRQ4, serves the launcher
+//! session of an app-mode hypervisor (`app_session_x86`: its window's input,
+//! display resizes and termination), and surfaces guest shutdown. RIP
+//! advancing is done kernel-side (IOIO via EXITINFO2; HLT/MSR/PAUSE via
 //! instruction-length), so the cell never touches guest PC here. The guest
-//! LAPIC is the kernel's RAM-backed xAPIC window — its timer is injected
-//! kernel-side; only the legacy PIT tick is delivered from here.
+//! local APIC and its timer are the kernel's.
+//!
+//! A guest with more than one vCPU gets a thread per vCPU (`x86_machine`);
+//! this loop is the first vCPU's.
 
 extern crate alloc;
 #[path = "x86-irq-dispatch.rs"]
 mod x86_irq_dispatch;
+#[path = "x86-machine.rs"]
+mod x86_machine;
 #[path = "x86-mmio-dispatch.rs"]
 mod x86_mmio_dispatch;
 #[path = "x86-port-dispatch.rs"]
@@ -24,13 +25,18 @@ mod x86_port_dispatch;
 
 use crate::app_session_x86::{AppSession, SessionRequest};
 use crate::{
-    cmos_rtc::CmosRtc, pic_8259::Pic8259, pit_8253::Pit8253, uart_16550::Uart16550,
-    virtio_blk::BlkDisk, virtio_gpu::GpuDev, virtio_input::InputDev, virtio_mmio::VirtioMmio,
-    virtio_net::NetDev, vmm,
+    acpi_pm::AcpiPm, client_clipboard, cmos_rtc::CmosRtc, exit_counts::ExitCounts,
+    pic_8259::Pic8259, pit_8253::Pit8253, uart_16550::Uart16550, virtio_9p::P9Dev,
+    virtio_blk::BlkDisk, virtio_console::Console, virtio_gpu::GpuDev, virtio_input::InputDev,
+    virtio_mmio::VirtioMmio, virtio_net::NetDev, vmm, yield_lock,
 };
 use abi::hypervisor::ViVmExit;
+use alloc::sync::Arc;
+use alloc::vec::Vec;
+use core::sync::atomic::Ordering;
 use ostd::io::println;
-use x86_mmio_dispatch::{MmioDevices, MmioDevicesMut};
+use ostd::sync::Mutex;
+use x86_machine::{Machine, EAGER_POLLS, STOPPED};
 
 #[cfg(feature = "hostile-backend-recovery")]
 const HOSTILE_PREEMPTION_PORT: u16 = 0x5050;
@@ -41,21 +47,19 @@ pub enum RunOutcome {
     Shutdown,
 }
 
-/// Run the guest until it powers off or an unrecoverable exit.
+/// Run the guest until it powers off or an unrecoverable exit. `vcpus` are
+/// the guest's vCPU ids, the first one's first; the others get a thread each.
 pub fn run(
     vm_id: usize,
-    vcpu_id: usize,
+    vcpus: &[usize],
     disk_file: Option<(
         crate::persistent_disk::PersistentDisk,
         crate::persistent_disk::DiskSpec,
     )>,
     launcher: Option<(AppSession, u32, u32)>,
 ) -> RunOutcome {
+    let vcpu_id = vcpus[0];
     let net_tid = ostd::service::provider_tid(abi::syscall::service::NET).unwrap_or(0);
-    let mut blk = BlkDisk::new(disk_file, None);
-    let mut blk_vmio = VirtioMmio::default();
-    let mut net = NetDev::new(net_tid, None);
-    let mut net_vmio = VirtioMmio::default();
     let (mut gpu, mut session) = match launcher {
         Some((session, width, height)) => (
             GpuDev::for_client(session.client_tid(), width, height),
@@ -73,111 +77,117 @@ pub fn run(
             (gpu, None)
         }
     };
-    let mut gpu_vmio = VirtioMmio::default();
     gpu.bring_up();
     // x86: completions raise ISR status only; `x86_irq_dispatch` delivers them on DISPLAY_IRQ.
-    let mut input = InputDev::new(None);
-    let mut input_vmio = VirtioMmio::default();
-    let mut uart = Uart16550::new();
-    let mut pic = Pic8259::new();
-    let mut pit = Pit8253::new();
-    let mut rtc = CmosRtc::new();
+    let mut gpu_vmio = VirtioMmio::default();
+    let machine = Arc::new(Mutex::new(Machine {
+        blk: BlkDisk::new(disk_file, None),
+        blk_vmio: VirtioMmio::default(),
+        net: NetDev::new(net_tid, None),
+        net_vmio: VirtioMmio::default(),
+        input: InputDev::new(None),
+        input_vmio: VirtioMmio::default(),
+        console: Console::clipboard(),
+        console_vmio: VirtioMmio::default(),
+        p9: P9Dev::new(),
+        p9_vmio: VirtioMmio::default(),
+        uart: Uart16550::new(),
+        pic: Pic8259::new(),
+        pit: Pit8253::new(),
+        rtc: CmosRtc::new(),
+        pm: AcpiPm::new(),
+        eager_polls: 0,
+        handed_over: Vec::new(),
+        answered: Vec::new(),
+        handed_over_count: 0,
+    }));
+    // With other vCPUs this thread alone serves the GPU for them: its runs
+    // stay short so a handed-over access waits about one of them.
+    let smp = vcpus.len() > 1;
+    STOPPED.store(false, Ordering::Release);
+    for &ap in &vcpus[1..] {
+        let machine = machine.clone();
+        let spawned = ostd::task::spawn(move || x86_machine::run_ap(vm_id, ap, vcpu_id, &machine));
+        if matches!(spawned, ostd::syscall::SyscallResult::Err(_)) {
+            println(&alloc::format!(
+                "[hv-x86] vcpu {ap}: no thread — the guest waits for it in vain"
+            ));
+        }
+    }
     let mut exit = ViVmExit::Unknown { ec: 0, iss: 0 };
-    let mut net_poll_turn = false;
+    let mut counts = ExitCounts::new();
     #[cfg(feature = "hostile-backend-recovery")]
     let mut hostile_preemption_armed = false;
 
-    loop {
-        gpu.poll_damage();
-        let ret = vmm::run_vcpu(vm_id, vcpu_id, &mut exit);
+    while !STOPPED.load(Ordering::Acquire) {
+        let budget_ns = {
+            let mut machine = yield_lock::lock(&machine);
+            machine.serve_handed_over(vm_id, &mut gpu, &mut gpu_vmio);
+            gpu.poll_damage();
+            machine.raise_due(vm_id, vcpu_id, Some(&mut gpu_vmio));
+            run_budget_ns(&machine.pit, &machine.pic, smp || machine.eager_polls != 0)
+        };
+        counts.entering();
+        let ret = vmm::run_vcpu(vm_id, vcpu_id, budget_ns, &mut exit);
         if ret == usize::MAX {
             println("[hv-x86] run_vcpu kernel error — aborting");
-            gpu.shutdown();
-            return RunOutcome::Shutdown;
+            break;
         }
+        counts.record(&exit);
 
+        let mut guard = yield_lock::lock(&machine);
+        let m = &mut *guard;
+        #[cfg(feature = "hostile-backend-recovery")]
+        if let ViVmExit::PortOut { port, val, .. } = exit {
+            if port == HOSTILE_PREEMPTION_PORT && val == HOSTILE_PREEMPTION_ARM {
+                hostile_preemption_armed = true;
+                continue;
+            }
+        }
+        if let Some(running) =
+            m.serve_device(vm_id, vcpu_id, &exit, Some((&mut gpu, &mut gpu_vmio)))
+        {
+            if !running {
+                break;
+            }
+            continue;
+        }
         match exit {
-            // ── Port OUT — device write; RIP already advanced kernel-side ─────
-            ViVmExit::PortOut { port, size: _, val } => {
+            // ── The guest is idle (`Hlt`, where the kernel reports it), or a
+            //    host interrupt or the budget took it off the CPU (`Preempted`,
+            //    which is also how a guest shows up that waits halted in the
+            //    guest). Either way the outside world gets its turn. ──────────
+            ViVmExit::Hlt | ViVmExit::Preempted => {
+                let preempted = matches!(exit, ViVmExit::Preempted);
                 #[cfg(feature = "hostile-backend-recovery")]
-                if port == HOSTILE_PREEMPTION_PORT && val == HOSTILE_PREEMPTION_ARM {
-                    hostile_preemption_armed = true;
-                    continue;
-                }
-                if !x86_port_dispatch::write(port, val, &mut uart, &mut pic, &mut pit, &mut rtc) {
-                    return RunOutcome::Shutdown;
-                }
-            }
-            // ── Port IN — device read; return value in guest (E)AX ────────────
-            ViVmExit::PortIn { port, size, .. } => {
-                let value = x86_port_dispatch::read(port, &mut uart, &pic, &mut pit, &mut rtc);
-                write_rax(vm_id, vcpu_id, value, size);
-            }
-            ViVmExit::Hlt => {
-                uart.flush_tx_if_quiescent();
-                x86_irq_dispatch::service_idle(
-                    vm_id,
-                    vcpu_id,
-                    &mut uart,
-                    &mut pit,
-                    &pic,
-                    &mut net,
-                    &blk_vmio,
-                    &mut net_vmio,
-                    [&gpu_vmio, &input_vmio],
-                    &mut net_poll_turn,
-                    session.is_none(),
-                );
-                if serve_host(
-                    &mut gpu,
-                    &mut gpu_vmio,
-                    &mut input,
-                    &mut input_vmio,
-                    &mut session,
-                    vm_id,
-                    vcpu_id,
-                ) {
-                    gpu.shutdown();
-                    return RunOutcome::Shutdown;
-                }
-            }
-
-            // ── Host-interrupt preemption — the guest was mid-execution (maybe
-            //    a pause-less spin loop): deliver the PIT tick here too, so
-            //    jiffies advance at host-tick pace even when the guest never
-            //    executes HLT or PAUSE. ──────────────────────────────────────
-            ViVmExit::Preempted => {
-                #[cfg(feature = "hostile-backend-recovery")]
-                if hostile_preemption_armed {
+                if preempted && hostile_preemption_armed {
                     println("[hv-virtio-host] vcpu-preempted");
                     hostile_preemption_armed = false;
                 }
-                x86_irq_dispatch::service_idle(
+                m.uart
+                    .flush_tx_if_quiescent(!preempted, ostd::syscall::sys_get_time());
+                let frame = x86_irq_dispatch::service_idle(
                     vm_id,
                     vcpu_id,
-                    &mut uart,
-                    &mut pit,
-                    &pic,
-                    &mut net,
-                    &blk_vmio,
-                    &mut net_vmio,
-                    [&gpu_vmio, &input_vmio],
-                    &mut net_poll_turn,
+                    &mut m.uart,
+                    &m.pic,
+                    &mut m.net,
+                    &mut m.net_vmio,
                     session.is_none(),
                 );
-                if serve_host(
-                    &mut gpu,
-                    &mut gpu_vmio,
-                    &mut input,
-                    &mut input_vmio,
-                    &mut session,
-                    vm_id,
-                    vcpu_id,
-                ) {
-                    gpu.shutdown();
-                    return RunOutcome::Shutdown;
+                let served = serve_host(m, &mut gpu, &mut gpu_vmio, &mut session, vm_id, vcpu_id);
+                if served.terminate {
+                    break;
                 }
-                ostd::task::yield_now();
+                m.eager_polls = if frame || served.input {
+                    EAGER_POLLS
+                } else {
+                    m.eager_polls.saturating_sub(1)
+                };
+                if preempted {
+                    drop(guard);
+                    ostd::task::yield_now();
+                }
             }
 
             // ── MSR — never surfaced anymore (the kernel emulates all MSR exits
@@ -190,56 +200,12 @@ pub fn run(
                     index,
                     is_write
                 ));
-                gpu.shutdown();
-                return RunOutcome::Shutdown;
-            }
-
-            ViVmExit::MmioWrite { ipa, size, val } => {
-                if !x86_mmio_dispatch::write(
-                    ipa,
-                    size,
-                    val as u32,
-                    vm_id,
-                    vcpu_id,
-                    &mut MmioDevicesMut {
-                        block: &mut blk,
-                        block_mmio: &mut blk_vmio,
-                        net: &mut net,
-                        net_mmio: &mut net_vmio,
-                        gpu: &mut gpu,
-                        gpu_mmio: &mut gpu_vmio,
-                        input: &mut input,
-                        input_mmio: &mut input_vmio,
-                    },
-                ) {
-                    return RunOutcome::Shutdown;
-                }
-            }
-
-            ViVmExit::MmioRead { ipa, size, reg } => {
-                let Some(value) = x86_mmio_dispatch::read(
-                    ipa,
-                    size,
-                    &MmioDevices {
-                        block: &blk,
-                        block_mmio: &blk_vmio,
-                        net: &net,
-                        net_mmio: &net_vmio,
-                        gpu: &gpu,
-                        gpu_mmio: &gpu_vmio,
-                        input: &input,
-                        input_mmio: &input_vmio,
-                    },
-                ) else {
-                    return RunOutcome::Shutdown;
-                };
-                write_gpr(vm_id, vcpu_id, reg, value, size);
+                break;
             }
 
             ViVmExit::Shutdown => {
                 println("[hv-x86] guest shutdown");
-                gpu.shutdown();
-                return RunOutcome::Shutdown;
+                break;
             }
 
             ViVmExit::Unknown { ec, iss } => {
@@ -248,33 +214,55 @@ pub fn run(
                     ec,
                     iss
                 ));
-                gpu.shutdown();
-                return RunOutcome::Shutdown;
+                break;
             }
 
-            // ── aarch64-only exits — never emitted on the x86 world-switch ────
-            ViVmExit::Hvc { .. } | ViVmExit::Wfi | ViVmExit::SysReg { .. } => {
+            // ── Device exits were served above; aarch64-only exits are never
+            //    emitted on the x86 world-switch ────────────────────────────────
+            _ => {
                 println("[hv-x86] unexpected aarch64 vmexit — shutting down VM");
-                gpu.shutdown();
-                return RunOutcome::Shutdown;
+                break;
             }
         }
     }
+    STOPPED.store(true, Ordering::Release);
+    counts.report();
+    // Files the guest left open are synced and closed with the guest.
+    let (requests, errors) = yield_lock::lock(&machine).p9.end_session();
+    println(&alloc::format!(
+        "[hv-x86] 9p requests: {requests}, errors: {errors}"
+    ));
+    if smp {
+        println(&alloc::format!(
+            "[hv-x86] GPU accesses handed to the first vCPU: {}",
+            yield_lock::lock(&machine).handed_over_count
+        ));
+    }
+    // Every way out ends the guest: stop presenting, which is how a bound
+    // launcher learns of it.
+    gpu.shutdown();
+    RunOutcome::Shutdown
 }
 
 /// Work done at every guest idle/preemption boundary besides interrupt
-/// delivery: the launcher session (or, without one, compositor reconnection)
-/// and flushing queued input into the guest. Returns `true` when the launcher
-/// ended the session.
+/// delivery: the launcher session (or, without one, compositor reconnection),
+/// flushing queued input into the guest, and the session's clipboard, whose
+/// Grant and events must come from this (the BSP's) thread.
 fn serve_host(
+    machine: &mut Machine,
     gpu: &mut GpuDev,
     gpu_vmio: &mut VirtioMmio,
-    input: &mut InputDev,
-    input_vmio: &mut VirtioMmio,
     session: &mut Option<AppSession>,
     vm_id: usize,
     vcpu_id: usize,
-) -> bool {
+) -> Served {
+    let Machine {
+        input,
+        input_vmio,
+        console,
+        console_vmio,
+        ..
+    } = machine;
     let terminate = match session {
         Some(session) => matches!(
             session.poll(gpu, gpu_vmio, input),
@@ -293,10 +281,53 @@ fn serve_host(
             false
         }
     };
-    if input.flush_events(&input_vmio.queue_cfg(0), vm_id, vcpu_id) {
+    let input = input.flush_events(&input_vmio.queue_cfg(0), vm_id, vcpu_id);
+    if input {
         input_vmio.signal_used();
     }
-    terminate
+    let clipboard = session
+        .as_mut()
+        .is_some_and(|session| client_clipboard::serve(session, console, console_vmio, vm_id));
+    Served {
+        terminate,
+        input: input || clipboard,
+    }
+}
+
+/// What [`serve_host`] found.
+struct Served {
+    /// The launcher ended the session.
+    terminate: bool,
+    /// Host input or clipboard text went into the guest.
+    input: bool,
+}
+
+/// The short poll interval: what an inbound frame or a pointer move waits at
+/// most while the guest is in a conversation.
+const EAGER_POLL_NS: u64 = 1_000_000;
+/// The shortest budget: 0 would mean "no bound" to the kernel.
+const SOONEST_NS: u64 = 50_000;
+
+/// How long the guest may run before this Cell wants control back: until the
+/// next PIT tick is due, so the tick is raised on time, and no longer than the
+/// pace at which the host console, the network and the launcher are polled —
+/// one scheduler tick, or [`EAGER_POLL_NS`] while `eager`. Where the kernel
+/// keeps a halted guest in the guest, this is also how long an idle guest
+/// sleeps.
+///
+/// A tick whose line the guest has masked is not waited for: it cannot be
+/// raised, and a tick that stays due would otherwise shrink every budget to
+/// [`SOONEST_NS`].
+fn run_budget_ns(pit: &Pit8253, pic: &Pic8259, eager: bool) -> u64 {
+    let poll_ns = if eager {
+        EAGER_POLL_NS
+    } else {
+        vmm::SCHED_TICK_BUDGET_NS
+    };
+    pic.irq0()
+        .and_then(|_| pit.ns_until_irq0())
+        .map_or(poll_ns, |tick_ns| tick_ns.min(poll_ns))
+        .max(SOONEST_NS)
 }
 
 /// Host input with keyboard focus on the console `hv` reaches the guest's tablet
@@ -321,33 +352,4 @@ fn push_console_event(input: &mut InputDev, event: wire::input::InputEvent) {
         wire::input::InputEvent::MouseScroll { dy, .. } => input.push_mouse_scroll(dy),
         wire::input::InputEvent::MouseMove { .. } => {}
     }
-}
-
-/// Store a port-IN result in the guest's RAX (masked to the access size). RAX is
-/// VMCB-managed; the kernel syncs gpr[0]→VMCB before the next entry.
-fn write_rax(vm_id: usize, vcpu_id: usize, val: u32, size: u8) {
-    let mut rb = [0u64; 32];
-    vmm::vcpu_regs(vm_id, vcpu_id, &mut rb, false);
-    let mask: u64 = match size {
-        1 => 0xFF,
-        2 => 0xFFFF,
-        _ => 0xFFFF_FFFF,
-    };
-    rb[0] = val as u64 & mask;
-    vmm::vcpu_regs(vm_id, vcpu_id, &mut rb, true);
-}
-
-fn write_gpr(vm_id: usize, vcpu_id: usize, reg: u8, val: u32, size: u8) {
-    if reg >= 16 {
-        return;
-    }
-    let mut rb = [0u64; 32];
-    vmm::vcpu_regs(vm_id, vcpu_id, &mut rb, false);
-    let old = rb[reg as usize];
-    rb[reg as usize] = match size {
-        1 => (old & !0xff) | (val as u64 & 0xff),
-        2 => (old & !0xffff) | (val as u64 & 0xffff),
-        _ => val as u64,
-    };
-    vmm::vcpu_regs(vm_id, vcpu_id, &mut rb, true);
 }

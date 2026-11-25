@@ -3,6 +3,7 @@
 use wire::display::{AppearancePalette, Rect, SurfaceRole};
 
 use crate::framebuffer::ScreenFb;
+use crate::pointer_look::PointerLook;
 use crate::pointer_router::{DragFeedback, MenuButtonHover, OpenMenu};
 use crate::surface_table::{frame::MAX_VIEWS_PER_FRAME, FrameRegistry, SurfaceTable};
 use crate::window_decoration::{
@@ -24,8 +25,9 @@ pub struct ChromeState {
 /// window's shadow and frame (or a floating panel's shadow) go down first,
 /// then its content clipped to its rounded shape, so the next surface up
 /// covers all of it. Windows behind another tab of their stack are skipped:
-/// the shown window paints the whole frame, every tab included.
-#[allow(clippy::too_many_arguments)]
+/// the shown window paints the whole frame, every tab included. `cursor` is
+/// the software pointer, `(look, x, y)`; `None` while the hardware cursor
+/// shows it.
 pub fn render_frame(
     fb: &mut ScreenFb,
     table: &mut SurfaceTable,
@@ -33,8 +35,7 @@ pub fn render_frame(
     z_order: &ZOrder,
     extra_dirty: Option<Rect>,
     chrome: &ChromeState,
-    cursor_x: i32,
-    cursor_y: i32,
+    cursor: Option<(&PointerLook, i32, i32)>,
 ) -> Option<Rect> {
     let mut dirty = extra_dirty;
     for cap in z_order.iter_bottom_to_top() {
@@ -112,7 +113,9 @@ pub fn render_frame(
             surface.clear_damage();
         }
     }
-    fb.composite_cursor(cursor_x, cursor_y, dirty);
+    if let Some((look, x, y)) = cursor {
+        fb.composite_cursor(look, x, y, dirty);
+    }
     fb.flush_rect(dirty);
     Some(dirty)
 }

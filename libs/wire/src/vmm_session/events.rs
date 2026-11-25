@@ -15,6 +15,17 @@ pub const VMM_EVT_SCANOUT: u8 = 0x81;
 pub const VMM_EVT_DAMAGE: u8 = 0x82;
 /// The guest stopped; the hypervisor exits after posting this.
 pub const VMM_EVT_EXITED: u8 = 0x83;
+/// The guest's cursor image changed: `width`x`height` BGRA8888 pixels, rows
+/// packed, at the start of `grant` (shared read-only, owned by the
+/// hypervisor, at least `MAX_POINTER_EDGE`² pixels), hot spot `(hot_x,
+/// hot_y)`; or the guest hid its cursor.
+pub const VMM_EVT_POINTER: u8 = 0x84;
+/// The guest copied text: `len` bytes of UTF-8 (1..=`VMM_CLIPBOARD_MAX`) at
+/// the start of `grant` (shared read-only, owned by the hypervisor).
+pub const VMM_EVT_CLIPBOARD: u8 = 0x85;
+
+const POINTER_IMAGE: u8 = 0;
+const POINTER_HIDDEN: u8 = 1;
 
 /// Largest display edge a launcher may request (a 4K scanout).
 pub const MAX_DISPLAY_EDGE: u32 = 4096;
@@ -80,6 +91,23 @@ pub enum VmmEvent {
     Exited {
         code: u32,
     },
+    /// Layout: byte 1 = 0, word 0 `grant`, word 1 `width | height << 16`,
+    /// word 2 `hot_x | hot_y << 16`. Edges are 1..=`MAX_POINTER_EDGE` and the
+    /// hot spot lies inside the image, or the frame is not an event.
+    Pointer {
+        grant: u32,
+        width: u16,
+        height: u16,
+        hot_x: u16,
+        hot_y: u16,
+    },
+    /// Layout: byte 1 = 1, every word 0.
+    PointerHidden,
+    /// Layout: word 0 `grant`, word 1 `len`, the rest 0.
+    Clipboard {
+        grant: u32,
+        len: u32,
+    },
 }
 
 impl VmmEvent {
@@ -100,6 +128,26 @@ impl VmmEvent {
                 height,
             } => (VMM_EVT_DAMAGE, [x, y, width, height]),
             Self::Exited { code } => (VMM_EVT_EXITED, [code, 0, 0, 0]),
+            Self::Pointer {
+                grant,
+                width,
+                height,
+                hot_x,
+                hot_y,
+            } => (
+                VMM_EVT_POINTER,
+                [
+                    grant,
+                    u32::from(width) | u32::from(height) << 16,
+                    u32::from(hot_x) | u32::from(hot_y) << 16,
+                    0,
+                ],
+            ),
+            Self::PointerHidden => {
+                out[1] = POINTER_HIDDEN;
+                (VMM_EVT_POINTER, [0; 4])
+            }
+            Self::Clipboard { grant, len } => (VMM_EVT_CLIPBOARD, [grant, len, 0, 0]),
         };
         out[0] = opcode;
         for (index, word) in words.iter().enumerate() {
@@ -127,6 +175,39 @@ impl VmmEvent {
                 height: word(3),
             }),
             VMM_EVT_EXITED => Some(Self::Exited { code: word(0) }),
+            VMM_EVT_POINTER => match buf[1] {
+                POINTER_HIDDEN if buf[2..Self::LEN].iter().all(|byte| *byte == 0) => {
+                    Some(Self::PointerHidden)
+                }
+                POINTER_IMAGE => {
+                    let (width, height) = (word(1) as u16, (word(1) >> 16) as u16);
+                    let (hot_x, hot_y) = (word(2) as u16, (word(2) >> 16) as u16);
+                    let edge = 1..=crate::display::MAX_POINTER_EDGE;
+                    (edge.contains(&width)
+                        && edge.contains(&height)
+                        && hot_x < width
+                        && hot_y < height)
+                        .then_some(Self::Pointer {
+                            grant: word(0),
+                            width,
+                            height,
+                            hot_x,
+                            hot_y,
+                        })
+                }
+                _ => None,
+            },
+            VMM_EVT_CLIPBOARD => {
+                let len = word(1);
+                (buf[1..4] == [0; 3]
+                    && (1..=super::VMM_CLIPBOARD_MAX).contains(&len)
+                    && word(2) == 0
+                    && word(3) == 0)
+                    .then_some(Self::Clipboard {
+                        grant: word(0),
+                        len,
+                    })
+            }
             _ => None,
         }
     }
@@ -151,6 +232,18 @@ mod tests {
                 height: 4,
             },
             VmmEvent::Exited { code: 2 },
+            VmmEvent::Pointer {
+                grant: 9,
+                width: 24,
+                height: 32,
+                hot_x: 5,
+                hot_y: 31,
+            },
+            VmmEvent::PointerHidden,
+            VmmEvent::Clipboard {
+                grant: 11,
+                len: 65536,
+            },
         ] {
             assert_eq!(VmmEvent::decode(&event.encode()), Some(event));
         }
@@ -158,6 +251,20 @@ mod tests {
         frame[0] = super::super::VMM_OP_LAUNCH_APP;
         assert_eq!(VmmEvent::decode(&frame), None);
         assert_eq!(VmmEvent::decode(&frame[..VmmEvent::LEN - 1]), None);
+        // A cursor larger than the hardware plane, or a hot spot outside it.
+        for (size, hot) in [(65 | 8 << 16, 0), (8 | 8 << 16, 8)] {
+            let mut frame = VmmEvent::PointerHidden.encode();
+            frame[1] = 0;
+            frame[8..12].copy_from_slice(&(size as u32).to_le_bytes());
+            frame[12..16].copy_from_slice(&(hot as u32).to_le_bytes());
+            assert_eq!(VmmEvent::decode(&frame), None);
+        }
+        // Clipboard text that is empty or over the limit.
+        for len in [0, super::super::VMM_CLIPBOARD_MAX + 1] {
+            let mut frame = VmmEvent::Clipboard { grant: 1, len: 1 }.encode();
+            frame[8..12].copy_from_slice(&len.to_le_bytes());
+            assert_eq!(VmmEvent::decode(&frame), None);
+        }
     }
 
     #[test]

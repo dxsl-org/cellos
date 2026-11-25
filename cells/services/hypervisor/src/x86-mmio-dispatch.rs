@@ -3,7 +3,9 @@
 extern crate alloc;
 
 use crate::{
+    virtio_9p::P9Dev,
     virtio_blk::BlkDisk,
+    virtio_console::Console,
     virtio_gpu::GpuDev,
     virtio_input::InputDev,
     virtio_mmio::{self, VirtioMmio},
@@ -11,29 +13,41 @@ use crate::{
 };
 use ostd::io::println;
 
-/// Mutable device bundle passed to the write dispatcher.
+/// Mutable device bundle passed to the write dispatcher. `gpu` is `None` on
+/// a thread that does not hold the GPU (`x86_machine`): its accesses to the
+/// GPU's slot go to the thread that does.
 pub struct MmioDevicesMut<'a> {
     pub block: &'a mut BlkDisk,
     pub block_mmio: &'a mut VirtioMmio,
     pub net: &'a mut NetDev,
     pub net_mmio: &'a mut VirtioMmio,
-    pub gpu: &'a mut GpuDev,
-    pub gpu_mmio: &'a mut VirtioMmio,
+    pub gpu: Option<(&'a mut GpuDev, &'a mut VirtioMmio)>,
     pub input: &'a mut InputDev,
     pub input_mmio: &'a mut VirtioMmio,
+    pub console: &'a mut Console,
+    pub console_mmio: &'a mut VirtioMmio,
+    pub p9: &'a mut P9Dev,
+    pub p9_mmio: &'a mut VirtioMmio,
 }
 
-/// Shared device bundle passed to the read dispatcher.
+/// Shared device bundle passed to the read dispatcher; `gpu` as in
+/// [`MmioDevicesMut`].
 pub struct MmioDevices<'a> {
     pub block: &'a BlkDisk,
     pub block_mmio: &'a VirtioMmio,
     pub net: &'a NetDev,
     pub net_mmio: &'a VirtioMmio,
-    pub gpu: &'a GpuDev,
-    pub gpu_mmio: &'a VirtioMmio,
+    pub gpu: Option<(&'a GpuDev, &'a VirtioMmio)>,
     pub input: &'a InputDev,
     pub input_mmio: &'a VirtioMmio,
+    pub console: &'a Console,
+    pub console_mmio: &'a VirtioMmio,
+    pub p9: &'a P9Dev,
+    pub p9_mmio: &'a VirtioMmio,
 }
+
+/// The virtio-mmio slot of the GPU.
+pub const GPU_SLOT: usize = 3;
 
 pub fn write(
     ipa: u64,
@@ -73,12 +87,20 @@ pub fn write(
         1 => dev
             .net_mmio
             .mmio_write(offset, value, dev.net, vm_id, vcpu_id),
-        3 => dev
-            .gpu_mmio
-            .mmio_write(offset, value, dev.gpu, vm_id, vcpu_id),
+        2 => dev
+            .console_mmio
+            .mmio_write(offset, value, dev.console, vm_id, vcpu_id),
+        3 => {
+            if let Some((gpu, gpu_mmio)) = dev.gpu.as_mut() {
+                gpu_mmio.mmio_write(offset, value, &mut **gpu, vm_id, vcpu_id);
+            }
+        }
         4 => dev
             .input_mmio
             .mmio_write(offset, value, dev.input, vm_id, vcpu_id),
+        5 => dev
+            .p9_mmio
+            .mmio_write(offset, value, dev.p9, vm_id, vcpu_id),
         _ => {}
     }
     true
@@ -120,17 +142,32 @@ pub fn read(ipa: u64, size: u8, dev: &MmioDevices<'_>) -> Option<u32> {
             }
             dev.net_mmio.mmio_read(aligned, dev.net) as u32
         }
+        2 => {
+            if offset == 0 {
+                println("[hv-x86] virtio-mmio console probe");
+            }
+            dev.console_mmio.mmio_read(aligned, dev.console) as u32
+        }
         3 => {
             if offset == 0 {
                 println("[hv-x86] virtio-mmio gpu probe");
             }
-            dev.gpu_mmio.mmio_read(aligned, dev.gpu) as u32
+            match dev.gpu {
+                Some((gpu, gpu_mmio)) => gpu_mmio.mmio_read(aligned, gpu) as u32,
+                None => 0,
+            }
         }
         4 => {
             if offset == 0 {
                 println("[hv-x86] virtio-mmio input probe");
             }
             dev.input_mmio.mmio_read(aligned, dev.input) as u32
+        }
+        5 => {
+            if offset == 0 {
+                println("[hv-x86] virtio-mmio 9p probe");
+            }
+            dev.p9_mmio.mmio_read(aligned, dev.p9) as u32
         }
         _ => 0,
     };

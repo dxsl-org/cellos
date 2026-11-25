@@ -246,12 +246,19 @@ impl AttachGrant {
 }
 
 mod appearance;
+mod clipboard;
 mod icon;
+mod pointer;
 pub use appearance::{
     AppearanceChanged, AppearancePalette, SetAppearance, APPEARANCE_CHANGED_WIRE_SIZE,
     SET_APPEARANCE_WIRE_SIZE,
 };
+pub use clipboard::{
+    ClipboardChanged, ClipboardGet, ClipboardSet, CLIPBOARD_CHANGED_WIRE_SIZE,
+    CLIPBOARD_GET_WIRE_SIZE, CLIPBOARD_MAX, CLIPBOARD_SET_WIRE_SIZE,
+};
 pub use icon::{SetIcon, SET_ICON_WIRE_SIZE};
+pub use pointer::{PointerImage, SetPointerImage, MAX_POINTER_EDGE, SET_POINTER_IMAGE_WIRE_SIZE};
 
 // ─── Window lifecycle IPC messages ───────────────────────────────────────────
 
@@ -293,6 +300,8 @@ pub enum DisplayProtocolError {
     InvalidUtf8 = 6,
     /// Unused bytes in a fixed-width title were nonzero.
     NonZeroTitlePadding = 7,
+    /// A size or position lay outside the range the message allows.
+    OutOfRange = 8,
 }
 
 /// Reason a compositor asks its owner to configure a window.
@@ -1225,6 +1234,21 @@ pub mod compositor_ops {
     /// Payload: [`SetIcon`] (8 bytes). No reply.
     pub const SET_ICON: u8 = 0x13;
 
+    /// Set what the pointer looks like over an owner surface's content.
+    ///
+    /// Payload: [`SetPointerImage`] (20 bytes). No reply.
+    pub const SET_POINTER_IMAGE: u8 = 0x14;
+
+    /// Set the clipboard text (focused surface's owner only).
+    ///
+    /// Payload: [`ClipboardSet`] (16 bytes). No reply.
+    pub const CLIPBOARD_SET: u8 = 0x15;
+
+    /// Ask for the clipboard text (focused surface's owner only).
+    ///
+    /// Payload: [`ClipboardGet`] (8 bytes). Answer: [`ClipboardChanged`] event.
+    pub const CLIPBOARD_GET: u8 = 0x16;
+
     /// Query screen dimensions.
     /// Payload: empty  Reply: `[w: u32, h: u32]`
     pub const GET_SCREEN_SIZE: u8 = 0x10;
@@ -1275,6 +1299,8 @@ pub mod compositor_events {
     pub const WINDOW_STATE_CHANGED: u8 = 0xA2;
     /// The system palette, encoded as [`AppearanceChanged`] (8 bytes).
     pub const APPEARANCE_CHANGED: u8 = 0xA3;
+    /// The clipboard text, encoded as [`ClipboardChanged`] (20 bytes).
+    pub const CLIPBOARD_CHANGED: u8 = 0xA4;
 }
 
 // ─── Misc constants ───────────────────────────────────────────────────────────

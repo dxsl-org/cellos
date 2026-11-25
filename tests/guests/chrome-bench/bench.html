@@ -1,0 +1,155 @@
+<!doctype html>
+<!--
+  Bench page for the Tier 3 Chrome guest (scripts/qemu-tier3-chrome-bench-x86.sh).
+  Chromium runs each test once and reports the numbers to GET /report on the
+  server that served this page. Times are milliseconds.
+    raf     requestAnimationFrame for 5 s: frames, p50/p95/max interval
+    timer   200 chained setTimeout(4): p50/p95/max lateness
+    js1     one fixed integer loop
+    jsN     the same loop in four Web Workers at once (wall time)
+    scroll  a long text page scrolled by script for 5 s
+    paint   a full-window canvas redrawn for 5 s
+-->
+<meta charset="utf-8">
+<title>CellOS Chrome guest bench</title>
+<style>
+  html, body { margin: 0; }
+  body { font: 16px/1.4 sans-serif; }
+  #status { position: fixed; top: 0; left: 0; z-index: 2; padding: 4px 8px; background: #fff; }
+  #stage p { margin: 0 24px 12px; }
+  canvas { display: block; }
+</style>
+<div id="status">starting</div>
+<div id="stage"></div>
+<script>
+'use strict';
+const SECONDS = 5;
+const LOOP = 200000000;
+const WORKERS = 4;
+const statusLine = document.getElementById('status');
+const stage = document.getElementById('stage');
+
+function percentile(sorted, p) {
+  return sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor(p * sorted.length))] : 0;
+}
+
+// Frame count and interval percentiles of a list of timestamps.
+function intervals(times) {
+  const gaps = [];
+  for (let i = 1; i < times.length; i++) gaps.push(times[i] - times[i - 1]);
+  gaps.sort((a, b) => a - b);
+  return { frames: times.length, p50: percentile(gaps, 0.5), p95: percentile(gaps, 0.95),
+           max: gaps.length ? gaps[gaps.length - 1] : 0 };
+}
+
+// Call `each(now)` on every animation frame for `seconds`.
+function animate(seconds, each) {
+  return new Promise(resolve => {
+    const times = [];
+    const end = performance.now() + seconds * 1000;
+    function frame(now) {
+      times.push(now);
+      if (each) each(now);
+      if (now < end) requestAnimationFrame(frame); else resolve(intervals(times));
+    }
+    requestAnimationFrame(frame);
+  });
+}
+
+function timers(count, delay) {
+  return new Promise(resolve => {
+    const late = [];
+    let last = performance.now();
+    function fire() {
+      const now = performance.now();
+      late.push(now - last - delay);
+      last = now;
+      if (late.length < count) setTimeout(fire, delay); else {
+        late.sort((a, b) => a - b);
+        resolve({ p50: percentile(late, 0.5), p95: percentile(late, 0.95), max: late[late.length - 1] });
+      }
+    }
+    setTimeout(fire, delay);
+  });
+}
+
+function work(n) {
+  let x = 1;
+  for (let i = 0; i < n; i++) x = (Math.imul(x, 1103515245) + 12345) & 0x7fffffff;
+  return x;
+}
+
+function timed(fn) {
+  const start = performance.now();
+  fn();
+  return performance.now() - start;
+}
+
+function workers(count, n) {
+  const source = `${work.toString()}; onmessage = e => postMessage(work(e.data));`;
+  const url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
+  const start = performance.now();
+  return Promise.all(Array.from({ length: count }, () => new Promise(resolve => {
+    const worker = new Worker(url);
+    worker.onmessage = () => { worker.terminate(); resolve(); };
+    worker.postMessage(n);
+  }))).then(() => performance.now() - start);
+}
+
+async function scrolling() {
+  const words = 'The quick brown fox jumps over the lazy dog. ';
+  stage.innerHTML = Array.from({ length: 600 }, (_, i) => `<p>${i} ${words.repeat(6)}</p>`).join('');
+  let down = true;
+  const result = await animate(SECONDS, () => {
+    const limit = document.documentElement.scrollHeight - innerHeight;
+    if (scrollY >= limit) down = false; else if (scrollY <= 0) down = true;
+    scrollBy(0, down ? 24 : -24);
+  });
+  stage.innerHTML = '';
+  scrollTo(0, 0);
+  return result;
+}
+
+async function painting() {
+  const canvas = document.createElement('canvas');
+  canvas.width = innerWidth;
+  canvas.height = innerHeight;
+  stage.appendChild(canvas);
+  const context = canvas.getContext('2d');
+  const result = await animate(SECONDS, now => {
+    const shift = (now / 10) % canvas.width;
+    const gradient = context.createLinearGradient(shift, 0, shift + canvas.width, canvas.height);
+    gradient.addColorStop(0, '#1a73e8');
+    gradient.addColorStop(0.5, '#fbbc04');
+    gradient.addColorStop(1, '#34a853');
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.fillStyle = 'rgba(255, 255, 255, 0.4)';
+    for (let i = 0; i < 200; i++) {
+      context.fillRect((i * 37 + shift) % canvas.width, (i * 53) % canvas.height, 40, 40);
+    }
+  });
+  stage.innerHTML = '';
+  return result;
+}
+
+async function main() {
+  const report = { cores: navigator.hardwareConcurrency };
+  const put = (name, values) => {
+    for (const [key, value] of Object.entries(values)) report[`${name}_${key}`] = Math.round(value * 10) / 10;
+  };
+  const step = async (name, run) => { statusLine.textContent = name; put(name, await run()); };
+  await new Promise(resolve => setTimeout(resolve, 500));
+  await step('raf', () => animate(SECONDS));
+  await step('timer', () => timers(200, 4));
+  await step('js1', async () => ({ ms: timed(() => work(LOOP)) }));
+  await step('jsN', async () => ({ ms: await workers(WORKERS, LOOP) }));
+  await step('scroll', scrolling);
+  await step('paint', painting);
+  statusLine.textContent = 'reporting';
+  await fetch('/report?' + new URLSearchParams(report));
+  statusLine.textContent = 'done';
+}
+
+main().catch(error => { statusLine.textContent = 'failed: ' + error; fetch('/report?error=' + encodeURIComponent(error)); });
+</script>

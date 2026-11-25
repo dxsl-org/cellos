@@ -1198,6 +1198,17 @@ rationale = "registry::init is called only from dev::init, which kmain runs unde
 review = "kernel/src/dev/registry.rs:init; kernel/src/dev/registry.rs:resolve; kernel/src/dev/registry.rs:register_driver; kernel/src/dev.rs:init; kernel/src/main.rs:797"
 
 [[global]]
+key = "kernel::arch::x86_64::hypervisor::svm_registry::EPT_VALIDATED @cfg(target_arch = \"x86_64\")"
+lifetime = "per-cpu"
+mutation = "atomic"
+owner = "hypervisor::svm_registry::validate_ept_on_this_cpu: slot N is the NestedPageTable epoch CPU N last ran INVEPT for (0 before any); read and written by CPU N only, from run_vcpu_hal"
+contexts = ["boot", "normal"]
+seal = "none: rewritten whenever a CPU invalidates an EPT context before a VM entry"
+retirement = "never: lives for the whole run; a stale slot costs one more INVEPT, never a skipped one"
+rationale = "Relaxed load/store on one u64 per CPU: run_vcpu_hal masks interrupts from before the load to the VM entry, so slot N has a single reader and writer and nothing interleaves on CPU N. A slot equal to the table's epoch means this CPU invalidated the root after the table's latest leaf change (an epoch is never drawn twice, so a freed table's root frame cannot match either); the INVEPT is then skipped unless the vCPU last ran on another CPU (VmxVcpu::last_cpu). Called from the RunVcpu syscall and the test-hooks boot fixtures, never an ISR."
+review = "kernel/src/arch/x86_64/hypervisor/svm_registry.rs:validate_ept_on_this_cpu; kernel/src/arch/x86_64/hypervisor/svm_registry.rs:run_vcpu_hal; kernel/src/arch/x86_64/memory/ept.rs:NestedPageTable::invalidate; hal/arch/x86/src/x86_64/vmx_vcpu.rs:VmxVcpu::last_cpu"
+
+[[global]]
 key = "kernel::arch::x86_64::hypervisor::svm_registry::SVM_ASIDS @cfg(target_arch = \"x86_64\")"
 lifetime = "global"
 mutation = "atomic"
@@ -1218,6 +1229,17 @@ seal = "none: VMs are created and reaped for the whole run (map allocated by the
 retirement = "reap_vms_for(owner) from the yield_cpu root-retirement funnel (task.rs, beside release_shm_for, before the quota row is deregistered) removes the incarnation's VMs under the lock and drops them (frees VMCB/NPT/guest RAM and refunds their guest charge) outside it"
 rationale = "IRQ-masking spinlock with order VM_REGISTRY -> FRAME_ALLOCATOR; the reaper can run in the timer/IPI ISR via yield_cpu and cannot self-deadlock. Finding: run_vcpu_hal holds this global lock across the whole VMRUN world switch, serializing every VM on every hart and making a retirement on another hart spin until the guest exits (bounded because the VMCB intercepts physical INTR with V_INTR_MASKING)."
 review = "kernel/src/arch/x86_64/hypervisor/svm_registry.rs:create_vm; kernel/src/arch/x86_64/hypervisor/svm_registry.rs:run_vcpu_hal; kernel/src/arch/x86_64/hypervisor/svm_registry.rs:reap_vms_for; kernel/src/task.rs:yield_cpu; hal/arch/x86/src/x86_64/vmcb.rs:init"
+
+[[global]]
+key = "kernel::arch::x86_64::memory::ept::NEXT_EPOCH @cfg(target_arch = \"x86_64\")"
+lifetime = "global"
+mutation = "atomic"
+owner = "arch::memory::ept: next_epoch draws the epoch of a NestedPageTable when it is made (new) and after every leaf change (map, map_device_frame, unmap through invalidate)"
+contexts = ["boot", "normal"]
+seal = "none: advanced on every table creation and leaf change for the whole run"
+retirement = "never: an epoch is never drawn twice in a boot, so a CPU's record of an old table matches no later one"
+rationale = "fetch_add(Relaxed) on a u64 starting at 1 (0 is a CPU's record before any INVEPT); epochs only need to be unique, not ordered with any other memory, and a u64 does not wrap in a boot. Drawn from the CreateVm and MapGuestMemory syscalls and the test-hooks boot fixtures, never an ISR."
+review = "kernel/src/arch/x86_64/memory/ept.rs:next_epoch; kernel/src/arch/x86_64/memory/ept.rs:NestedPageTable::new; kernel/src/arch/x86_64/memory/ept.rs:NestedPageTable::invalidate; kernel/src/arch/x86_64/hypervisor/svm_registry.rs:validate_ept_on_this_cpu"
 
 [[global]]
 key = "kernel::hypervisor::registry::NEXT_VM_ID"

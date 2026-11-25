@@ -33,6 +33,9 @@ pub struct SurfaceState {
     title: alloc::string::String,
     /// Icon on the Cell Tab (`SET_ICON`); generic until the owner names one.
     icon: ostd::display::linear::icons::LineIcon,
+    /// What the pointer looks like over the content (`SET_POINTER_IMAGE`);
+    /// the arrow until the owner names another.
+    pub pointer: crate::pointer_look::PointerLook,
     pub(super) state: wire::display::WindowState,
     pub(super) normal_rect: Rect,
     pub(super) minimized_from: wire::display::WindowState,
@@ -43,6 +46,9 @@ pub struct SurfaceState {
     /// Behind another Cell Tab of its frame: kept `Normal` so it can still be
     /// configured to the frame's size, but neither painted nor given input.
     behind_tab: bool,
+    /// Clipboard serial this surface last saw (`crate::clipboard`); 0 = none.
+    /// Kept here so it goes with the surface, whatever removes it.
+    pub clipboard_seen: u32,
 }
 
 impl SurfaceState {
@@ -61,6 +67,7 @@ impl SurfaceState {
             role,
             title: alloc::string::String::new(),
             icon: ostd::display::linear::icons::LineIcon::Application,
+            pointer: crate::pointer_look::PointerLook::Arrow,
             state: wire::display::WindowState::Normal,
             minimized_from: wire::display::WindowState::Normal,
             normal_rect: rect,
@@ -69,6 +76,7 @@ impl SurfaceState {
             pending_close: None,
             serial: 0,
             behind_tab: false,
+            clipboard_seen: 0,
         }
     }
 

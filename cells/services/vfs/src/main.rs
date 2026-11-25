@@ -27,6 +27,8 @@ mod caller;
 mod dir_admission;
 mod dir_ops;
 #[cfg(test)]
+mod dir_ops_disk_tests;
+#[cfg(test)]
 mod dir_ops_tests;
 mod dirs;
 mod disk_cellosfs;

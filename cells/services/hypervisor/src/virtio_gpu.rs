@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 //! VirtIO-GPU 2D device model (DeviceID=16, MMIO slot 3, SPI 19).
 
+mod client_pointer;
 mod client_scanout;
 mod command;
 mod dispatch;
@@ -31,6 +32,14 @@ impl Presenter {
             Self::Compositor(bridge) => bridge.notify_damage(rect),
             Self::Client(client) => client.notify_damage(resources, rect),
         }
+    }
+
+    /// Whether the guest's cursor plane is drawn into the scanout. A launcher's
+    /// window lies under the host pointer, so there the guest's cursor commands
+    /// are consumed and nothing is drawn: one pointer, and no scanout copy per
+    /// pointer move.
+    fn draws_guest_cursor(&self) -> bool {
+        matches!(self, Self::Compositor(_))
     }
 }
 
@@ -183,19 +192,28 @@ impl VirtioDevice for GpuDev {
                     )
                 },
             ),
-            1 => process_notify(
-                vm_id,
-                qcfg,
-                &mut self.last_avail[1],
-                &mut self.used_idx[1],
-                |bufs| dispatch::handle_cursor(&mut self.resources, bufs, vm_id),
-            ),
+            1 => {
+                let presenter = &mut self.presenter;
+                let resources = &mut self.resources;
+                process_notify(
+                    vm_id,
+                    qcfg,
+                    &mut self.last_avail[1],
+                    &mut self.used_idx[1],
+                    |bufs| match presenter {
+                        Presenter::Compositor(_) => dispatch::handle_cursor(resources, bufs, vm_id),
+                        Presenter::Client(client) => {
+                            dispatch::handle_client_cursor(client, resources, bufs, vm_id)
+                        }
+                    },
+                )
+            }
             _ => return false,
         };
         if published == 0 {
             return false;
         }
-        if queue == 1 {
+        if queue == 1 && self.presenter.draws_guest_cursor() {
             if let Some((_, width, height, _)) = self.resources.bound_resource() {
                 self.presenter.notify_damage(
                     &self.resources,

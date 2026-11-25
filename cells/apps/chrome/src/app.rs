@@ -7,22 +7,32 @@ use viui::window_lifecycle::{ClosePolicy, WindowEvent, WindowLifecycle};
 use wire::display::{PixelFormat, Rect};
 use wire::vmm_session::VmmEvent;
 
+use crate::clipboard::GuestClipboard;
 use crate::frame::GuestFrame;
 use crate::guest::{Guest, InputOutbox};
 use crate::input_bridge::InputBridge;
+use crate::pointer::WindowPointer;
 
 const DEFAULT_WIDTH: u32 = 1024;
 const DEFAULT_HEIGHT: u32 = 680;
 
-/// What the window shows when no guest frame is on screen.
-fn paint_status(surface: &mut ViSurface, fonts: &mut TextFonts, text: &str) {
-    let palette = theme::system();
-    let (width, height, stride) = (surface.width(), surface.height(), surface.stride());
-    let bg = palette.bg();
+/// Shown until Chromium's first frame.
+const STARTING: &str = "Starting Chromium in a Linux guest...";
+
+/// Fill the window with the system background.
+fn clear(surface: &mut ViSurface) {
+    let bg = theme::system().bg();
     let fill = [bg.b(), bg.g(), bg.r(), bg.a()];
     for pixel in surface.pixels_mut().as_chunks_mut::<4>().0 {
         pixel.copy_from_slice(&fill);
     }
+}
+
+/// What the window shows when no guest frame is on screen.
+fn paint_status(surface: &mut ViSurface, fonts: &mut TextFonts, text: &str) {
+    clear(surface);
+    let palette = theme::system();
+    let (width, height, stride) = (surface.width(), surface.height(), surface.stride());
     let fg = palette.text_secondary();
     fonts.draw_text(
         surface.pixels_mut(),
@@ -37,6 +47,14 @@ fn paint_status(surface: &mut ViSurface, fonts: &mut TextFonts, text: &str) {
         [fg.b(), fg.g(), fg.r(), fg.a()],
         (0, 0, width as i32, height as i32),
     );
+    surface.damage_all();
+}
+
+/// The whole guest frame, clipped to the window, over the window background.
+fn paint_frame(surface: &mut ViSurface, frame: &GuestFrame) {
+    clear(surface);
+    let (width, height, stride) = (surface.width(), surface.height(), surface.stride());
+    let _ = frame.copy_to(frame.bounds(), surface.pixels_mut(), stride, width, height);
     surface.damage_all();
 }
 
@@ -59,11 +77,7 @@ pub fn cell_main() {
         (screen_h.saturating_sub(height) / 2) as i32,
     );
     let mut fonts = TextFonts::new();
-    paint_status(
-        &mut surface,
-        &mut fonts,
-        "Starting Chromium in a Linux guest...",
-    );
+    paint_status(&mut surface, &mut fonts, STARTING);
 
     let guest = match Guest::start(width, height) {
         Ok(guest) => {
@@ -82,9 +96,17 @@ pub fn cell_main() {
 
     let mut window = WindowLifecycle::new(ClosePolicy::Accept);
     let mut frame: Option<GuestFrame> = None;
+    // The guest's picture is in the window. Not before the guest has drawn: a
+    // new scanout is blank, and until Chromium's first frame so is cage's
+    // output, which would put an empty guest screen in the window.
+    let mut shown = false;
+    // Chromium has been on screen, so the guest stopping is Chromium ending.
+    let mut started = false;
     let mut bridge = InputBridge::new();
     let mut outbox = InputOutbox::new();
-    loop {
+    let mut pointer = WindowPointer::new();
+    let mut clipboard = GuestClipboard::new();
+    'window: loop {
         let mut closed = false;
         let mut resized = false;
         window.poll(&mut surface, |event| match event {
@@ -110,9 +132,15 @@ pub fn cell_main() {
             continue;
         };
         if resized {
-            // The old frame no longer matches; the guest re-announces at the new size.
-            frame = None;
-            paint_status(&mut surface, &mut fonts, "Resizing...");
+            match &frame {
+                // The picture stays, clipped to the new size, until the guest
+                // redraws at it. A size the guest sees as unchanged (it rounds the
+                // width down to 8 pixels; a restore changes nothing) brings no
+                // new frame at all.
+                Some(frame) if shown => paint_frame(&mut surface, frame),
+                _ if started => paint_status(&mut surface, &mut fonts, "Resizing..."),
+                _ => paint_status(&mut surface, &mut fonts, STARTING),
+            }
             guest.resize(surface.width(), surface.height());
         }
 
@@ -127,6 +155,8 @@ pub fn cell_main() {
             }
         }
         busy |= outbox.flush(guest);
+        // Offers arrive with the compositor's frames, routed by the polls above.
+        busy |= clipboard.poll(&surface, guest);
 
         while let Some(event) = guest.next_event() {
             busy = true;
@@ -142,6 +172,7 @@ pub fn cell_main() {
                         width,
                         height,
                     ));
+                    shown = false;
                 }
                 VmmEvent::Damage {
                     x,
@@ -150,6 +181,14 @@ pub fn cell_main() {
                     height,
                 } => {
                     let Some(frame) = &frame else { continue };
+                    if !shown {
+                        if frame.has_content() {
+                            shown = true;
+                            started = true;
+                            paint_frame(&mut surface, frame);
+                        }
+                        continue;
+                    }
                     let rect = Rect {
                         x: x as i32,
                         y: y as i32,
@@ -161,7 +200,30 @@ pub fn cell_main() {
                         surface.damage(copied);
                     }
                 }
+                VmmEvent::Pointer {
+                    grant,
+                    width,
+                    height,
+                    hot_x,
+                    hot_y,
+                } => pointer.show(
+                    &surface,
+                    comp_tid,
+                    guest.hypervisor_tid(),
+                    grant,
+                    (width, height),
+                    (hot_x, hot_y),
+                ),
+                VmmEvent::PointerHidden => pointer.hide(&surface),
+                VmmEvent::Clipboard { grant, len } => {
+                    clipboard.guest_copied(&surface, guest, grant, len)
+                }
                 VmmEvent::Exited { .. } => {
+                    if started {
+                        // Chromium ran and is gone (quit from inside, or it
+                        // crashed): its window goes with it.
+                        break 'window;
+                    }
                     frame = None;
                     paint_status(&mut surface, &mut fonts, "The Linux guest has stopped.");
                 }
@@ -173,5 +235,6 @@ pub fn cell_main() {
             let _ = ostd::syscall::sys_set_timer(1);
         }
     }
+    surface.destroy();
     ostd::syscall::sys_exit(0);
 }

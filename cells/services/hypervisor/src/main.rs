@@ -43,6 +43,9 @@ abi::declare_syscalls![
     Recv,
     RecvTimeout,
     Log,
+    // A thread per vCPU after the first (x86 `run_loop_x86`). Threads only:
+    // the manifest's `spawn` right (new Cells) stays off.
+    Spawn,
     LookupServiceBound,
     // Kernel filesystem access (read vmlinuz + initrd)
     OpenCap,
@@ -84,6 +87,18 @@ abi::declare_syscalls![
 mod backend_fault_control;
 #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
 mod vmm;
+
+// Clipboard lines on the guest's virtio-console: carried on x86 only, the
+// aarch64 console stays a log.
+#[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
+#[cfg_attr(target_arch = "aarch64", allow(dead_code))]
+mod base64;
+#[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
+#[cfg_attr(target_arch = "aarch64", allow(dead_code))]
+mod clipboard_line;
+#[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
+#[cfg_attr(target_arch = "aarch64", allow(dead_code))]
+mod clipboard_port;
 
 // ── aarch64 (EL2) personality ─────────────────────────────────────────────────
 #[cfg(target_arch = "aarch64")]
@@ -130,6 +145,8 @@ mod virtqueue_guard;
 #[cfg(target_arch = "x86_64")]
 mod acpi;
 #[cfg(target_arch = "x86_64")]
+mod acpi_pm;
+#[cfg(target_arch = "x86_64")]
 mod app_session_x86;
 #[cfg(target_arch = "x86_64")]
 mod boot_info;
@@ -138,9 +155,15 @@ mod boot_x86;
 #[cfg(target_arch = "x86_64")]
 mod boot_x86_profile;
 #[cfg(target_arch = "x86_64")]
+mod client_clipboard;
+#[cfg(target_arch = "x86_64")]
 mod cmos_rtc;
 #[cfg(target_arch = "x86_64")]
+mod exit_counts;
+#[cfg(target_arch = "x86_64")]
 mod loader_image_x86;
+#[cfg(target_arch = "x86_64")]
+mod p9;
 #[cfg(target_arch = "x86_64")]
 mod pic_8259;
 #[cfg(target_arch = "x86_64")]
@@ -149,6 +172,10 @@ mod pit_8253;
 mod run_loop_x86;
 #[cfg(target_arch = "x86_64")]
 mod uart_16550;
+#[cfg(target_arch = "x86_64")]
+mod virtio_9p;
+#[cfg(target_arch = "x86_64")]
+mod yield_lock;
 #[cfg(target_os = "none")]
 ostd::declare_custom_heap!(10 * 1024 * 1024);
 

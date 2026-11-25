@@ -10,11 +10,14 @@
 extern crate std;
 
 extern crate alloc;
+use alloc::format;
 
+mod clipboard;
 mod grid;
 mod keymap;
 #[cfg(test)]
 mod roundtrip;
+mod selection;
 mod session;
 mod sink;
 
@@ -29,7 +32,9 @@ use viui::theme::{self, ViTheme};
 use wire::display::PixelFormat;
 
 use crate::grid::{Color as GridColor, TerminalCell, Width};
-use crate::session::{TerminalSession, MAX_COLS, MAX_ROWS, MIN_COLS, MIN_ROWS};
+use crate::keymap::{clip_chord, ClipChord};
+use crate::selection::{Geometry, Selector};
+use crate::session::{Pasted, TerminalSession, MAX_COLS, MAX_ROWS, MIN_COLS, MIN_ROWS};
 
 abi::declare_manifest!(block_io = false, network = false, spawn = true);
 abi::declare_syscalls![
@@ -62,6 +67,7 @@ pub struct TerminalApp {
     pub height: u32,
     pub cell_w: f32,
     pub cell_h: f32,
+    pub selector: Selector,
 }
 
 impl TerminalApp {
@@ -76,6 +82,7 @@ impl TerminalApp {
             height,
             cell_w,
             cell_h,
+            selector: Selector::default(),
         }
     }
 
@@ -84,6 +91,7 @@ impl TerminalApp {
         self.height = height;
         let (cols, rows) = grid_dims(width, height, self.cell_w, self.cell_h);
         self.session.resize(cols, rows);
+        self.selector.clear();
     }
 
     pub fn render(&self, surf: &mut ViSurface, fonts: &mut TextFonts) {
@@ -98,8 +106,8 @@ impl TerminalApp {
 
         // Pass 1: cell backgrounds that differ from the window background. All fills come
         // before any glyph so a glyph's 2 px clip overhang is never painted over.
-        for (col_x, row_y, cell, span) in self.visible_cells() {
-            let (_, bg) = cell_colors(cell, colors);
+        for (col_x, row_y, cell, span, selected) in self.visible_cells() {
+            let (_, bg) = cell_colors(cell, colors, selected);
             if bg != colors.bg {
                 fill_rect(
                     surf,
@@ -113,7 +121,7 @@ impl TerminalApp {
         }
 
         // Pass 2: glyphs (character plus its combining mark), bold in the bold face.
-        for (col_x, row_y, cell, span) in self.visible_cells() {
+        for (col_x, row_y, cell, span, selected) in self.visible_cells() {
             if cell.ch == ' ' && cell.mark.is_none() {
                 continue;
             }
@@ -124,7 +132,7 @@ impl TerminalApp {
                     .mark
                     .map_or(0, |mark| mark.encode_utf8(&mut buf[len..]).len());
             let text = core::str::from_utf8(&buf[..len]).unwrap_or("\u{fffd}");
-            let (fg, _) = cell_colors(cell, colors);
+            let (fg, _) = cell_colors(cell, colors, selected);
             let face = if cell.pen.bold {
                 FontFace::MonoBold
             } else {
@@ -170,9 +178,10 @@ impl TerminalApp {
     }
 
     /// Every cell that fits the window and draws something itself (no wide-character
-    /// trailing halves), with its pixel origin and column span.
-    fn visible_cells(&self) -> impl Iterator<Item = (f32, f32, &TerminalCell, usize)> + '_ {
+    /// trailing halves), with its pixel origin, column span and whether it is selected.
+    fn visible_cells(&self) -> impl Iterator<Item = (f32, f32, &TerminalCell, usize, bool)> + '_ {
         let grid = &self.session.grid;
+        let selection = self.selector.selection();
         let (sw, sh) = (self.width as f32, self.height as f32);
         let (cell_w, cell_h) = (self.cell_w, self.cell_h);
         (0..grid.rows)
@@ -189,9 +198,43 @@ impl TerminalApp {
                             Width::Wide => 2,
                             Width::Narrow => 1,
                         };
-                        Some((col_x, row_y, cell, span))
+                        let selected = selection.is_some_and(|s| s.contains(c, r));
+                        Some((col_x, row_y, cell, span, selected))
                     })
             })
+    }
+
+    /// Where the grid sits in the window, for mouse selection.
+    fn geometry(&self) -> Geometry {
+        Geometry {
+            cell_w: self.cell_w,
+            cell_h: self.cell_h,
+            cols: self.session.grid.cols,
+            rows: self.session.grid.rows,
+        }
+    }
+
+    /// Ctrl+Shift+C: the selection's text onto the clipboard; no selection, nothing.
+    fn copy_selection(&self, surf: &ViSurface) {
+        if let Some(selection) = self.selector.selection() {
+            clipboard::copy(surf, &selection.text(&self.session.grid));
+        }
+    }
+
+    /// Paste clipboard text into the session; returns whether the grid changed.
+    fn paste(&mut self, text: &str) -> bool {
+        match self.session.paste(text) {
+            Pasted::Sent => {
+                ostd::io::println(&format!("[terminal] pasted {} bytes", text.len()));
+                false
+            }
+            Pasted::Dropped(Some(status)) => {
+                ostd::io::println(&format!("[terminal] paste refused: {:?}", status));
+                false
+            }
+            Pasted::Dropped(None) => false,
+            Pasted::Failed => true,
+        }
     }
 }
 
@@ -276,11 +319,12 @@ fn resolve(color: GridColor, default: Color) -> Color {
     }
 }
 
-/// Foreground and background pixels of a cell; inverse swaps the resolved pair.
-fn cell_colors(cell: &TerminalCell, colors: TermColors) -> (Color, Color) {
+/// Foreground and background pixels of a cell; inverse swaps the resolved pair, and so
+/// does selection (a selected inverse cell shows its plain colours).
+fn cell_colors(cell: &TerminalCell, colors: TermColors, selected: bool) -> (Color, Color) {
     let fg = resolve(cell.pen.fg, colors.fg);
     let bg = resolve(cell.pen.bg, colors.bg);
-    if cell.pen.inverse {
+    if cell.pen.inverse != selected {
         (bg, fg)
     } else {
         (fg, bg)
@@ -330,6 +374,7 @@ fn cell_main() {
     let mut painted_serial = theme::system_serial();
     app.render(&mut surf, &mut fonts);
     ostd::io::println("[terminal] Terminal surface ready. Entering event loop.");
+    let mut paste = clipboard::PasteRequest::default();
 
     loop {
         let mut need_render = false;
@@ -337,16 +382,29 @@ fn cell_main() {
 
         for ev in ostd::input::poll_events(16) {
             busy = true;
+            let geom = app.geometry();
             match ev {
+                InputEvent::MouseMove { x, y, .. } => {
+                    need_render |= app.selector.on_move(x, y, geom);
+                }
                 InputEvent::MouseButton {
                     button: MouseButton::Left,
                     state: KeyState::Pressed,
                 } => {
                     let _ = ostd::input::request_focus();
+                    need_render |= app.selector.on_press(geom);
                 }
-                InputEvent::Key(ke) => {
-                    need_render |= app.session.on_key(&ke);
-                }
+                InputEvent::MouseButton {
+                    button: MouseButton::Left,
+                    state: KeyState::Released,
+                } => app.selector.on_release(),
+                // Clipboard chords are the Terminal's: never mapped to shell input.
+                InputEvent::Key(ke) => match clip_chord(&ke) {
+                    Some(_) if ke.state != KeyState::Pressed => {}
+                    Some(ClipChord::Copy) => app.copy_selection(&surf),
+                    Some(ClipChord::Paste) => paste.request(&surf),
+                    None => need_render |= app.session.on_key(&ke),
+                },
                 _ => {}
             }
         }
@@ -366,6 +424,11 @@ fn cell_main() {
                 }
                 _ => {}
             }
+        }
+
+        if let Some(text) = paste.take_text(&surf) {
+            need_render |= app.paste(&text);
+            busy = true;
         }
 
         if let Some(serial) = close_serial {
@@ -480,7 +543,7 @@ mod tests {
                 PAD_Y + (rows - 1) as f32 * cell_h,
             );
             assert_eq!(
-                app.visible_cells().last().map(|(x, y, _, _)| (x, y)),
+                app.visible_cells().last().map(|(x, y, ..)| (x, y)),
                 Some(last),
                 "{w}x{h}"
             );
@@ -548,22 +611,25 @@ mod tests {
             // Default cell: theme text on theme background; inverse swaps them, so an
             // inverse default cell paints a text-coloured block on a light theme too.
             let mut cell = TerminalCell::BLANK;
-            assert_eq!(cell_colors(&cell, colors), (colors.fg, colors.bg));
+            assert_eq!(cell_colors(&cell, colors, false), (colors.fg, colors.bg));
+            // Selection swaps the pair too, and undoes inverse.
+            assert_eq!(cell_colors(&cell, colors, true), (colors.bg, colors.fg));
             cell.pen.inverse = true;
-            assert_eq!(cell_colors(&cell, colors), (colors.bg, colors.fg));
-            assert_ne!(cell_colors(&cell, colors).1, colors.bg);
+            assert_eq!(cell_colors(&cell, colors, false), (colors.bg, colors.fg));
+            assert_eq!(cell_colors(&cell, colors, true), (colors.fg, colors.bg));
+            assert_ne!(cell_colors(&cell, colors, false).1, colors.bg);
 
             // Explicit colours keep their values whatever the theme.
             cell.pen.inverse = false;
             cell.pen.fg = GridColor::Indexed(1);
             cell.pen.bg = GridColor::Rgb(1, 2, 3);
             assert_eq!(
-                cell_colors(&cell, colors),
+                cell_colors(&cell, colors, false),
                 (Color::rgb(205, 49, 49), Color::rgb(1, 2, 3))
             );
             cell.pen.inverse = true;
             assert_eq!(
-                cell_colors(&cell, colors),
+                cell_colors(&cell, colors, false),
                 (Color::rgb(1, 2, 3), Color::rgb(205, 49, 49))
             );
         }
@@ -576,7 +642,7 @@ mod tests {
         let row0: std::vec::Vec<_> = app
             .visible_cells()
             .take(3)
-            .map(|(x, y, cell, span)| (x, y, cell.ch, span))
+            .map(|(x, y, cell, span, _)| (x, y, cell.ch, span))
             .collect();
         assert_eq!(
             row0,
@@ -586,6 +652,13 @@ mod tests {
                 (35.0, 6.0, 'b', 1)
             ]
         );
+        // A drag onto a wide character's trailing half selects the character.
+        let geom = app.geometry();
+        app.selector.on_move(8, 6, geom);
+        app.selector.on_press(geom);
+        app.selector.on_move(8 + 9 * 2, 6, geom);
+        let selected: std::vec::Vec<_> = app.visible_cells().take(4).map(|c| c.4).collect();
+        assert_eq!(selected, [true, true, false, false]);
         // 720 px fit 79 whole columns after the 8 px pad, the grid's own width; 26 rows;
         // minus one trailing half.
         assert_eq!(app.visible_cells().count(), 79 * 26 - 1);

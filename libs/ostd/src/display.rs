@@ -16,6 +16,7 @@
 //! ```
 
 pub mod appearance;
+pub mod clipboard;
 mod dispatcher;
 mod events;
 mod ipc;

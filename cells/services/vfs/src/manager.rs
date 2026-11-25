@@ -13,6 +13,7 @@ mod owned_state;
 pub(crate) mod read_path_selftest;
 #[cfg(test)]
 mod read_path_tests;
+mod rename;
 #[cfg(test)]
 mod tests;
 
@@ -340,28 +341,6 @@ impl VfsManager {
             .backend_mut(path)
             .map_or(Err(FsError::Unavailable), |b| b.rmdir_recursive(path));
         self.mark_tree(path);
-        result
-    }
-
-    /// `Unsupported` across two backends: no backend renames between mounts.
-    pub fn rename_no_replace(&mut self, old: &str, new: &str) -> Result<(), FsError> {
-        let (Some(old_backend), Some(new_backend)) =
-            (self.mounts.backend(old), self.mounts.backend(new))
-        else {
-            return Err(FsError::Unavailable);
-        };
-        if !core::ptr::eq(old_backend, new_backend) {
-            return Err(FsError::Unsupported);
-        }
-        if !self.healthy(old) || !self.healthy(new) {
-            return Err(FsError::Unavailable);
-        }
-        let result = self
-            .mounts
-            .backend_mut(old)
-            .map_or(Err(FsError::Unavailable), |b| b.rename_no_replace(old, new));
-        self.mark_binding(old);
-        self.mark_binding(new);
         result
     }
 

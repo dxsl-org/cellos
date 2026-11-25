@@ -1,6 +1,7 @@
 use crate::virtqueue::DescBuf;
 
 use super::{
+    client_scanout::ClientScanout,
     command,
     resource::{ResourceError, ResourceTable},
     Presenter,
@@ -88,6 +89,33 @@ pub fn handle_cursor(resources: &mut ResourceTable, bufs: &[DescBuf], vm_id: usi
         _ => Err(ResourceError::InvalidParameter),
     }
     .map_or(0, |_| 0)
+}
+
+/// The cursor queue of a guest shown in a launcher's window: the cursor image
+/// goes to the launcher (resource 0 hides it); positions are the host
+/// pointer's, so `MOVE_CURSOR` changes nothing. A resource this table cannot
+/// show as a cursor (unknown, larger than 64x64) changes nothing either.
+pub fn handle_client_cursor(
+    client: &mut ClientScanout,
+    resources: &ResourceTable,
+    bufs: &[DescBuf],
+    vm_id: usize,
+) -> u32 {
+    let Some(header) = command::read_header(bufs, vm_id) else {
+        return 0;
+    };
+    if header.command != command::UPDATE_CURSOR {
+        return 0;
+    }
+    let Some(cmd) = command::parse_cursor(bufs, vm_id, true) else {
+        return 0;
+    };
+    if cmd.resource_id == 0 {
+        client.update_cursor(None);
+    } else if let Ok((width, height, pixels)) = resources.cursor_image(vm_id, cmd.resource_id) {
+        client.update_cursor(Some((width, height, cmd.hot_x, cmd.hot_y, pixels)));
+    }
+    0
 }
 
 fn respond(

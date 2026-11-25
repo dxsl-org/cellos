@@ -13,6 +13,7 @@ use crate::{
     boot_info::{self, BootInfoParams},
     loader_image_x86, run_loop_x86, vmm,
 };
+use alloc::vec::Vec;
 use ostd::io::println;
 use types::{ViError, ViResult};
 /// 2 MiB alignment for the initramfs placement.
@@ -68,9 +69,9 @@ pub fn run() {
     let profile = GuestProfile::select(app_mode);
 
     match boot(profile) {
-        Some((vm_id, vcpu_id, disk)) => {
+        Some((vm_id, vcpus, disk)) => {
             println("[hv-x86] vCPU ready — entering run loop");
-            run_loop_x86::run(vm_id, vcpu_id, disk, session);
+            run_loop_x86::run(vm_id, &vcpus, disk, session);
             println("[hv-x86] guest exited");
         }
         None => {
@@ -86,22 +87,35 @@ pub fn run() {
     }
 }
 
-/// Everything before the run loop: guest RAM, kernel, initramfs, ACPI, boot
-/// info, vCPU and disk. `None` after logging the failed step.
+/// Everything before the run loop: guest RAM, kernel, initramfs, vCPUs, ACPI,
+/// boot info and disk. Returns the VM and its vCPU ids (the first one's
+/// first); `None` after logging the failed step.
 #[allow(clippy::type_complexity)]
-fn boot(profile: GuestProfile) -> Option<(usize, usize, Option<(PersistentDisk, DiskSpec)>)> {
+fn boot(profile: GuestProfile) -> Option<(usize, Vec<usize>, Option<(PersistentDisk, DiskSpec)>)> {
     // Open the disk first: a missing Chromium image must fail before the
     // large guest-RAM carve.
     let disk = open_disk(profile)?;
-    let vm_id = vmm::create_vm(profile.ram_pages());
-    if vm_id == 0 || vm_id == usize::MAX {
+    // The largest size the kernel can carve; a smaller one is said out loud,
+    // since the guest then has less than its profile asks for.
+    let sizes = profile.ram_sizes();
+    let Some((vm_id, ram_size)) = sizes.iter().find_map(|&size| {
+        let vm_id = vmm::create_vm((size / 4096) as usize);
+        (vm_id != 0 && vm_id != usize::MAX).then_some((vm_id, size))
+    }) else {
         // Causes, in likelihood order: HypervisorCap not granted to this cell
         // (CreateVm → PermissionDenied), SVM root not active, or no contiguous
         // guest-RAM run. The kernel logs the precise reason (`[hv-x86] …`).
         println("[hv-x86] create_vm failed — see kernel log (cap / SVM / OOM)");
         return None;
+    };
+    if ram_size != sizes[0] {
+        println(&alloc::format!(
+            "[hv-x86] guest RAM: {} MiB ({} MiB did not fit)",
+            ram_size >> 20,
+            sizes[0] >> 20
+        ));
     }
-    if vmm::map_guest_memory(vm_id, 0, profile.ram_size() as usize, true) == usize::MAX {
+    if vmm::map_guest_memory(vm_id, 0, ram_size as usize, true) == usize::MAX {
         println("[hv-x86] map_guest_memory failed");
         return None;
     }
@@ -159,8 +173,31 @@ fn boot(profile: GuestProfile) -> Option<(usize, usize, Option<(PersistentDisk, 
         initrd_size
     ));
 
+    // ── vCPUs: the first at the PVH entry (RBX = hvm_start_info GPA); the
+    //    others wait for the guest to start them. A kernel that gives fewer
+    //    (SVM: one) settles the count before the MADT names them. ─────────────
+    let first = vmm::create_vcpu(vm_id, entry32);
+    if first == 0 || first == usize::MAX {
+        println("[hv-x86] create_vcpu failed");
+        return None;
+    }
+    let asked = usize::from(profile.vcpus());
+    let mut vcpus = alloc::vec![first];
+    while vcpus.len() < asked {
+        let vcpu_id = vmm::create_vcpu(vm_id, 0);
+        if vcpu_id == 0 || vcpu_id == usize::MAX {
+            break;
+        }
+        vcpus.push(vcpu_id);
+    }
+    println(&alloc::format!(
+        "[hv-x86] guest vCPUs: {} (asked {})",
+        vcpus.len(),
+        asked
+    ));
+
     // ── ACPI tables (Alpine requires them; PVH passes rsdp via start_info) ────
-    let (acpi_blob, rsdp_paddr) = acpi::build();
+    let (acpi_blob, rsdp_paddr) = acpi::build(vcpus.len() as u8);
     if wg(vm_id, acpi::ACPI_BASE_GPA, &acpi_blob).is_err() {
         println("[hv-x86] write ACPI tables failed");
         return None;
@@ -168,7 +205,7 @@ fn boot(profile: GuestProfile) -> Option<(usize, usize, Option<(PersistentDisk, 
 
     // ── Boot-info blob (hvm_start_info + e820 + initramfs module + cmdline) ───
     let (blob, start_info_gpa) = boot_info::build(&BootInfoParams {
-        ram_size: profile.ram_size(),
+        ram_size,
         initrd_gpa,
         initrd_size,
         cmdline: &profile.cmdline(),
@@ -178,18 +215,11 @@ fn boot(profile: GuestProfile) -> Option<(usize, usize, Option<(PersistentDisk, 
         println("[hv-x86] write boot_info failed");
         return None;
     }
-
-    // ── vCPU at the PVH entry; RBX = hvm_start_info GPA ───────────────────────
-    let vcpu_id = vmm::create_vcpu(vm_id, entry32);
-    if vcpu_id == 0 || vcpu_id == usize::MAX {
-        println("[hv-x86] create_vcpu failed");
-        return None;
-    }
     let mut rb = [0u64; 32];
-    vmm::vcpu_regs(vm_id, vcpu_id, &mut rb, false);
+    vmm::vcpu_regs(vm_id, first, &mut rb, false);
     rb[3] = start_info_gpa; // RBX (x86 gpr index 3)
-    vmm::vcpu_regs(vm_id, vcpu_id, &mut rb, true);
-    Some((vm_id, vcpu_id, disk))
+    vmm::vcpu_regs(vm_id, first, &mut rb, true);
+    Some((vm_id, vcpus, disk))
 }
 
 /// The guest's only disk. Chrome always runs from its read-only image; the

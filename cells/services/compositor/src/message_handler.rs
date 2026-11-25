@@ -1,6 +1,8 @@
 //! Authenticated display IPC dispatch and owner-exit cleanup.
 
+mod clipboard;
 mod grant;
+mod pointer;
 mod surface;
 mod view;
 mod view_frame;
@@ -25,6 +27,7 @@ pub(crate) struct MessageContext<'a> {
     pub(crate) z_order: &'a mut ZOrder,
     pub(crate) pending_dirty: &'a mut Option<Rect>,
     pub(crate) appearance: &'a mut Appearance,
+    pub(crate) clipboard: &'a mut crate::clipboard::Clipboard,
 }
 
 /// Dispatch one IPC message from a consumer cell or the supervisor.
@@ -38,6 +41,7 @@ pub(crate) fn handle_message(buf: &[u8; 512], sender: usize, context: MessageCon
         z_order,
         pending_dirty,
         appearance,
+        clipboard,
     } = context;
     if buf.is_empty() {
         return;
@@ -80,6 +84,7 @@ pub(crate) fn handle_message(buf: &[u8; 512], sender: usize, context: MessageCon
                 z_order,
                 pending_dirty,
                 appearance,
+                clipboard,
             },
         ),
         wire::display::compositor_ops::ATTACH_GRANT
@@ -107,6 +112,7 @@ pub(crate) fn handle_message(buf: &[u8; 512], sender: usize, context: MessageCon
                 z_order,
                 pending_dirty,
                 appearance,
+                clipboard,
             },
         ),
         wire::display::compositor_ops::SET_APPEARANCE => {
@@ -124,6 +130,13 @@ pub(crate) fn handle_message(buf: &[u8; 512], sender: usize, context: MessageCon
                 });
                 appearance.broadcast(table);
             }
+        }
+        wire::display::compositor_ops::CLIPBOARD_SET
+        | wire::display::compositor_ops::CLIPBOARD_GET => {
+            clipboard::handle(buf, sender, input.keyboard_focus(), table, clipboard)
+        }
+        wire::display::compositor_ops::SET_POINTER_IMAGE => {
+            pointer::set_pointer_image(buf, sender, table)
         }
         _ => {}
     }

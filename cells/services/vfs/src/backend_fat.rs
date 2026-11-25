@@ -9,6 +9,8 @@
 //! fatfs uses interior mutability, so all operations go through `&self`
 //! internally; `&mut self` on the trait is only for RamFS symmetry.
 
+pub(crate) mod rename;
+
 use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -734,6 +736,15 @@ impl FsBackend for FatBackend {
         self.extents.get_mut().clear();
         fs.root_dir().open_file(rel).map_err(file_error)?;
         fs.root_dir().remove(rel).map_err(fat_error)
+    }
+
+    /// See [`rename`] for the contract and where it is not atomic.
+    fn rename_replace(&mut self, old: &str, new: &str) -> Result<(), FsError> {
+        let fs = self.fs.as_ref().ok_or(FsError::Unavailable)?;
+        let (old, new) = (self.rel_nonempty(old)?, self.rel_nonempty(new)?);
+        // A replaced entry's clusters may be reused by any file's next write.
+        self.extents.get_mut().clear();
+        rename::rename(fs, old, new)
     }
 
     /// Recursive delete (`rm -r`). A path resolving to a regular file is

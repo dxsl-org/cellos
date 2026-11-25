@@ -6,7 +6,8 @@
 //! hypervisor shares its scanout Grant and posts damaged rectangles, which are
 //! copied into the window. The window's input is forwarded to the guest's
 //! virtio tablet/keyboard, a resize asks the guest for a new display size, and
-//! closing the window ends the guest (ADR-0017 §5d). Until the guest's first
+//! closing the window ends the guest (ADR-0017 §5d). Clipboard text crosses
+//! between the desktop and the guest both ways. Until the guest's first
 //! frame, and after it stops, the window says so.
 
 #![no_std]
@@ -22,9 +23,13 @@ extern crate alloc;
 
 #[cfg(not(test))]
 mod app;
+#[cfg(not(test))]
+mod clipboard;
 mod frame;
 mod guest;
 mod input_bridge;
+#[cfg(not(test))]
+mod pointer;
 
 abi::declare_manifest!(block_io = true, network = true, spawn = true);
 abi::declare_syscalls![
