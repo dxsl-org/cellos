@@ -3856,7 +3856,7 @@ version = "0.1.0"
 dependencies = [
  "abi",
  "cell-build",
- "chacha20 0.9.1",
+ "chacha20 0.10.2",
  "chacha20poly1305",
  "ed25519-compact",
  "ostd",
