@@ -13,5 +13,5 @@ terminal-sdk = { path = "../terminal", version = "0.1.0" }
 # Ratatui's modular crates, defaults off: no std, crossterm/termion, serde,
 # macros, layout-cache or calendar. Never the `ratatui` facade crate (its
 # dependency on ratatui-widgets re-enables `all-widgets`/`calendar`).
-ratatui-core = { version = "=0.1.0", default-features = false }
-ratatui-widgets = { version = "=0.3.0", default-features = false }
+ratatui-core = { version = "=0.1.2", default-features = false }
+ratatui-widgets = { version = "=0.3.2", default-features = false }
