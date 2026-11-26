@@ -990,6 +990,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "chacha20poly1305"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9b89e1c441e926b9c82a8d023f6e1b7ae0adcfaa7d621814e4d60789bac751cb"
+dependencies = [
+ "aead 0.6.1",
+ "chacha20 0.10.2",
+ "cipher 0.5.2",
+ "poly1305 0.9.1",
+]
+
+[[package]]
 name = "cipher"
 version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1019,7 +1031,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6fed49fa357a85c377c0f920e86100f5326111b09ad69f6de684e324e3ad8097"
 dependencies = [
  "arrayvec",
- "chacha20poly1305",
+ "chacha20poly1305 0.10.1",
  "displaydoc",
  "rand_core 0.6.4",
  "sha2 0.10.9",
@@ -3809,7 +3821,7 @@ version = "0.1.0"
 dependencies = [
  "abi",
  "cell-build",
- "chacha20poly1305",
+ "chacha20poly1305 0.11.0",
  "clatter",
  "kms-codec",
  "ostd",
@@ -3857,7 +3869,7 @@ dependencies = [
  "abi",
  "cell-build",
  "chacha20 0.9.1",
- "chacha20poly1305",
+ "chacha20poly1305 0.11.0",
  "ed25519-compact",
  "ostd",
  "poly1305 0.8.0",
