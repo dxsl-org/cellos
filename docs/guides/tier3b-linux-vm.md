@@ -49,6 +49,15 @@
 > preloaded `data-control.c`) carries the text over a virtio console (`/dev/hvc0`) as
 > base64 lines. In the Terminal, drag to select, Ctrl+Shift+C copies and Ctrl+Shift+V pastes.
 >
+> Chromium's sound plays through the machine's sound card when CellOS has a driver for it:
+> today QEMU's `virtio-sound-pci` (`/bin/virtio-snd`, service `AUDIO`; one stream, 48 kHz
+> 16-bit stereo). The guest sees a virtio sound card from the hypervisor and plays through
+> ALSA (no sound server); the hypervisor forwards the samples to `AUDIO`. Without a driver,
+> or on a physical machine (no HDA or USB-audio driver yet), the guest still plays at the
+> right pace, into silence. `run-desktop.sh` adds `virtio-sound-pci` with QEMU's default
+> audio backend; QEMU builds without a host backend (as on WSL here) produce no audible
+> sound.
+>
 > Chromium's UI appears 21-23 s after the taskbar click on a quiet host (nested KVM). The
 > guest kernel logs at `loglevel=4`: every console byte is a VM exit to the hypervisor Cell,
 > and the full boot log cost about 9 s of that start. Key repeat comes

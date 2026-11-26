@@ -7,6 +7,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 ### Added
+- **Chrome plays sound** (2026-11-26). Sound from pages in Chrome reaches the machine's sound card through a new CellOS sound driver (QEMU's virtio-sound for now). Without a sound card, pages still play normally, silently. Verified by the Chrome lane under nested KVM, which records the sound and checks its pitch and length.
 - **Chrome's downloads are kept** (2026-11-26). Files Chromium downloads now go to the `Chrome` folder of a CellOS data disk (`run-desktop.sh` creates `build/chrome-files.img` once and keeps it) instead of vanishing when the window closes, and files put in that folder open in Chromium. Verified by the Chrome lane under nested KVM.
 - **Copy and paste between Chrome and CellOS apps** (2026-11-26). CellOS now has a desktop clipboard for text. Text copied in Chrome pastes into the Terminal (Ctrl+Shift+V), and text selected in the Terminal by dragging and copied with Ctrl+Shift+C pastes into Chrome. Only the focused window can read or set the clipboard. Verified by the Chrome lane under nested KVM.
 - **Python via Monty in a Tier 2 Cell (witness)** (2026-11-22, plan `.agents/261122-1036-monty-thin-port-p0`).

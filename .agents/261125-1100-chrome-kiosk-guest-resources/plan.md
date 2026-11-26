@@ -37,7 +37,7 @@ before vCPU count.
 | 08 | [Pointer shape](phase-08-pointer-shape.md) | the host pointer takes the guest's cursor image over the window | done (arrow over page, I-beam over omnibox; lane check) |
 | 09 | [Clipboard](phase-09-clipboard.md) | text copies between Chromium and CellOS apps | done (Chromium <-> Terminal both ways; lane checks) |
 | 10 | [Files](phase-10-files.md) | a host folder is Chromium's Downloads and upload source | done (downloads on the data disk; VFS FAT rename under `/mnt/disk/`) |
-| 11 | [Sound](phase-11-sound.md) | Chromium's audio plays through a CellOS audio service | blocked (owner deferred: image pin and allowlist review) |
+| 11 | [Sound](phase-11-sound.md) | Chromium's audio plays through a CellOS audio service | done, checkpoint (tone recorded 5.008 s, 439.3 Hz; lane flaky on today's host, see log) |
 | 12 | [GPU decision](phase-12-gpu-decision.md) | an ADR picks software-only, a virgl proxy, or waiting for a native driver | done (ADR-0037: software only) |
 
 Dependencies: 01 -> 02 -> 03 -> 04 -> 05; 06 and 07 after 03; 08-11 after 01 (each independent);

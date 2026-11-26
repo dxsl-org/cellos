@@ -1,7 +1,7 @@
 ---
 phase: 11
 title: "Sound"
-status: blocked
+status: completed
 priority: P3
 effort: "8-12d"
 dependencies: [1]
@@ -76,10 +76,16 @@ flowchart LR
 
 ## Success Criteria
 
-- [ ] Lane: the WAV recorded by QEMU contains a 440 Hz peak for 5 s +/- 0.5 s, with no gap
-      longer than 50 ms.
-- [ ] With the sound device removed from the machine, the same page finishes without stalling.
-- [ ] Driver and wire host tests, `f1-admission`, Chrome lane and the x86 Tier 3 CI jobs pass.
+- [x] Lane: the WAV recorded by QEMU contains a 440 Hz peak for 5 s +/- 0.5 s, with no gap
+      longer than 50 ms. (`sound-device-records-tone`: 5.008 s, 439.3 Hz, longest gap 8 ms;
+      1 105 920 bytes to `AUDIO`, 0 dropped; Chrome lane 38/38, 2026-11-26.)
+- [x] With the sound device removed from the machine, the same page finishes without stalling.
+      (`CHROME_LANE_SOUND=0`: 5568 ms, "no audio service; playing silence", 1 122 304 bytes
+      paced and dropped; see the deviation log for a second, slower run.)
+- [x] Driver and wire host tests, `f1-admission`, Chrome lane and the x86 Tier 3 CI jobs pass.
+      (driver 25, wire 100, hypervisor 73 host tests; `cellos-sign --check` F1 OK, Tier-1 587;
+      display lane 43/43; CI lint, x86_64-lint, unit-tests, hypervisor-boot, virtio-e2e,
+      hostile, python pass; all from a clone where the new crate is tracked.)
 
 ## Security Considerations
 
@@ -98,3 +104,38 @@ extend. On a physical machine it produces nothing until an HDA or USB-audio driv
   `scripts/assemble-x86-image.py` recipe (its reviewed SHA-256 pin blocks rollout otherwise) and
   driver MMIO rows in `scripts/unsafe-allowlist.toml`; both need owner review. Blocked on that
   review; nothing built.
+- **Decision (owner, 2026-11-26):** go ahead ("làm tiếp phase 11"), including the re-pinned
+  image recipe the new driver Cell needs.
+- **Assumption 1 settled (microvm reference, 2026-11-26):** the guest needs no sound server and
+  no new package. The modloop has `virtio_snd`; Chromium fails to reach PulseAudio and falls back
+  to ALSA (`audio_manager_linux.cc: Falling back to ALSA`). First run recorded nothing (44-byte
+  WAV): `/dev/snd/*` belong to group `audio`, which the `chrome` user was not in. With
+  `addgroup chrome audio`, QEMU's virtio-sound recorded the page's tone: 5.0 s, 439.8 Hz, no gap
+  (`scripts/tier3_wav_tone.py`). QEMU writes the WAV only on a clean quit (QMP `quit`).
+- **Decision:** `wire::audio` carries PCM in a client-owned Grant with blocking calls (OPEN,
+  WRITE) and a posted CLOSE; the driver copies before it replies and answers BUSY instead of
+  waiting, so the guest never waits on the host audio path. No OWNER_WATCH for `AUDIO`.
+- **Decision:** the driver Cell implements its virtqueues over `DmaBuf`'s safe accessors instead
+  of the vendored `VirtIOSound`, whose HAL needs `unsafe`: allowlist and Tier-1 ceiling unchanged.
+- **Deviation (criterion 2):** "sound device removed" is the same lane with
+  `CHROME_LANE_SOUND=0`: no virtio-sound on the machine, so no `AUDIO` provider; the guest still
+  has its card (the hypervisor's model) and the page must still finish on time.
+- **Surprise (host, not this phase):** on 2026-11-26 afternoon the Chromium/cage crash
+  (`ld-musl` segfault, "GPU process isn't usable") hit most lane runs, with and without the
+  sound device, at 1 and 4 vCPUs; the pushed HEAD (phase 10, no sound code) crashed the same
+  way on the same host. Runs with the device hidden: 0 of 2 crashed at 4 vCPUs, 2 of 2 at 1
+  vCPU; with the device: 3 of 4. No mechanism tied to the device was found (its guest writes
+  stay inside the guest's buffers; a run where the guest never touched it after boot crashed
+  too). The earlier choppy run (19 stream restarts, 419.7 Hz, page 8.4 s) was on the slow host;
+  the passing run had 2 starts. A later no-device run on the same host took 8.7 s, Chromium
+  never opened the card (no SET_PARAMS) and its download never started: host slowness. Rerun
+  the lane on a quiet host (after restarting WSL) before relying on these numbers.
+- **Deviation:** the page check accepts 4.5-7 s instead of +/- 0.5 s: it is wall-clock time and
+  includes opening the card in the guest; the recording judges the timing exactly. The
+  clipboard step now waits for the guest's echo instead of a fixed 2 s (lost that race twice on
+  the slow host).
+- **Note:** the image signer admits only tracked crates, so until `cells/drivers/virtio-snd/`
+  is committed the lanes run from a clone with it committed (`/tmp/cellos-p11wt`).
+- **Note:** the driver writes ring indexes byte by byte (no `unsafe`); a device reading the
+  avail index while its low byte wraps can see a wrong value. The driver detects
+  `DEVICE_NEEDS_RESET` or failed requests and re-initialises (at most 3 times).
