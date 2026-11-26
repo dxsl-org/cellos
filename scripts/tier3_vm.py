@@ -134,6 +134,16 @@ class Vm:
             else:
                 self.press(*named[char])
 
+    def quit(self, seconds: float = 10) -> None:
+        """Ask QEMU to quit and wait for it: a `-audiodev wav` recording is complete
+        (data flushed, RIFF sizes written) only after a clean quit. Kills it when
+        it does not leave in time."""
+        self.qmp({"execute": "quit"})
+        try:
+            self.process.wait(timeout=seconds)
+        except subprocess.TimeoutExpired:
+            self.stop()
+
     def stop(self) -> None:
         self.process.kill()
         self.process.wait()

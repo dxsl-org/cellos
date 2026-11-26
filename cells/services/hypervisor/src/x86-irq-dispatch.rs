@@ -10,8 +10,9 @@ use crate::{
     virtio_mmio::VirtioMmio, virtio_net::NetDev, vmm,
 };
 
-/// ISA line shared by virtio-gpu, virtio-input, the clipboard virtio-console
-/// and the Downloads virtio-9p (Linux's virtio-mmio IRQs are `IRQF_SHARED`).
+/// ISA line shared by virtio-gpu, virtio-input, the clipboard virtio-console,
+/// the Downloads virtio-9p and virtio-snd (Linux's virtio-mmio IRQs are
+/// `IRQF_SHARED`).
 /// The emulated PIC has no slave, so the free master lines are 3 and 7, and 7
 /// is the 8259 spurious line.
 pub const DISPLAY_IRQ: u8 = 3;

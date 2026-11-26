@@ -1861,6 +1861,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "driver-virtio-snd"
+version = "0.1.0"
+dependencies = [
+ "abi",
+ "bitflags 2.13.1",
+ "cell-build",
+ "ostd",
+ "virtio-drivers",
+ "virtio-pci-transport",
+ "wire",
+]
+
+[[package]]
 name = "driver-vmxnet3"
 version = "0.1.0"
 dependencies = [

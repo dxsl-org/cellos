@@ -23,7 +23,7 @@ mount -t devpts devpts /dev/pts
 mount -t tmpfs -o mode=1777 tmpfs /dev/shm
 hostname cellos-chrome
 
-for module in virtio_gpu virtio_input evdev virtio_net af_packet 9pnet_virtio 9p; do
+for module in virtio_gpu virtio_input evdev virtio_net af_packet 9pnet_virtio 9p virtio_snd; do
     modprobe "$module" 2>/dev/null
 done
 udevd --daemon
@@ -31,6 +31,8 @@ udevadm trigger --action=add
 udevadm settle --timeout=10
 [ -e /dev/dri/card0 ] || { log "CHROME_GUEST_FAIL:no-drm"; poweroff -f; }
 log "CHROME_GUEST_DEVICES $(free -m | awk '/^Mem:/ { print "mem_total_mib=" $2 }') cpus=$(nproc) utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+# The sound card Chromium plays through (ALSA's default device), if the machine has one.
+log "CHROME_GUEST_SOUND cards=$(grep -c '^ *[0-9]' /proc/asound/cards 2>/dev/null || echo 0) first=$(awk 'NR == 1 { print $2 }' /proc/asound/cards 2>/dev/null)"
 # Which clock event the kernel settled on, and whether its timers are
 # high-resolution: `lapic-deadline` and 1 where the hypervisor gives the guest a
 # local APIC timer, the PIT and 0 where it does not.
@@ -57,6 +59,8 @@ dbus-daemon --system --fork
 # Chromium's sandbox does not run as root, so Chromium gets a user of its own
 # (the root is a tmpfs overlay: the account lasts as long as the guest).
 adduser -D -h /home/chrome -s /bin/sh chrome || { log "CHROME_GUEST_FAIL:no-user"; poweroff -f; }
+# The sound card's device nodes belong to group audio.
+addgroup chrome audio 2>/dev/null
 export HOME=/home/chrome XDG_RUNTIME_DIR="/run/user/$(id -u chrome)"
 mkdir -p "$XDG_RUNTIME_DIR" /tmp/chrome/Default
 # "Use system title bar and borders": Chromium then draws no minimize, maximize

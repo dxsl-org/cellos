@@ -397,7 +397,7 @@ pub mod service {
     /// Ids 1–13 are the services above, 14 is
     /// [`crate::hypervisor::HYPERVISOR_SERVICE_ID`], 15 `AI`, 16 `OCEL_JS`,
     /// 17 this producer role, 18 `OCEL_PDF`, 19 `OCEL_ACTIVATOR`, 20
-    /// `MACHINE_PIN` and 21 `XE_GPU`; next free: 22.
+    /// `MACHINE_PIN`, 21 `XE_GPU` and 22 `AUDIO`; next free: 23.
     pub const USB_HID_PRODUCER: u16 = 17;
     /// Ocel's isolated native PDF rasterizer (`/bin/ocel-pdf`).
     pub const OCEL_PDF: u16 = 18;
@@ -409,6 +409,9 @@ pub mod service {
     pub const MACHINE_PIN: u16 = 20;
     /// Intel GPU driver Cell serving the Linux `xe` uAPI over IPC (ADR-0033).
     pub const XE_GPU: u16 = 21;
+    /// Sound output driver Cell (`/bin/virtio-snd`, `wire::audio`): one PCM
+    /// stream, S16LE 48 kHz stereo.
+    pub const AUDIO: u16 = 22;
 }
 
 /// `RegisterService` flags (`a2`): kernel rights a registry row grants the Cell

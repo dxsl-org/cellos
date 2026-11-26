@@ -1482,6 +1482,7 @@ fn every_pre_annex_boot_row_keeps_observe_mutate() {
         "/bin/input",
         "/bin/ahci",
         "/bin/virtio-scsi",
+        "/bin/virtio-snd",
         "/bin/vmxnet3",
         "/bin/pvscsi",
     ] {

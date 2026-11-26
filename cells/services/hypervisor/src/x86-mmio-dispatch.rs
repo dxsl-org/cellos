@@ -10,6 +10,7 @@ use crate::{
     virtio_input::InputDev,
     virtio_mmio::{self, VirtioMmio},
     virtio_net::NetDev,
+    virtio_snd::SndDev,
 };
 use ostd::io::println;
 
@@ -28,6 +29,8 @@ pub struct MmioDevicesMut<'a> {
     pub console_mmio: &'a mut VirtioMmio,
     pub p9: &'a mut P9Dev,
     pub p9_mmio: &'a mut VirtioMmio,
+    pub snd: &'a mut SndDev,
+    pub snd_mmio: &'a mut VirtioMmio,
 }
 
 /// Shared device bundle passed to the read dispatcher; `gpu` as in
@@ -44,6 +47,8 @@ pub struct MmioDevices<'a> {
     pub console_mmio: &'a VirtioMmio,
     pub p9: &'a P9Dev,
     pub p9_mmio: &'a VirtioMmio,
+    pub snd: &'a SndDev,
+    pub snd_mmio: &'a VirtioMmio,
 }
 
 /// The virtio-mmio slot of the GPU.
@@ -101,6 +106,9 @@ pub fn write(
         5 => dev
             .p9_mmio
             .mmio_write(offset, value, dev.p9, vm_id, vcpu_id),
+        6 => dev
+            .snd_mmio
+            .mmio_write(offset, value, dev.snd, vm_id, vcpu_id),
         _ => {}
     }
     true
@@ -168,6 +176,12 @@ pub fn read(ipa: u64, size: u8, dev: &MmioDevices<'_>) -> Option<u32> {
                 println("[hv-x86] virtio-mmio 9p probe");
             }
             dev.p9_mmio.mmio_read(aligned, dev.p9) as u32
+        }
+        6 => {
+            if offset == 0 {
+                println("[hv-x86] virtio-mmio snd probe");
+            }
+            dev.snd_mmio.mmio_read(aligned, dev.snd) as u32
         }
         _ => 0,
     };

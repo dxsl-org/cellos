@@ -75,9 +75,10 @@ class ManifestTables(unittest.TestCase):
     def test_desktop_is_headless_plus_the_desktop_apps(self):
         self.assertEqual(DESKTOP.packages(), HEADLESS.packages() + [
             "service-compositor", "fb-console", "desktop", "files", "terminal", "app-chrome", "ocel",
-            "service-hypervisor"])
+            "service-hypervisor", "driver-virtio-snd"])
         self.assertEqual(DESKTOP.image_paths() - HEADLESS.image_paths(), {"/bin/" + name for name in (
-            "compositor", "fb-console", "desktop", "files", "terminal", "chrome", "ocel", "hypervisor")}
+            "compositor", "fb-console", "desktop", "files", "terminal", "chrome", "ocel", "hypervisor",
+            "virtio-snd")}
             | {"/vmlinux", "/chrome-initrd.gz"})
         self.assertEqual(HEADLESS.guest_files, ())
         self.assertEqual(DESKTOP.package_features(), ["service-hypervisor/volatile-disk"])

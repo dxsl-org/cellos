@@ -25,10 +25,11 @@ mod x86_port_dispatch;
 
 use crate::app_session_x86::{AppSession, SessionRequest};
 use crate::{
-    acpi_pm::AcpiPm, client_clipboard, cmos_rtc::CmosRtc, exit_counts::ExitCounts,
-    pic_8259::Pic8259, pit_8253::Pit8253, uart_16550::Uart16550, virtio_9p::P9Dev,
-    virtio_blk::BlkDisk, virtio_console::Console, virtio_gpu::GpuDev, virtio_input::InputDev,
-    virtio_mmio::VirtioMmio, virtio_net::NetDev, vmm, yield_lock,
+    acpi_pm::AcpiPm, client_audio::AudioClient, client_clipboard, cmos_rtc::CmosRtc,
+    exit_counts::ExitCounts, pic_8259::Pic8259, pit_8253::Pit8253, uart_16550::Uart16550,
+    virtio_9p::P9Dev, virtio_blk::BlkDisk, virtio_console::Console, virtio_gpu::GpuDev,
+    virtio_input::InputDev, virtio_mmio::VirtioMmio, virtio_net::NetDev, virtio_snd::SndDev, vmm,
+    yield_lock,
 };
 use abi::hypervisor::ViVmExit;
 use alloc::sync::Arc;
@@ -91,6 +92,8 @@ pub fn run(
         console_vmio: VirtioMmio::default(),
         p9: P9Dev::new(),
         p9_vmio: VirtioMmio::default(),
+        snd: SndDev::new(),
+        snd_vmio: VirtioMmio::default(),
         uart: Uart16550::new(),
         pic: Pic8259::new(),
         pit: Pit8253::new(),
@@ -116,6 +119,7 @@ pub fn run(
     }
     let mut exit = ViVmExit::Unknown { ec: 0, iss: 0 };
     let mut counts = ExitCounts::new();
+    let mut audio = AudioClient::new();
     #[cfg(feature = "hostile-backend-recovery")]
     let mut hostile_preemption_armed = false;
 
@@ -175,7 +179,15 @@ pub fn run(
                     &mut m.net_vmio,
                     session.is_none(),
                 );
-                let served = serve_host(m, &mut gpu, &mut gpu_vmio, &mut session, vm_id, vcpu_id);
+                let served = serve_host(
+                    m,
+                    &mut gpu,
+                    &mut gpu_vmio,
+                    &mut session,
+                    &mut audio,
+                    vm_id,
+                    vcpu_id,
+                );
                 if served.terminate {
                     break;
                 }
@@ -238,6 +250,7 @@ pub fn run(
             yield_lock::lock(&machine).handed_over_count
         ));
     }
+    audio.finish(&yield_lock::lock(&machine).snd);
     // Every way out ends the guest: stop presenting, which is how a bound
     // launcher learns of it.
     gpu.shutdown();
@@ -246,16 +259,19 @@ pub fn run(
 
 /// Work done at every guest idle/preemption boundary besides interrupt
 /// delivery: the launcher session (or, without one, compositor reconnection),
-/// flushing queued input into the guest, and the session's clipboard, whose
-/// Grant and events must come from this (the BSP's) thread.
+/// flushing queued input into the guest, and the session's clipboard and the
+/// guest's sound, whose Grants and calls must come from this (the BSP's)
+/// thread.
 fn serve_host(
     machine: &mut Machine,
     gpu: &mut GpuDev,
     gpu_vmio: &mut VirtioMmio,
     session: &mut Option<AppSession>,
+    audio: &mut AudioClient,
     vm_id: usize,
     vcpu_id: usize,
 ) -> Served {
+    audio.pump(&mut machine.snd, ostd::syscall::sys_get_time());
     let Machine {
         input,
         input_vmio,

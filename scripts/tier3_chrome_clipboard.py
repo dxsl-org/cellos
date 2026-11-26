@@ -84,7 +84,9 @@ def run(vm, page_loaded) -> list:
 
     vm.click(*CHROME_ONLY)
     to_guest = seen(f"[hv-x86] clipboard to guest: {size} bytes", 15)
-    time.sleep(2)
+    # The guest's watcher hands the text back once wl-copy has set it: from then
+    # on Ctrl+V pastes it. A fixed wait lost that race on a slow host.
+    in_guest = seen(f"[hv-x86] clipboard from guest: {size} bytes", 20)
     vm.click(*OMNIBOX)
     vm.press("ctrl", "a")
     vm.press("ctrl", "v")
@@ -92,5 +94,5 @@ def run(vm, page_loaded) -> list:
     vm.screendump("clipboard-pasted")
     vm.press("ret")
     checks.append(("terminal-copy-pastes-in-chromium",
-                   to_guest and page_loaded("clipboard-page")))
+                   to_guest and in_guest and page_loaded("clipboard-page")))
     return checks

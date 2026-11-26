@@ -20,8 +20,8 @@ use super::{x86_irq_dispatch, x86_mmio_dispatch, x86_port_dispatch};
 use crate::{
     acpi_pm::AcpiPm, cmos_rtc::CmosRtc, pic_8259::Pic8259, pit_8253::Pit8253,
     uart_16550::Uart16550, virtio_9p::P9Dev, virtio_blk::BlkDisk, virtio_console::Console,
-    virtio_gpu::GpuDev, virtio_input::InputDev, virtio_mmio::VirtioMmio, virtio_net::NetDev, vmm,
-    yield_lock,
+    virtio_gpu::GpuDev, virtio_input::InputDev, virtio_mmio::VirtioMmio, virtio_net::NetDev,
+    virtio_snd::SndDev, vmm, yield_lock,
 };
 use abi::hypervisor::ViVmExit;
 use alloc::vec::Vec;
@@ -50,6 +50,10 @@ pub(super) struct Machine {
     /// The Downloads share (slot 5).
     pub p9: P9Dev,
     pub p9_vmio: VirtioMmio,
+    /// The sound card (slot 6); its PCM reaches the audio service from the
+    /// BSP's thread (`run_loop_x86::serve_host`).
+    pub snd: SndDev,
+    pub snd_vmio: VirtioMmio,
     pub uart: Uart16550,
     pub pic: Pic8259,
     pub pit: Pit8253,
@@ -129,6 +133,8 @@ impl Machine {
                         console_mmio: &mut self.console_vmio,
                         p9: &mut self.p9,
                         p9_mmio: &mut self.p9_vmio,
+                        snd: &mut self.snd,
+                        snd_mmio: &mut self.snd_vmio,
                     },
                 )
             }
@@ -148,6 +154,8 @@ impl Machine {
                         console_mmio: &self.console_vmio,
                         p9: &self.p9,
                         p9_mmio: &self.p9_vmio,
+                        snd: &self.snd,
+                        snd_mmio: &self.snd_vmio,
                     },
                 );
                 if let Some(value) = value {
@@ -171,22 +179,31 @@ impl Machine {
     }
 
     /// Raise on vCPU `bsp` what the timer and the virtio devices have; the
-    /// GPU's interrupt only where the caller holds it.
+    /// GPU's interrupt only where the caller holds it. The sound card's
+    /// played buffers complete here first, and a playing stream keeps the
+    /// polls short so completions are at most about one poll late.
     pub fn raise_due(&mut self, vm_id: usize, bsp: usize, gpu_vmio: Option<&mut VirtioMmio>) {
-        let (input, console, p9) = (
+        if self.snd.poll(vm_id) {
+            self.snd_vmio.signal_used();
+        }
+        if self.snd.playing() {
+            self.eager_polls = EAGER_POLLS;
+        }
+        let (input, console, p9, snd) = (
             &mut self.input_vmio,
             &mut self.console_vmio,
             &mut self.p9_vmio,
+            &mut self.snd_vmio,
         );
         let mut all;
         let mut held;
         let display: &mut [&mut VirtioMmio] = match gpu_vmio {
             Some(gpu) => {
-                all = [gpu, input, console, p9];
+                all = [gpu, input, console, p9, snd];
                 &mut all
             }
             None => {
-                held = [input, console, p9];
+                held = [input, console, p9, snd];
                 &mut held
             }
         };

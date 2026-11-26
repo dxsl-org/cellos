@@ -23,7 +23,7 @@ pub(super) fn init_profile(route: LaunchRoute, target: &str) -> Option<LaunchPro
         | "/bin/dwc2-usb" | "/bin/e1000" | "/bin/e1000e" | "/bin/igb" | "/bin/fb-console" | "/bin/hypervisor" | "/bin/input"
         | "/bin/kms" | "/bin/net" | "/bin/net-broker" | "/bin/nvme" | "/bin/serial" | "/bin/cellbox"
         | "/bin/silo" | "/bin/supervisor"
-        | "/bin/vfs" | "/bin/virtio-gpu" | "/bin/virtio-net" | "/bin/virtio-scsi"
+        | "/bin/vfs" | "/bin/virtio-gpu" | "/bin/virtio-net" | "/bin/virtio-scsi" | "/bin/virtio-snd"
         | "/bin/vmxnet3" | "/bin/pvscsi"
         | "/bin/desktop" | "/bin/sshd" | "/bin/chrome" | "/bin/vm-runner" | "/bin/files" | "/bin/terminal"
         // Phase 13: init's fixed bootstrap rows after the VFS. The machine-pin

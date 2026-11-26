@@ -1,0 +1,36 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>tone</title>
+<!-- Phase 11 sound check: a click anywhere plays a 440 Hz sine for 5 s at half scale,
+     then the page turns green and reports /done?ms=<played ms> to the server it came
+     from. The page is grey until clicked; a browser without an audio output still
+     runs the oscillator's clock, so the page never stalls. -->
+<style>
+  html, body { margin: 0; height: 100%; background: #808080; }
+  body.playing { background: #2050c0; }
+  body.done { background: #20a040; }
+</style>
+<body>
+<script>
+  let started = false;
+  document.addEventListener("click", () => {
+    if (started) return;
+    started = true;
+    const context = new AudioContext({ sampleRate: 48000 });
+    const tone = context.createOscillator();
+    const level = context.createGain();
+    tone.frequency.value = 440;
+    level.gain.value = 0.5;
+    tone.connect(level).connect(context.destination);
+    document.body.className = "playing";
+    const begin = performance.now();
+    tone.onended = () => {
+      const ms = Math.round(performance.now() - begin);
+      document.body.className = "done";
+      fetch(`/done?ms=${ms}&state=${context.state}`).catch(() => {});
+    };
+    tone.start();
+    tone.stop(context.currentTime + 5);
+  });
+</script>
+</body>

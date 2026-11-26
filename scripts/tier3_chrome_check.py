@@ -13,6 +13,7 @@ between Chromium and the Terminal (tier3_chrome_clipboard) and is then ended fro
 the serial log stay in the work directory as evidence. Exit 0 PASS, 1 FAIL.
 """
 import argparse
+import os
 import re
 import sys
 import time
@@ -22,6 +23,7 @@ from PIL import Image
 
 import tier3_chrome_clipboard
 import tier3_chrome_files
+import tier3_chrome_sound
 from tier3_display_check import CHROME_H, CHROME_TASKBAR, CHROME_W, CHROME_X, CHROME_Y, ipv4
 from tier3_vm import SCREEN_H, SCREEN_W, Vm
 
@@ -161,6 +163,12 @@ def run(args) -> list:
              # block driver Cell drives one controller, so a second NVMe would go unserved.
              "-drive", f"file={args.files_disk},if=none,id=files,format=raw",
              "-device", "ide-hd,drive=files,bus=ide.1")
+    # Phase 11: the machine's sound device records to a WAV file (CHROME_LANE_SOUND=0: none).
+    with_sound = os.environ.get("CHROME_LANE_SOUND", "1") != "0"
+    wav = args.work / "chrome-sound.wav"
+    wav.unlink(missing_ok=True)
+    if with_sound:
+        extra += tier3_chrome_sound.machine_args(wav)
     # The Chrome guest takes up to 3072 MiB in one run (`CHROME_RAM_SIZES`).
     vm = Vm(args.qemu, args.iso, args.work, "chrome", memory="6G", extra=extra)
     checks = []
@@ -296,6 +304,8 @@ def run(args) -> list:
         checks.extend(tier3_chrome_files.run(vm, lambda name, colour: poll_screen(
             vm, name, lambda img: page_share(img, colour) >= 0.8,
             60, interval=2, since=second)[0]))
+        # Phase 11, in the same session.
+        checks.extend(tier3_chrome_sound.run(vm, with_sound))
         vm.press("ctrl", "shift", "w")
         checks.append(("chromium-quit-ends-guest", vm.wait_for(
             lambda t: "CHROME_GUEST_EXITED" in t[second:]
@@ -306,10 +316,13 @@ def run(args) -> list:
         checks.append(("chromium-quit-closes-window",
                        closed and not chromium_ui(vm.screendump("closed"))))
     finally:
-        vm.stop()
+        # A clean quit completes the WAV recording.
+        vm.quit()
     # The data disk is consistent only once the machine has stopped.
     if any(name == "guest-mounts-downloads" for name, _ in checks):
         checks.append(tier3_chrome_files.downloaded(args.files_disk, args.work))
+    if with_sound and any(name == "guest-has-sound-card" for name, _ in checks):
+        checks.append(tier3_chrome_sound.recorded(wav))
     return checks
 
 

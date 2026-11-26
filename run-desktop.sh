@@ -132,6 +132,20 @@ else
     echo "  [Chrome]   Chưa có $CHROME_DISK: chạy bash scripts/make-chrome-guest-disk.sh $CHROME_DISK"
 fi
 
+# Sound (Chrome's audio, /bin/virtio-snd): QEMU's virtio-sound on the host's sound system,
+# the first backend this QEMU build has (CELLOS_AUDIODEV overrides, e.g. wav,path=out.wav).
+AUDIODEV="${CELLOS_AUDIODEV:-}"
+if [[ -z "$AUDIODEV" ]]; then
+    AUDIODEV=none
+    for backend in pipewire pa alsa; do
+        if qemu-system-x86_64 -audiodev help 2>/dev/null | grep -qx "$backend"; then
+            AUDIODEV=$backend
+            break
+        fi
+    done
+fi
+echo "  [Âm thanh] virtio-sound, backend: $AUDIODEV$([[ $AUDIODEV == none ]] && echo ' (QEMU này không có backend âm thanh: không nghe được)')"
+
 exec qemu-system-x86_64 \
   "${ACCEL_OPTS[@]}" \
   -machine q35,vmport=on \
@@ -143,6 +157,8 @@ exec qemu-system-x86_64 \
   -device virtio-keyboard-pci \
   -device virtio-tablet-pci \
   -device virtio-mouse-pci \
+  -audiodev "${AUDIODEV%%,*},id=snd0${AUDIODEV#"${AUDIODEV%%,*}"}" \
+  -device virtio-sound-pci,audiodev=snd0,streams=1 \
   -display gtk,zoom-to-fit=on \
   -vnc 127.0.0.1:0 \
   -qmp unix:/tmp/qmp-desktop.sock,server,nowait \

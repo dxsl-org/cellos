@@ -62,6 +62,14 @@ service_id = 21
 restart = "never"
 
 [[cells]]
+name = "virtio-snd"
+path = "/bin/virtio-snd"
+# `AUDIO` (22) is below the private range, so init registers it (phase 11 CP1). The cell
+# exits cleanly without a sound device; the row reaches the desktop image only.
+service_id = 22
+restart = "never"
+
+[[cells]]
 name = "config"
 path = "/bin/config"
 service_id = 4

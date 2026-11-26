@@ -166,6 +166,9 @@ DESKTOP_CELLS = HEADLESS_CELLS + (
     # autostarted. Its root disk lives on /mnt/sd; `volatile-disk` only concerns the
     # console guest.
     Cell("service-hypervisor", "hypervisor", ("/bin/hypervisor",), features=("volatile-disk",)),
+    # Phase 11 sound: serves AUDIO for the Chrome guest's virtio-snd; exits cleanly
+    # without a sound device.
+    Cell("driver-virtio-snd", "driver-virtio-snd", ("/bin/virtio-snd",)),
 )
 
 # The Chrome guest's kernel and initramfs (`boot_x86_profile.rs`). They cannot live on

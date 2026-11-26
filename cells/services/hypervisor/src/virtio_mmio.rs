@@ -5,8 +5,9 @@
 //! VERSION_1 (bit 32 = DriverFeatures high-word bit 0) is mandatory; rejected otherwise.
 use ostd::io::println;
 
-/// Maximum queues per device.
-pub const MAX_QUEUES: usize = 2;
+/// Most queues one slot serves (virtio-snd has four). A device has
+/// [`VirtioDevice::num_queues`] of them; selecting one past that is refused.
+pub const MAX_QUEUES: usize = 4;
 #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
 const QUEUE_SIZE_MAX: u16 = crate::virtqueue_guard::MAX_QUEUE_SIZE as u16;
 #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
@@ -53,6 +54,10 @@ pub trait VirtioDevice {
     fn device_features_hi(&self) -> u32 {
         VIRTIO_F_VERSION_1_HI
     }
+    /// Queues the device has, at most [`MAX_QUEUES`]. Two unless overridden.
+    fn num_queues(&self) -> usize {
+        2
+    }
     /// Guest rang QueueNotify for queue `q` with the confirmed queue config.
     ///
     /// Returns `true` only if one or more used-ring entries were published.
@@ -84,7 +89,7 @@ pub struct VirtioMmio {
 
 impl VirtioMmio {
     pub fn mmio_read(&self, offset: u64, dev: &dyn VirtioDevice) -> u64 {
-        let q = self.queue_sel;
+        let q = selected_queue(self.queue_sel, dev);
         match offset {
             0x000 => 0x7472_6976, // Magic "virt"
             0x004 => 2,           // Version=2 (modern)
@@ -133,7 +138,7 @@ impl VirtioMmio {
         vm_id: usize,
         vcpu_id: usize,
     ) {
-        let q = self.queue_sel;
+        let q = selected_queue(self.queue_sel, dev);
         match offset {
             0x014 => self.feat_sel = val,
             0x020 => {
@@ -146,7 +151,7 @@ impl VirtioMmio {
             0x024 => self.drv_feat_sel = val,
             0x030 => {
                 self.queue_sel = val as usize;
-                if self.queue_sel >= MAX_QUEUES {
+                if selected_queue(self.queue_sel, dev) == INVALID_QUEUE {
                     println("[hv-virtio-host] reject queue-select");
                 }
             }
@@ -185,7 +190,10 @@ impl VirtioMmio {
                     println("[hv-virtio-host] reject queue-notify-before-driver-ok");
                     return;
                 }
-                if nq >= MAX_QUEUES || !self.queues[nq].ready || !self.queues[nq].is_valid() {
+                if nq >= dev.num_queues().min(MAX_QUEUES)
+                    || !self.queues[nq].ready
+                    || !self.queues[nq].is_valid()
+                {
                     println("[hv-virtio-host] reject queue-notify-invalid");
                     return;
                 }
@@ -282,6 +290,17 @@ impl VirtioMmio {
         let edge = self.intr_status != 0 && !self.intr_raised;
         self.intr_raised |= edge;
         edge
+    }
+}
+
+/// The selected queue if `dev` has it, else [`INVALID_QUEUE`], which every
+/// queue register refuses: a device with fewer queues than the transport
+/// keeps answering `QueueNumMax` 0 for the rest.
+fn selected_queue(queue_sel: usize, dev: &dyn VirtioDevice) -> usize {
+    if queue_sel < dev.num_queues().min(MAX_QUEUES) {
+        queue_sel
+    } else {
+        INVALID_QUEUE
     }
 }
 

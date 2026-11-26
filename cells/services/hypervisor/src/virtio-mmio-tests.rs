@@ -305,3 +305,46 @@ fn config_space_answers_byte_offsets_inside_a_word() {
     assert_eq!(mmio.mmio_read(0x104, &device) & 0xffff_ffff, 0x1234_CCBB);
     assert_eq!(mmio.mmio_read(0x106, &device) & 0xffff, 0x1234);
 }
+
+/// A device with four queues (virtio-snd: control, event, tx, rx).
+#[derive(Default)]
+struct FourQueueDevice {
+    notified: Option<usize>,
+}
+impl VirtioDevice for FourQueueDevice {
+    fn device_id(&self) -> u32 {
+        25
+    }
+    fn num_queues(&self) -> usize {
+        4
+    }
+    fn notify(&mut self, queue: usize, _: &QueueCfg, _: usize, _: usize) -> bool {
+        self.notified = Some(queue);
+        false
+    }
+}
+
+#[test]
+fn the_queue_count_is_the_devices() {
+    let mut mmio = VirtioMmio::default();
+    let mut device = FourQueueDevice::default();
+    mmio.mmio_write(0x030, 3, &mut device, 7, 3);
+    assert_eq!(mmio.mmio_read(0x034, &device), 256);
+    mmio.mmio_write(0x038, 8, &mut device, 7, 3);
+    for (offset, value) in [(0x080, 0x1000), (0x090, 0x2000), (0x0a0, 0x3000)] {
+        mmio.mmio_write(offset, value, &mut device, 7, 3);
+    }
+    mmio.mmio_write(0x044, 1, &mut device, 7, 3);
+    assert!(mmio.queue_cfg(3).ready);
+    mmio.mmio_write(0x024, 1, &mut device, 7, 3);
+    mmio.mmio_write(0x020, 1, &mut device, 7, 3);
+    mmio.mmio_write(0x070, 0xf, &mut device, 7, 3);
+    mmio.mmio_write(0x050, 3, &mut device, 7, 3);
+    assert_eq!(device.notified, Some(3));
+
+    // A two-queue device still refuses queue 2.
+    let dummy = DummyDevice::default();
+    let mut mmio = VirtioMmio::default();
+    mmio.mmio_write(0x030, 2, &mut DummyDevice::default(), 7, 3);
+    assert_eq!(mmio.mmio_read(0x034, &dummy), 0);
+}

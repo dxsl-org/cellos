@@ -155,6 +155,8 @@ mod boot_x86;
 #[cfg(target_arch = "x86_64")]
 mod boot_x86_profile;
 #[cfg(target_arch = "x86_64")]
+mod client_audio;
+#[cfg(target_arch = "x86_64")]
 mod client_clipboard;
 #[cfg(target_arch = "x86_64")]
 mod cmos_rtc;
@@ -174,6 +176,8 @@ mod run_loop_x86;
 mod uart_16550;
 #[cfg(target_arch = "x86_64")]
 mod virtio_9p;
+#[cfg(target_arch = "x86_64")]
+mod virtio_snd;
 #[cfg(target_arch = "x86_64")]
 mod yield_lock;
 #[cfg(target_os = "none")]

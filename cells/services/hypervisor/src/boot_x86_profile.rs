@@ -31,8 +31,8 @@ const CHROME_INITRD_PATH: &str = "/chrome-initrd.gz";
 pub const CHROME_DISK_NAME: &str = "chrome-guest.sqfs";
 
 // Slots 3 (virtio-gpu) and 4 (virtio-input) share ISA IRQ 3 (`x86_irq_dispatch::DISPLAY_IRQ`),
-// and so do slot 2 (the clipboard virtio-console) and slot 5 (the Downloads virtio-9p), which
-// only the Chrome guest is told of.
+// and so do slot 2 (the clipboard virtio-console), slot 5 (the Downloads virtio-9p) and slot 6
+// (virtio-snd), which only the Chrome guest is told of.
 #[cfg(not(feature = "ubuntu-wide-guest"))]
 const CMDLINE: &str = "earlycon=uart8250,io,0x3f8,115200 console=ttyS0 nox2apic pci=off lpj=4000000 nohz=off highres=off rdinit=/bin/sh panic=1 virtio_mmio.device=512@0xd0000000:5 virtio_mmio.device=512@0xd0000200:6 virtio_mmio.device=512@0xd0000600:3 virtio_mmio.device=512@0xd0000800:3 -- -i";
 const E2E_CMDLINE: &str = "earlycon=uart8250,io,0x3f8,115200 console=ttyS0 nox2apic pci=off lpj=4000000 nohz=off highres=off rdinit=/bin/virtio-e2e-init panic=1 virtio_mmio.device=512@0xd0000000:5 virtio_mmio.device=512@0xd0000200:6 virtio_mmio.device=512@0xd0000600:3 virtio_mmio.device=512@0xd0000800:3";
@@ -40,7 +40,7 @@ const E2E_CMDLINE: &str = "earlycon=uart8250,io,0x3f8,115200 console=ttyS0 nox2a
 // then data). Measured during Chromium's start: 32.5k of 60k `RunVcpu` returns
 // were the UART, almost all of it the kernel's boot log. The guest init's
 // `CHROME_GUEST_*` markers do not go through printk and stay.
-const CHROME_CMDLINE: &str = "earlycon=uart8250,io,0x3f8,115200 console=ttyS0 loglevel=4 nox2apic pci=off lpj=4000000 nohz=off highres=off rdinit=/bin/chrome-guest-stage1 panic=1 virtio_mmio.device=512@0xd0000000:5 virtio_mmio.device=512@0xd0000200:6 virtio_mmio.device=512@0xd0000400:3 virtio_mmio.device=512@0xd0000600:3 virtio_mmio.device=512@0xd0000800:3 virtio_mmio.device=512@0xd0000a00:3";
+const CHROME_CMDLINE: &str = "earlycon=uart8250,io,0x3f8,115200 console=ttyS0 loglevel=4 nox2apic pci=off lpj=4000000 nohz=off highres=off rdinit=/bin/chrome-guest-stage1 panic=1 virtio_mmio.device=512@0xd0000000:5 virtio_mmio.device=512@0xd0000200:6 virtio_mmio.device=512@0xd0000400:3 virtio_mmio.device=512@0xd0000600:3 virtio_mmio.device=512@0xd0000800:3 virtio_mmio.device=512@0xd0000a00:3 virtio_mmio.device=512@0xd0000c00:3";
 #[cfg(feature = "ubuntu-wide-guest")]
 const CMDLINE: &str = "earlycon=uart8250,io,0x3f8,115200 console=ttyS0 nox2apic pci=off lpj=4000000 nohz=off highres=off root=/dev/vda rw rootfstype=ext4 rootwait init=/sbin/init systemd.unit=multi-user.target net.ifnames=0 panic=1 virtio_mmio.device=512@0xd0000000:5 virtio_mmio.device=512@0xd0000200:6 virtio_mmio.device=512@0xd0000600:3 virtio_mmio.device=512@0xd0000800:3";
 

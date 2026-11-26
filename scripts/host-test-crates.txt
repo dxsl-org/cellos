@@ -45,6 +45,7 @@ driver-pvscsi ci
 driver-r8169 ci
 driver-spi-bcm ci
 driver-virtio-scsi untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+driver-virtio-snd ci
 driver-vmxnet3 ci
 driver-xhci untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
 edu-export-proto untested no ci.yml step runs it as of 2026-11-10; host build not yet tried

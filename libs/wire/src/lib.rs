@@ -18,6 +18,7 @@ extern crate alloc;
 
 pub mod allocator;
 pub mod async_io;
+pub mod audio;
 pub mod benchmark;
 pub use abi::block;
 pub mod cluster;

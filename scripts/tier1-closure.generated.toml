@@ -85,6 +85,7 @@ tier1_roots = [
     "driver-virtio-gpu",
     "driver-virtio-net",
     "driver-virtio-scsi",
+    "driver-virtio-snd",
     "driver-vmxnet3",
     "driver-wasm",
     "driver-xhci",
@@ -2277,6 +2278,12 @@ name = "driver-virtio-scsi"
 package = "driver-virtio-scsi"
 dir = "cells/drivers/virtio-scsi"
 src = "cells/drivers/virtio-scsi/src/main.rs"
+
+[[bin]]
+name = "driver-virtio-snd"
+package = "driver-virtio-snd"
+dir = "cells/drivers/virtio-snd"
+src = "cells/drivers/virtio-snd/src/main.rs"
 
 [[bin]]
 name = "driver-vmxnet3"
