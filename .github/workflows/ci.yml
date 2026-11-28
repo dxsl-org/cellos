@@ -65,7 +65,7 @@ jobs:
     runs-on: ${{ vars.CI_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","X64","cellos-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -285,7 +285,7 @@ jobs:
     runs-on: ${{ vars.CI_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","X64","cellos-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
@@ -365,7 +365,7 @@ jobs:
               -p app-init -p app-cellbox -p service-vfs -p service-machine-pin -p service-config
               -p service-platform -p driver-nvme -p driver-e1000 -p app-sys-tools
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
@@ -473,7 +473,7 @@ jobs:
 
       - name: Upload kernel ELF
         if: matrix.short == 'rv64'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: kernel-rv64
           path: target/riscv64gc-unknown-none-elf/release/cellos-kernel
@@ -486,7 +486,7 @@ jobs:
     timeout-minutes: 90
     needs: build
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install QEMU
         timeout-minutes: 15
@@ -495,7 +495,7 @@ jobs:
           packages: qemu-system-misc
 
       - name: Download kernel artifact
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: kernel-rv64
           path: target/riscv64gc-unknown-none-elf/release/
@@ -518,7 +518,7 @@ jobs:
     runs-on: ${{ vars.CI_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","X64","cellos-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # The lane patches `library/` of the *pinned* toolchain, so it needs
       # rust-src for exactly that nightly (rust-toolchain.toml and the sysroot
@@ -617,7 +617,7 @@ jobs:
             printf '[ci] repository checkout starting\n'
           } > "$evidence_dir/single-guest-local-runtime-qemu.log"
 
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Record single-guest local-runtime checkout completion
         shell: bash
@@ -692,7 +692,7 @@ jobs:
 
       - name: Upload single-guest local-runtime QEMU oracle log
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: c2c-broker-oracle-single-guest-local-runtime-qemu-log-${{ github.run_attempt }}
           path: ${{ runner.temp }}/c2c-oracle-evidence/single-guest-local-runtime-qemu.log
@@ -704,7 +704,7 @@ jobs:
     runs-on: ${{ vars.CI_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","X64","cellos-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
@@ -735,7 +735,7 @@ jobs:
     timeout-minutes: 90
     needs: build
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
@@ -892,7 +892,7 @@ jobs:
       CFLAGS_aarch64_unknown_none_softfloat: --target=aarch64-unknown-none-elf -ffreestanding -mgeneral-regs-only -DLFS_NO_INTRINSICS -I${{ github.workspace }}/third_party/freestanding-include
       BINDGEN_EXTRA_CLANG_ARGS_aarch64_unknown_none_softfloat: --target=aarch64-linux-gnu --sysroot=/usr/aarch64-linux-gnu
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
@@ -916,7 +916,7 @@ jobs:
           packages: qemu-system-arm squashfs-tools libclang-dev gcc-aarch64-linux-gnu
 
       - name: Cache Alpine artifacts
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .alpine-cache
           key: alpine-netboot-aarch64-3.21.3
@@ -984,7 +984,7 @@ jobs:
       # complete boot output for regression diagnosis.
       - name: Upload QEMU boot log
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: hv-machinery-log-${{ github.run_attempt }}
           path: |
@@ -1008,7 +1008,7 @@ jobs:
       CFLAGS_aarch64_unknown_none_softfloat: --target=aarch64-unknown-none-elf -ffreestanding -mgeneral-regs-only -DLFS_NO_INTRINSICS -I${{ github.workspace }}/third_party/freestanding-include
       BINDGEN_EXTRA_CLANG_ARGS_aarch64_unknown_none_softfloat: --target=aarch64-linux-gnu --sysroot=/usr/aarch64-linux-gnu
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
@@ -1030,7 +1030,7 @@ jobs:
           packages: qemu-system-arm squashfs-tools libclang-dev gcc-aarch64-linux-gnu
 
       - name: Cache Alpine artifacts
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .alpine-cache
           key: alpine-netboot-aarch64-3.21.3
@@ -1081,7 +1081,7 @@ jobs:
 
       - name: Upload QEMU boot log
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: hv-boot-kvm-log-${{ github.run_attempt }}
           path: |
@@ -1095,7 +1095,7 @@ jobs:
     runs-on: ${{ vars.CI_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","X64","cellos-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
@@ -1143,7 +1143,7 @@ jobs:
     timeout-minutes: 90
     needs: build
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
@@ -1449,7 +1449,7 @@ jobs:
     runs-on: ${{ vars.CI_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","X64","cellos-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 75
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # `runner` is not available in job-level env, so the path is exported here. The
       # assembler creates only its own --out-dir, so the parent must exist.
@@ -1555,7 +1555,7 @@ jobs:
 
       - name: Upload C2C gate logs
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: x86-c2c-logs-${{ github.run_attempt }}
           path: |
@@ -1577,7 +1577,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/x86-hypervisor-evidence"
           printf '[gate] x86 hypervisor CI started\n' > "$RUNNER_TEMP/x86-hypervisor-evidence/gate.log"
 
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
@@ -1603,7 +1603,7 @@ jobs:
 
 
       - name: Restore QEMU 10.2.0
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ env.QEMU_X86_PREFIX }}
           key: qemu-x86_64-10.2.0-${{ runner.os }}-${{ runner.arch }}
@@ -1665,7 +1665,7 @@ jobs:
 
       - name: Upload x86 hypervisor boot logs
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: x86-hypervisor-boot-${{ github.run_attempt }}
           path: ${{ runner.temp }}/x86-hypervisor-evidence
@@ -1695,7 +1695,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/x86-python-evidence"
           printf '[gate] Tier 3 CPython in-guest gate started\n' > "$RUNNER_TEMP/x86-python-evidence/gate.log"
 
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
@@ -1717,7 +1717,7 @@ jobs:
           packages: binutils build-essential curl gzip libglib2.0-dev libpixman-1-dev libslirp-dev mtools ninja-build pkg-config python3-venv xorriso xz-utils zstd
 
       - name: Restore QEMU 10.2.0
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ env.QEMU_X86_PREFIX }}
           key: qemu-x86_64-10.2.0-${{ runner.os }}-${{ runner.arch }}
@@ -1768,7 +1768,7 @@ jobs:
 
       - name: Upload Python gate logs
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: x86-tier3-python-${{ github.run_attempt }}
           path: ${{ runner.temp }}/x86-python-evidence
@@ -1801,7 +1801,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/x86-virtio-e2e-evidence"
           printf '[gate] x86 VirtIO e2e lane started\n' > "$RUNNER_TEMP/x86-virtio-e2e-evidence/gate.log"
 
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
@@ -1825,7 +1825,7 @@ jobs:
           packages: binutils build-essential curl dosfstools gzip libglib2.0-dev libpixman-1-dev libslirp-dev mtools ninja-build pkg-config python3-venv xorriso xz-utils zstd
 
       - name: Restore QEMU 10.2.0
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ env.QEMU_X86_PREFIX }}
           key: qemu-x86_64-10.2.0-${{ runner.os }}-${{ runner.arch }}
@@ -1858,7 +1858,7 @@ jobs:
 
       - name: Upload e2e logs
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: x86-tier3-virtio-e2e-${{ github.run_attempt }}
           path: ${{ runner.temp }}/x86-virtio-e2e-evidence
@@ -1886,7 +1886,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/x86-hostile-evidence"
           printf '[gate] x86 hostile corpus started\n' > "$RUNNER_TEMP/x86-hostile-evidence/gate.log"
 
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
@@ -1908,7 +1908,7 @@ jobs:
           packages: binutils build-essential curl dosfstools gzip libglib2.0-dev libpixman-1-dev libslirp-dev mtools ninja-build pkg-config python3-venv xorriso xz-utils zstd
 
       - name: Restore QEMU 10.2.0
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ env.QEMU_X86_PREFIX }}
           key: qemu-x86_64-10.2.0-${{ runner.os }}-${{ runner.arch }}
@@ -1943,7 +1943,7 @@ jobs:
 
       - name: Upload hostile logs
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: x86-tier3-hostile-${{ github.run_attempt }}
           path: ${{ runner.temp }}/x86-hostile-evidence
@@ -1956,7 +1956,7 @@ jobs:
     runs-on: ${{ vars.CI_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","X64","cellos-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
@@ -2011,7 +2011,7 @@ jobs:
     runs-on: ${{ vars.CI_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","X64","cellos-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
@@ -2054,7 +2054,7 @@ jobs:
 
       - name: Upload oracle evidence
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ai-inference-oracle-${{ matrix.arch }}-${{ github.run_number }}
           path: .agents/260913-2002-g2-level-a-ai-inference/evidence/ai-oracle-*.log
@@ -2066,7 +2066,7 @@ jobs:
     runs-on: ${{ vars.CI_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","X64","cellos-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
@@ -2126,7 +2126,7 @@ jobs:
     runs-on: ${{ vars.CI_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","X64","cellos-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: false
 
@@ -2180,7 +2180,7 @@ jobs:
     runs-on: ${{ vars.CI_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","X64","cellos-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
@@ -2317,7 +2317,7 @@ jobs:
     runs-on: ${{ vars.CI_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","X64","cellos-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
@@ -2427,7 +2427,7 @@ jobs:
     runs-on: ${{ vars.CI_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","X64","cellos-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
@@ -2472,7 +2472,7 @@ jobs:
     runs-on: ${{ vars.CI_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","X64","cellos-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
@@ -2550,7 +2550,7 @@ jobs:
     runs-on: ${{ vars.CI_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","X64","cellos-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
@@ -2819,7 +2819,7 @@ jobs:
       - name: Upload software evidence logs
         id: upload-software-evidence
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: software-evidence-${{ github.run_id }}-${{ github.run_attempt }}
           path: software-evidence/
@@ -2837,7 +2837,7 @@ jobs:
       contents: read
       checks: write
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # The binary, not EmbarkStudios/cargo-deny-action: a container action is
       # built during job setup even when its step is skipped, which breaks the
@@ -2885,10 +2885,10 @@ jobs:
       contents: read
       attestations: write
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Download software evidence logs
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           artifact-ids: ${{ needs.boot-suite.outputs.evidence-artifact-id }}
           path: .authenticated-evidence/runtime
@@ -2933,7 +2933,7 @@ jobs:
             --environment boot_suite_result="${{ needs.boot-suite.result }}"
 
       - name: Upload immutable evidence bundle
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: authenticated-evidence-${{ github.run_id }}-${{ github.run_attempt }}
           path: evidence/
@@ -2942,6 +2942,6 @@ jobs:
           retention-days: 90
 
       - name: Attest Authenticated Software Evidence Bundle
-        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: evidence/manifest.json
